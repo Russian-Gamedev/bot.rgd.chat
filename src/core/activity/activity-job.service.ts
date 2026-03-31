@@ -47,6 +47,14 @@ export class ActivityJobService {
       period,
     });
 
+    if (activities.length === 0) {
+      await interaction.reply({
+        content: 'Нет данных об активности за сегодня.',
+        ephemeral: true,
+      });
+      return;
+    }
+
     const embed = await this.buildEmbed(activities, period);
 
     await interaction.reply({ embeds: [embed] });
@@ -61,8 +69,16 @@ export class ActivityJobService {
     for (const { id } of guilds.values()) {
       const guild = await this.discord.guilds.fetch(id);
 
-      await this.calculateDailyActivity(guild);
-      await this.giveAwayDailyCoins(guild);
+      await this.calculateDailyActivity(guild).catch((err) => {
+        this.logger.error(
+          `Failed to calculate daily activity for guild ${guild.id}: ${err.message}`,
+        );
+      });
+      await this.giveAwayDailyCoins(guild).catch((err) => {
+        this.logger.error(
+          `Failed to give away daily coins for guild ${guild.id}: ${err.message}`,
+        );
+      });
 
       await this.postActivitySummary(guild, ActivityPeriod.Day);
       await this.moveToNextPeriod(guild, ActivityPeriod.Day);
@@ -92,14 +108,20 @@ export class ActivityJobService {
     });
 
     for (const activity of activities) {
-      const coinsPerMinute = Math.floor(activity.voice / 60);
-      const coins = activity.message + coinsPerMinute;
-      if (coins === 0) continue;
-      const user = await this.userService.findOrCreate(
-        BigInt(guild.id),
-        activity.user_id,
-      );
-      await this.userService.addCoins(user, coins);
+      try {
+        const coinsPerMinute = Math.floor(activity.voice / 60);
+        const coins = activity.message + coinsPerMinute;
+        if (coins === 0) continue;
+        const user = await this.userService.findOrCreate(
+          BigInt(guild.id),
+          activity.user_id,
+        );
+        await this.userService.addCoins(user, coins);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to give coins to user ${activity.user_id} in guild ${guild.id}: ${err.message}`,
+        );
+      }
     }
   }
 
@@ -159,43 +181,56 @@ export class ActivityJobService {
 
     // increase streaks for active users
     for (const userId of activeUsers) {
-      const user = await this.userService.findOrCreate(guild.id, userId);
-      await this.userService.increaseActiveStreak(user);
-      if (!checkAutoRole) continue;
+      try {
+        const user = await this.userService.findOrCreate(guild.id, userId);
+        await this.userService.increaseActiveStreak(user);
+        if (!checkAutoRole) continue;
 
-      if (user.activeStreak >= activeRoleThreshold!) {
-        this.logger.log(
-          `User ${user.user_id} in guild ${guild.id} has an active streak of ${user.activeStreak} days!`,
+        if (user.activeStreak >= activeRoleThreshold!) {
+          this.logger.log(
+            `User ${user.user_id} in guild ${guild.id} has an active streak of ${user.activeStreak} days!`,
+          );
+
+          await this.userService
+            .giveRoleToUser(user, activeRole.id)
+            .catch((err) => {
+              this.logger.warn(
+                `Failed to give active role to user ${user.user_id} in guild ${guild.id}: ${err.message}`,
+              );
+            });
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Failed to process streak for user ${userId} in guild ${guild.id}: ${err.message}`,
         );
-
-        await this.userService
-          .giveRoleToUser(user, activeRole.id)
-          .catch((err) => {
-            this.logger.warn(
-              `Failed to give active role to user ${user.user_id} in guild ${guild.id}: ${err.message}`,
-            );
-          });
       }
     }
 
     for (const member of activeRole?.members ?? []) {
-      const userId = BigInt(member[0]);
-      const user = await this.userService.findOrCreate(guild.id, userId);
-      if (!checkAutoRole) continue;
-      if (
-        Date.now() - user.lastActiveAt?.getTime() >
-        activeRemoveThreshold! * 24 * 60 * 60 * 1000
-      ) {
-        this.logger.log(
-          `Removing active role from user ${user.user_id} in guild ${guild.id} due to inactivity`,
+      try {
+        const userId = BigInt(member[0]);
+        const user = await this.userService.findOrCreate(guild.id, userId);
+        if (!checkAutoRole) continue;
+        if (
+          user.lastActiveAt == null ||
+          Date.now() - user.lastActiveAt.getTime() >
+            activeRemoveThreshold! * 24 * 60 * 60 * 1000
+        ) {
+          this.logger.log(
+            `Removing active role from user ${user.user_id} in guild ${guild.id} due to inactivity`,
+          );
+          await this.userService
+            .removeRoleFromUser(user, activeRole.id)
+            .catch((err) => {
+              this.logger.warn(
+                `Failed to remove active role from user ${user.user_id} in guild ${guild.id}: ${err.message}`,
+              );
+            });
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Failed to process role removal for member ${member[0]} in guild ${guild.id}: ${err.message}`,
         );
-        await this.userService
-          .removeRoleFromUser(user, activeRole.id)
-          .catch((err) => {
-            this.logger.warn(
-              `Failed to remove active role from user ${user.user_id} in guild ${guild.id}: ${err.message}`,
-            );
-          });
       }
     }
   }
