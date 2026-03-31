@@ -24,4 +24,10 @@ export class DiscordController {
   public async getMembersStats() {
     return this.discordService.getMembersStats();
   }
+
+  @Get('/invite/:code')
+  @ApiResponse({ description: 'Get invite information', status: 200 })
+  public async getInviteInfo(@Param('code') code: string) {
+    return this.discordService.getInviteInfo(code);
+  }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Client } from 'discord.js';
 import Redis from 'ioredis';
 import { Once } from 'necord';
@@ -102,5 +102,29 @@ export class DiscordService {
     );
 
     return response;
+  }
+
+  public async getInviteInfo(code: string) {
+    const invite = await this.client.fetchInvite(code).catch(() => null);
+    if (!invite) throw new NotFoundException('Invite not found');
+    if (!invite.guild)
+      throw new NotFoundException('Invite does not belong to a guild');
+
+    const guild = await this.client.guilds
+      .fetch(invite.guild.id)
+      .catch(() => null);
+    if (!guild) throw new NotFoundException('Guild not found');
+
+    return {
+      code,
+      title: invite.guild.name,
+      description: invite.guild.description,
+      memberCount: invite.memberCount,
+      presenceCount: invite.presenceCount,
+      expiresAt: invite.expiresAt,
+      url: `https://discord.gg/${code}`,
+      icon_url: invite.guild.iconURL({ extension: 'webp', size: 128 }),
+      banner_url: invite.guild.bannerURL({ extension: 'webp', size: 512 }),
+    };
   }
 }
