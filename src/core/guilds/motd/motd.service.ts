@@ -1,7 +1,7 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Interval } from '@nestjs/schedule';
 import { ActivityType, Client } from 'discord.js';
 import { On } from 'necord';
 
@@ -22,7 +22,7 @@ export class MotdService {
 
   @On('clientReady')
   async onBotReady() {
-    /// fires immediately on startup to set the bot's MOTD status, then every minute via the Cron job
+    /// fires immediately on startup to set the bot's MOTD status, then every minute via the Interval
     await this.setBotMotd();
   }
 
@@ -62,7 +62,7 @@ export class MotdService {
     return this.motdRepository.findAll();
   }
 
-  @Cron('* * * * *') // Every minute
+  @Interval(60_000) // Update bot status every 60 seconds
   async setBotMotd() {
     const motd = await this.getMotd();
     if (!motd) {
