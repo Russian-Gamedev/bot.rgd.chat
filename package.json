@@ -15,12 +15,15 @@
   },
   "homepage": "https://github.com/Russian-Gamedev/rgd-bot#readme",
   "scripts": {
+    "prepare": "bun ./scripts/setup-git-hooks.sh",
     "start:dev": "bunx --bun nest start --env-file .env.development --watch",
     "build": "bun run build.ts",
     "compose:dev": "docker compose -f ./docker/docker-compose.dev.yml up",
     "compose:prod": "docker compose -f ./docker/docker-compose.yml up",
     "migration:create": "bunx --bun mikro-orm migration:create",
-    "lint": "bunx --bun eslint . --fix --max-warnings=0"
+    "typecheck": "bunx --bun tsc --noEmit",
+    "lint": "bunx --bun eslint . --max-warnings=0",
+    "lint:fix": "bunx --bun eslint . --fix --max-warnings=0"
   },
   "lint-staged": {
     "*.ts": [
