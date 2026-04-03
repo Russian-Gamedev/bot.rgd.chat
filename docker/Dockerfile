@@ -7,7 +7,7 @@ ARG GIT_BRANCH=unknown
 ARG GIT_COMMIT=unknown
 ARG GIT_COMMIT_MESSAGE=unknown
 
-COPY package.json bun.lock ./
+COPY package.json bun.lock scripts ./ 
 
 RUN bun install --frozen-lockfile
 
