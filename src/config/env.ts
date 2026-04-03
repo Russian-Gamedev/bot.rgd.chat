@@ -1,11 +1,4 @@
-import {
-  IsBoolean,
-  IsEnum,
-  IsNumber,
-  IsOptional,
-  IsString,
-  ValidateIf,
-} from 'class-validator';
+import { IsEnum, IsNumber, IsString, ValidateIf } from 'class-validator';
 
 export enum Environment {
   Development = 'development',
@@ -48,16 +41,4 @@ export class EnvironmentVariables {
 
   @IsString()
   JWT_SECRET: string;
-
-  @IsString()
-  @IsOptional()
-  TELEGRAM_BOT_TOKEN?: string;
-
-  @IsString()
-  @IsOptional()
-  TELEGRAM_API_ROOT?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  USE_FFMPEG: boolean;
 }
