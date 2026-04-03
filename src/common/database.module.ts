@@ -16,7 +16,8 @@ export class DatabaseModule {
   async onModuleInit(): Promise<void> {
     this.logger.log('Environment: ' + process.env.NODE_ENV);
     if (process.env.NODE_ENV === Environment.Development) {
-      await this.orm.schema.getUpdateSchemaSQL();
+      await this.orm.schema.update();
+      this.logger.log('Running migrations in development environment');
     } else {
       const pendingMigrations = await this.orm.migrator.getPending();
       if (pendingMigrations.length === 0) {
