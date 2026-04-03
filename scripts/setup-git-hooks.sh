@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 
-if git rev-parse --git-dir > /dev/null; then
-  git config core.hooksPath .github/hooks
-else
-  echo "Error: This script must be run inside a Git repository."
+if [ ! -e .git ]; then
+  exit 0
 fi
+
+git config core.hooksPath .github/hooks
+echo "Git hooks set up successfully."
