@@ -42,7 +42,9 @@ export class MotdService {
     if (!this.motdCache.size) return null;
     const motdArray = Array.from(this.motdCache);
     const motd = motdArray[this.currentMotdIndex];
-    this.currentMotdIndex = (this.currentMotdIndex + 1) % motdArray.length;
+    const randomOffset = Math.floor(Math.random() * motdArray.length);
+    this.currentMotdIndex =
+      (this.currentMotdIndex + randomOffset) % motdArray.length;
     return motd;
   }
 
