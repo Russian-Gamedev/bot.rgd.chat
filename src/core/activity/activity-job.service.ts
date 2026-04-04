@@ -118,9 +118,11 @@ export class ActivityJobService {
         );
         await this.userService.addCoins(user, coins);
       } catch (err) {
-        this.logger.warn(
-          `Failed to give coins to user ${activity.user_id} in guild ${guild.id}: ${err.message}`,
-        );
+        if (err instanceof Error) {
+          this.logger.warn(
+            `Failed to give coins to user ${activity.user_id} in guild ${guild.id}: ${err.message}`,
+          );
+        }
       }
     }
   }
@@ -200,9 +202,11 @@ export class ActivityJobService {
             });
         }
       } catch (err) {
-        this.logger.warn(
-          `Failed to process streak for user ${userId} in guild ${guild.id}: ${err.message}`,
-        );
+        if (err instanceof Error) {
+          this.logger.warn(
+            `Failed to process streak for user ${userId} in guild ${guild.id}: ${err.message}`,
+          );
+        }
       }
     }
 
@@ -228,9 +232,11 @@ export class ActivityJobService {
             });
         }
       } catch (err) {
-        this.logger.warn(
-          `Failed to process role removal for member ${member[0]} in guild ${guild.id}: ${err.message}`,
-        );
+        if (err instanceof Error) {
+          this.logger.warn(
+            `Failed to process role removal for member ${member[0]} in guild ${guild.id}: ${err.message}`,
+          );
+        }
       }
     }
   }

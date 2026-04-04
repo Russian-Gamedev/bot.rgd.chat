@@ -140,10 +140,12 @@ export class RenameCommands {
         `${message}. By ${executor_member.user.username}`,
       );
     } catch (error) {
-      return {
-        error: true,
-        message: `Не удалось переименовать пользователя: ${error.message}`,
-      };
+      if (error instanceof Error) {
+        return {
+          error: true,
+          message: `Не удалось переименовать пользователя: ${error.message}`,
+        };
+      }
     }
 
     return {

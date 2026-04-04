@@ -76,9 +76,11 @@ export class BirthdayService {
         try {
           await member.roles.remove(birthdayRoleId, 'Removing birthday role');
         } catch (err) {
-          this.logger.error(
-            `Failed to remove birthday role from user ${member.id} in guild ${guildId}: ${err}`,
-          );
+          if (err instanceof Error) {
+            this.logger.error(
+              `Failed to remove birthday role from user ${member.id} in guild ${guildId}: ${err.message}`,
+            );
+          }
         }
       });
 
@@ -107,9 +109,11 @@ export class BirthdayService {
         try {
           await member.roles.add(birthdayRoleId, 'Birthday role assignment');
         } catch (err) {
-          this.logger.error(
-            `Failed to assign birthday role to user ${member.id} in guild ${guildId}: ${err}`,
-          );
+          if (err instanceof Error) {
+            this.logger.error(
+              `Failed to assign birthday role to user ${member.id} in guild ${guildId}: ${err.message}`,
+            );
+          }
         }
       }
       embed.setFields([{ name: 'и вот их список', value: field }]);

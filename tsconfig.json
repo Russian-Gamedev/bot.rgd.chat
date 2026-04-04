@@ -12,7 +12,6 @@
     "jsx": "react-jsx",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
@@ -20,11 +19,13 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
+    "strictPropertyInitialization": false,
     "paths": {
       "#common/*": ["./src/common/*"],
       "#config/*": ["./src/config/*"],
       "#core/*": ["./src/core/*"],
       "#root/*": ["./src/*"]
-    }
+    },
+    "types": ["bun"]
   }
 }

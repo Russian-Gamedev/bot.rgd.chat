@@ -1,3 +1,4 @@
+import { generateDependencyReport, joinVoiceChannel } from '@discordjs/voice';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   Client,
@@ -16,10 +17,6 @@ import {
   SlashCommand,
   type SlashCommandContext,
 } from 'necord';
-import {
-  generateDependencyReport,
-  joinVoiceChannel,
-} from 'node_modules/@discordjs/voice/dist';
 
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
