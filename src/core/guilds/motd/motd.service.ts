@@ -1,7 +1,6 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
 import { ActivityType, Client } from 'discord.js';
 import { On } from 'necord';
 
@@ -12,6 +11,7 @@ export class MotdService {
   private readonly logger = new Logger(MotdService.name);
   private motdCache = new Set<string>();
   private currentMotdIndex = 0;
+  private interval = 60 * 1000; // 1 minute
 
   constructor(
     @InjectRepository(MotdEntity)
@@ -24,6 +24,7 @@ export class MotdService {
   async onBotReady() {
     /// fires immediately on startup to set the bot's MOTD status, then every minute via the Interval
     await this.setBotMotd();
+    setInterval(() => this.setBotMotd(), this.interval);
   }
 
   private async loadMotd() {
@@ -62,7 +63,6 @@ export class MotdService {
     return this.motdRepository.findAll();
   }
 
-  @Interval(60_000) // Update bot status every 60 seconds
   async setBotMotd() {
     const motd = await this.getMotd();
     if (!motd) {
