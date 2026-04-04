@@ -21,10 +21,10 @@ import { AppController } from './app.controller';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     AppConfigModule,
     DatabaseModule,
     RedisModule,
-    ScheduleModule.forRoot(),
     DiscordModule,
     UserModule,
     GuildModule,

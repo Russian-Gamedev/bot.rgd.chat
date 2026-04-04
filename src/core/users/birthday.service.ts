@@ -29,7 +29,7 @@ export class BirthdayService {
     await this.setupBirthdayEvents();
   }
 
-  @Cron('0 8 * * *', { timeZone: 'Europe/Moscow' })
+  @Cron('0 8 * * *')
   async postBirthdayGreeting() {
     await this.setupBirthdayEvents();
 

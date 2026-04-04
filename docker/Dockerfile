@@ -36,6 +36,7 @@ ENV GIT_COMMIT=$GIT_COMMIT
 ENV GIT_COMMIT_MESSAGE=$GIT_COMMIT_MESSAGE
 
 ENV NODE_ENV=production
+ENV TZ=Europe/Moscow
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["./bot"]
