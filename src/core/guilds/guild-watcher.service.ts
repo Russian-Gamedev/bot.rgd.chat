@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Client } from 'discord.js';
+import { Client, SnowflakeUtil } from 'discord.js';
 import { Context, type ContextOf, On } from 'necord';
 
 import { GuildEvents } from '#config/guilds';
@@ -72,7 +72,11 @@ export class GuildWatcherService {
       message += `|| ${user.left_count} раз||`;
     }
 
-    await channel.send(message);
+    await channel.send({
+      content: message,
+      nonce: SnowflakeUtil.generate().toString(),
+      enforceNonce: true,
+    });
   }
 
   @On('guildMemberRemove')

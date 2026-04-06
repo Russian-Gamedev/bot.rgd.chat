@@ -58,6 +58,7 @@ import { DiscordService } from './discord.service';
           config.get('NODE_ENV') === Environment.Development
             ? [config.getOrThrow<string>('DISCORD_DEVELOPMENT_GUILD_ID')]
             : false,
+        enforceNonce: true,
       }),
     }),
     NecordPaginationModule.forRoot({}),
