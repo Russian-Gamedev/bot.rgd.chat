@@ -72,7 +72,7 @@ export class GuildEventsCommands {
     @Context() [interaction]: SlashCommandContext,
     @Options() dto: AddEventDto,
   ) {
-    const missingParams = this.guildEventService.validateTemplate(
+    const missingParams = GuildEventService.validateTemplate(
       dto.template,
       GuildEventsParameters[dto.event],
     );

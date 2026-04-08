@@ -39,7 +39,7 @@ export class GuildEventService {
 
     await this.entityManager.persist(template).flush();
 
-    return this.buildTemplate(template, params);
+    return GuildEventService.buildTemplate(template, params);
   }
 
   async addEvent(
@@ -94,7 +94,10 @@ export class GuildEventService {
     );
   }
 
-  buildTemplate(template: GuildEventEntity, params: Record<string, string>) {
+  static buildTemplate(
+    template: GuildEventEntity,
+    params: Record<string, string>,
+  ) {
     const names = Object.keys(params);
     const values = Object.values(params);
 
@@ -110,8 +113,7 @@ export class GuildEventService {
     return message;
   }
 
-  // Validate that all required parameters are present in the template
-  validateTemplate(template: string, requiredParams: string[]) {
+  static validateTemplate(template: string, requiredParams: string[]) {
     const regex = /\$\{(\w+)\}/g;
     const matches = template.matchAll(regex);
     const missingParams: string[] = [];
