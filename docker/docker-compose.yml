@@ -2,7 +2,7 @@ name: rgd_chat
 
 services:
   app:
-    image: rgd-bot:latest
+    image: ghcr.io/russian-gamedev/bot.rgd.chat:latest
     container_name: "${COMPOSE_PROJECT_NAME}_app"
     restart: unless-stopped
     healthcheck:
