@@ -122,3 +122,8 @@ export function hashStringToInt(str: string) {
 export function formatCoins(amount: bigint): string {
   return Number(amount).toLocaleString('ru-RU');
 }
+
+export function choose<T>(array: readonly T[]): T {
+  const index = Math.floor(Math.random() * array.length);
+  return array[index];
+}

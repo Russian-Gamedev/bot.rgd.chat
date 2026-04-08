@@ -4,13 +4,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ActivityType, Client } from 'discord.js';
 import { On } from 'necord';
 
+import { choose, formatTime, pluralize } from '#root/lib/utils';
+
 import { MotdEntity } from './entities/motd.entity';
+
+type MotdFunction = () => Promise<string> | string;
+type MotdEntry = MotdFunction | string;
 
 @Injectable()
 export class MotdService {
   private readonly logger = new Logger(MotdService.name);
-  private motdCache = new Set<string>();
-  private currentMotdIndex = 0;
+  private motdCache = new Set<MotdEntry>();
   private interval = 60 * 1000; // 1 minute
 
   constructor(
@@ -34,17 +38,24 @@ export class MotdService {
       return;
     }
     this.motdCache = new Set(motds.map((m) => m.content));
-    this.currentMotdIndex %= this.motdCache.size; // Ensure index is within bounds after reload
+    this.runtimeMotdFunctions().forEach((fn) => this.motdCache.add(fn));
   }
 
   async getMotd() {
-    await this.loadMotd();
+    if (this.motdCache.size === 0) {
+      await this.loadMotd();
+    }
     if (!this.motdCache.size) return null;
     const motdArray = Array.from(this.motdCache);
-    const motd = motdArray[this.currentMotdIndex];
-    const randomOffset = Math.floor(Math.random() * motdArray.length);
-    this.currentMotdIndex =
-      (this.currentMotdIndex + randomOffset) % motdArray.length;
+    const motd = choose(motdArray);
+
+    // Remove from cache to prevent repeats until refetch
+    this.motdCache.delete(motd);
+
+    if (typeof motd === 'function') {
+      return await motd();
+    }
+
     return motd;
   }
 
@@ -76,5 +87,38 @@ export class MotdService {
     } catch (error) {
       this.logger.error('Failed to set bot status:', error);
     }
+  }
+
+  private runtimeMotdFunctions() {
+    return [
+      () => `🎲 Твой шанс сегодня: ${Math.floor(Math.random() * 100)}%`,
+      () =>
+        `👥 Онлайн: ${Math.floor(Math.random() * 1000)} (да, мы тоже не верим)`,
+      () => {
+        const h = new Date().getHours();
+        if (h < 6) return '🌙 Ты вообще спишь?';
+        if (h < 12) return '☀️ Утро. Ты снова здесь';
+        if (h < 18) return '💼 Днем работаешь? Не верю';
+        return '🌆 Вечер. Время ломать билд';
+      },
+      () => `🎮 FPS: ${Math.floor(20 + Math.random() * 120)} (нормально)`,
+      () => {
+        const hours = Math.floor(Math.random() * 48);
+        const plural = pluralize(hours, ['час', 'часа', 'часов']);
+        return `⏳ До релиза: ${hours} ${plural}`;
+      },
+      () => {
+        const win = Math.random() > 0.8;
+        return win ? '🎉 Ты выиграл ничего' : '💀 Ты проиграл всё';
+      },
+      () => `⏳ Осталось ${this.motdCache.size} что-то там в очереди...`,
+      () => {
+        const days = Math.floor(Math.random() * 30) + 10;
+        const plural = pluralize(days, ['день', 'дня', 'дней']);
+        return `🎉 Следующий джем через ${days} ${plural}!`;
+      },
+      () =>
+        `Я жив уже ${formatTime(Math.floor(process.uptime()))}. Чувствую себя отлично!`,
+    ];
   }
 }
