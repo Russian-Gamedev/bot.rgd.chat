@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 
 import { AppConfigModule } from '#common/config/config.module';
 import { DatabaseModule } from '#common/database.module';
 import { GitInfoService } from '#common/git-info.service';
 import { RedisModule } from '#common/redis.module';
+import { ScheduleModule } from '#common/schedule';
 import { ActivityModule } from '#core/activity/activity.module';
 import { AuthModule } from '#core/auth/auth.module';
 import { BarModule } from '#core/bar/bar.module';
@@ -22,8 +22,8 @@ import { AppController } from './app.controller';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
     AppConfigModule,
+    ScheduleModule.forRoot(),
     DatabaseModule,
     RedisModule,
     DiscordModule,
