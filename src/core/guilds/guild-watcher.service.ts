@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Client, SnowflakeUtil } from 'discord.js';
+import { AuditLogEvent, Client, Guild, SnowflakeUtil } from 'discord.js';
 import { Context, type ContextOf, On } from 'necord';
 
 import { GuildEvents } from '#config/guilds';
@@ -107,16 +107,97 @@ export class GuildWatcherService {
     );
     if (!channel) return;
 
-    let message = await this.guildEventsService.getRandom(
-      guild.id,
-      GuildEvents.MEMBER_LEAVE,
-      {
-        user: `[<@${member.id}>] **${member.displayName}**`,
-      },
+    const { event, moderatorId } = await this.detectLeaveReason(
+      guild,
+      member.id,
     );
 
-    message ??= '<@' + member.id + '> покинул сервер.';
+    const userStr = `[<@${member.id}>] **${member.displayName}**`;
+    const moderatorStr = moderatorId ? `<@${moderatorId}>` : 'неизвестный';
+
+    const params: Record<string, string> =
+      event === GuildEvents.MEMBER_LEAVE
+        ? { user: userStr }
+        : { user: userStr, moderator: moderatorStr };
+
+    let message = await this.guildEventsService.getRandom(
+      guild.id,
+      event,
+      params,
+    );
+
+    /// Fallback messages if no template is found
+    if (!message) {
+      switch (event) {
+        case GuildEvents.MEMBER_BAN:
+          message = `${userStr} был забанен ${moderatorStr}.`;
+          break;
+        case GuildEvents.MEMBER_KICK:
+          message = `${userStr} был кикнут ${moderatorStr}.`;
+          break;
+        default:
+          message = `<@${member.id}> покинул сервер.`;
+      }
+    }
 
     await channel.send(message);
+  }
+
+  async detectLeaveReason(
+    guild: Guild,
+    memberId: string,
+  ): Promise<{ event: GuildEvents; moderatorId?: string }> {
+    const banResult = await this.checkAuditEntry(
+      guild,
+      memberId,
+      AuditLogEvent.MemberBanAdd,
+    );
+    if (banResult.found) {
+      return {
+        event: GuildEvents.MEMBER_BAN,
+        moderatorId: banResult.moderatorId,
+      };
+    }
+
+    const kickResult = await this.checkAuditEntry(
+      guild,
+      memberId,
+      AuditLogEvent.MemberKick,
+    );
+    if (kickResult.found) {
+      return {
+        event: GuildEvents.MEMBER_KICK,
+        moderatorId: kickResult.moderatorId,
+      };
+    }
+
+    return { event: GuildEvents.MEMBER_LEAVE };
+  }
+
+  private async checkAuditEntry(
+    guild: Guild,
+    memberId: string,
+    type: AuditLogEvent.MemberBanAdd | AuditLogEvent.MemberKick,
+  ): Promise<{ found: boolean; moderatorId?: string }> {
+    const RECENT_MS = 5000;
+    const now = Date.now();
+
+    try {
+      const logs = await guild.fetchAuditLogs({ type, limit: 1 });
+      const entry = logs.entries.first();
+      if (
+        entry &&
+        entry.target?.id === memberId &&
+        now - entry.createdTimestamp <= RECENT_MS
+      ) {
+        return { found: true, moderatorId: entry.executor?.id };
+      }
+    } catch {
+      this.logger.warn(
+        `Could not fetch ${type} audit log for guild ${guild.id}`,
+      );
+    }
+
+    return { found: false };
   }
 }
