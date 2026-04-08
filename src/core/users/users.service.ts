@@ -82,11 +82,6 @@ export class UserService {
     await this.save(user);
   }
 
-  async addCoins(user: UserEntity, amount: number): Promise<void> {
-    user.coins += amount;
-    await this.save(user);
-  }
-
   async addVoiceTime(user: UserEntity, amount: number): Promise<void> {
     user.voice_time += amount;
     await this.save(user);
@@ -216,22 +211,6 @@ export class UserService {
         limit,
       },
     );
-  }
-
-  async transferCoins(
-    fromUser: UserEntity,
-    toUser: UserEntity,
-    amount: number,
-  ): Promise<void> {
-    if (fromUser.coins < amount) {
-      throw new Error('Недостаточно монет для перевода.');
-    }
-
-    fromUser.coins -= amount;
-    toUser.coins += amount;
-
-    await this.save(fromUser);
-    await this.save(toUser);
   }
 
   async setBirthday(user: UserEntity, birthday: Date | null): Promise<void> {

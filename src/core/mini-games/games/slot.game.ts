@@ -11,7 +11,9 @@ import {
 import { Colors } from '#config/constants';
 import { EmojiCoin } from '#config/emojies';
 import { UserService } from '#core/users/users.service';
+import { WalletService } from '#core/wallet/wallet.service';
 import { DiscordID } from '#root/lib/types';
+import { formatCoins } from '#root/lib/utils';
 
 const SYMBOLS = ['🍒', '🍋', '💎', '7️⃣', '⭐', '🔔', '🍀'];
 const PAYOUTS: Record<string, number> = {
@@ -41,6 +43,7 @@ export class SlotGame {
 
   constructor(
     private readonly userService: UserService,
+    private readonly walletService: WalletService,
     private readonly discord: Client,
   ) {}
 
@@ -76,8 +79,8 @@ export class SlotGame {
       interaction.user.id,
     );
 
-    const coins = parseInt(dto.coins, 10) || 10;
-    if (coins <= 0) {
+    const coins = BigInt(parseInt(dto.coins, 10) || 10);
+    if (coins <= 0n) {
       return interaction.reply({
         content: 'Пожалуйста, введите допустимое количество монет для ставки.',
         ephemeral: true,
@@ -163,15 +166,15 @@ export class SlotGame {
     let isWin = false;
     if (PAYOUTS[resultKey]) {
       isWin = true;
-      const winnings = coins * PAYOUTS[resultKey];
-      user.coins += winnings;
-      outputMessage += `🎉 Вы выиграли ${winnings.toLocaleString('ru-RU')} монет! 🎉`;
+      const winnings = coins * BigInt(PAYOUTS[resultKey]);
+      await this.walletService.credit(user, winnings, 'mini-game:slot');
+      outputMessage += `🎉 Вы выиграли ${formatCoins(winnings)} монет! 🎉`;
     } else {
-      user.coins -= coins;
+      await this.walletService.debit(user, coins, 'mini-game:slot');
       outputMessage += `К сожалению, вы проиграли.`;
     }
 
-    outputMessage += `\n__Ставка:__ ${coins} ${EmojiCoin.Top}\n__Баланс:__ ~~${oldBalance}~~ -> ${user.coins.toLocaleString('ru-RU')} ${EmojiCoin.Bottom}`;
+    outputMessage += `\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(oldBalance)}~~ -> ${formatCoins(user.coins)} ${EmojiCoin.Bottom}`;
 
     embed.setColor(isWin ? '#5fdb00' : '#ff2f00');
     embed.setDescription(outputMessage);

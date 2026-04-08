@@ -10,6 +10,7 @@ import {
 } from 'necord';
 
 import {
+  formatCoins,
   formatTime,
   getDisplayAvatar,
   getRelativeFormat,
@@ -96,7 +97,7 @@ export class UserCommands {
       },
       {
         name: 'Баланс',
-        value: guildUser.coins.toLocaleString('ru'),
+        value: formatCoins(guildUser.coins),
         inline: true,
       },
       {

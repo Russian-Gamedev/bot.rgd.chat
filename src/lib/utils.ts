@@ -118,3 +118,7 @@ export function hashStringToInt(str: string) {
   }
   return Math.abs(hash);
 }
+
+export function formatCoins(amount: bigint): string {
+  return Number(amount).toLocaleString('ru-RU');
+}

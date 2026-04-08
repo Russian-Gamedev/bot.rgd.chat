@@ -10,6 +10,8 @@ import {
 } from 'necord';
 
 import { UserService } from '#core/users/users.service';
+import { WalletService } from '#core/wallet/wallet.service';
+import { formatCoins } from '#root/lib/utils';
 
 import { ItemEntity, ItemRarity } from '../entities/item.entity';
 import { ItemsService } from '../items.service';
@@ -32,6 +34,7 @@ export class ItemsCommands {
   constructor(
     private readonly itemsService: ItemsService,
     private readonly userService: UserService,
+    private readonly walletService: WalletService,
     private readonly paginationService: NecordPaginationService,
   ) {}
 
@@ -80,7 +83,7 @@ export class ItemsCommands {
     const user = await this.userService.findOrCreate(guild_id, user_id);
     if (user.coins < cost) {
       return interaction.reply({
-        content: `У вас недостаточно монет. Создание предмета стоит ${cost.toLocaleString('ru-RU')} монет.`,
+        content: `У вас недостаточно монет. Создание предмета стоит ${formatCoins(cost)} монет.`,
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -103,7 +106,7 @@ export class ItemsCommands {
       rare: dto.rare ?? ItemRarity.COMMON,
       transferable: dto.transferable ?? true,
     });
-    await this.userService.addCoins(user, -cost);
+    await this.walletService.debit(user, cost, 'item:create');
 
     return interaction.reply({
       content: `Предмет **${newItem.name}** успешно создан и выдан <@${target_user}>!`,

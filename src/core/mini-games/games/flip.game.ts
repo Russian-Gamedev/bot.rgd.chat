@@ -10,7 +10,9 @@ import {
 
 import { EmojiCoin, EmojiCoinId } from '#config/emojies';
 import { UserService } from '#core/users/users.service';
+import { WalletService } from '#core/wallet/wallet.service';
 import { DiscordID } from '#root/lib/types';
+import { formatCoins } from '#root/lib/utils';
 
 class FlipGameDto {
   @StringOption({
@@ -27,6 +29,7 @@ export class FlipGame {
 
   constructor(
     private readonly userService: UserService,
+    private readonly walletService: WalletService,
     private readonly discord: Client,
   ) {}
 
@@ -56,8 +59,8 @@ export class FlipGame {
       });
     }
 
-    const coins = parseInt(dto.coins, 10);
-    if (isNaN(coins) || coins <= 0) {
+    const coins = BigInt(parseInt(dto.coins, 10) || 0);
+    if (coins <= 0n) {
       return interaction.reply({
         content: 'Введите корректное количество монет.',
         ephemeral: true,
@@ -75,7 +78,7 @@ export class FlipGame {
 
     this.flipping.add(interaction.user.id);
 
-    const description = `**ПОДБРАСЫВАЕМ...**\n__Ставка:__ ${coins} ${EmojiCoin.Top}\n__Баланс:__ ${user.coins} ${EmojiCoin.Bottom}`;
+    const description = `**ПОДБРАСЫВАЕМ...**\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ${formatCoins(user.coins)} ${EmojiCoin.Bottom}`;
 
     const embed = new EmbedBuilder()
       .setColor('#FF9900')
@@ -93,13 +96,16 @@ export class FlipGame {
     await Bun.sleep(3_000);
 
     const isWin = Math.floor(Math.random() * 100) % 2;
-    const winnedCoins = isWin ? coins : -coins;
-    await this.userService.addCoins(user, winnedCoins);
+    if (isWin) {
+      await this.walletService.credit(user, coins, 'mini-game:flip');
+    } else {
+      await this.walletService.debit(user, coins, 'mini-game:flip');
+    }
 
     this.flipping.delete(interaction.user.id);
 
     embed.setDescription(
-      `**${isWin ? 'ПОБЕДА' : 'ПОСАСАКА'}**\n__Ставка:__ ${coins} ${EmojiCoin.Top}\n__Баланс:__ ~~${oldBalance}~~ -> ${user.coins} ${EmojiCoin.Bottom}`,
+      `**${isWin ? 'ПОБЕДА' : 'ПОСАСАКА'}**\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(oldBalance)}~~ -> ${formatCoins(user.coins)} ${EmojiCoin.Bottom}`,
     );
     embed.setThumbnail(
       isWin

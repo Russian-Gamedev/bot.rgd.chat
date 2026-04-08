@@ -8,7 +8,7 @@ import {
 } from 'necord';
 
 import { Colors } from '#config/constants';
-import { formatTime } from '#root/lib/utils';
+import { formatCoins, formatTime } from '#root/lib/utils';
 
 import { UserService } from '../users.service';
 
@@ -82,7 +82,7 @@ export class TopCommand {
 
     const formattedUsers = users.map((user) => ({
       user_id: user.user_id,
-      value: user.coins.toLocaleString('ru-RU'),
+      value: formatCoins(user.coins),
     }));
 
     const embed = this.buildEmbed('Топ по монетам', formattedUsers);

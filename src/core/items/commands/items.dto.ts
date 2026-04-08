@@ -1,14 +1,16 @@
 import { GuildMember, type HexColorString } from 'discord.js';
 import { BooleanOption, MemberOption, StringOption } from 'necord';
 
+import { formatCoins } from '#root/lib/utils';
+
 import { ItemRarity } from '../entities/item.entity';
 
-export const ItemCostMap: Record<string, number> = {
-  [ItemRarity.COMMON]: 50_000,
-  [ItemRarity.UNCOMMON]: 100_000,
-  [ItemRarity.RARE]: 200_000,
-  [ItemRarity.EPIC]: 500_000,
-  [ItemRarity.LEGENDARY]: 1_000_000,
+export const ItemCostMap: Record<string, bigint> = {
+  [ItemRarity.COMMON]: 50_000n,
+  [ItemRarity.UNCOMMON]: 100_000n,
+  [ItemRarity.RARE]: 200_000n,
+  [ItemRarity.EPIC]: 500_000n,
+  [ItemRarity.LEGENDARY]: 1_000_000n,
 };
 
 export class ItemListDto {
@@ -54,7 +56,7 @@ export class CreateItemDto {
     description: 'Редкость предмета',
     required: false,
     choices: Object.values(ItemRarity).map((value) => ({
-      name: `${value} - Стоимость: ${ItemCostMap[value].toLocaleString('ru-RU')} монет`,
+      name: `${value} - Стоимость: ${formatCoins(ItemCostMap[value])} монет`,
       value: value,
     })),
   })

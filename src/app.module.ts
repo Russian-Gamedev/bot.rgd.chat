@@ -16,6 +16,7 @@ import { ItemsModule } from '#core/items/items.module';
 import { MiniGamesModule } from '#core/mini-games/mini-games.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
 import { UserModule } from '#core/users/users.module';
+import { WalletModule } from '#core/wallet/wallet.module';
 
 import { AppController } from './app.controller';
 
@@ -33,6 +34,7 @@ import { AppController } from './app.controller';
     MiniGamesModule,
     AuthModule,
     ItemsModule,
+    WalletModule,
     BarModule,
     RoleManagerModule,
     FunModule,

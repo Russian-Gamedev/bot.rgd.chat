@@ -1,8 +1,9 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { GuildEventsModule } from '#core/guilds/events/guild-events.module';
 import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
+import { WalletModule } from '#core/wallet/wallet.module';
 
 import { UserEntity } from './entities/user.entity';
 import { UserRoleEntity } from './entities/user-roles.entity';
@@ -15,6 +16,7 @@ import { UserService } from './users.service';
     MikroOrmModule.forFeature([UserEntity, UserRoleEntity]),
     GuildSettingsModule,
     GuildEventsModule,
+    forwardRef(() => WalletModule),
   ],
   providers: [UserService, BirthdayService, ...commands],
   exports: [UserService],

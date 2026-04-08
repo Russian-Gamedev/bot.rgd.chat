@@ -13,5 +13,6 @@ import { BotsManagerService } from './bots-manager.service';
   imports: [MikroOrmModule.forFeature([BotEntity])],
   providers: [BotsService, BotsManagerService, GitInfoService, GitInfoCommands],
   controllers: [BotsController],
+  exports: [BotsService],
 })
 export class BotsModule {}

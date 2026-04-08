@@ -15,6 +15,7 @@ import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 import { UserEntity } from '#core/users/entities/user.entity';
 import { UserService } from '#core/users/users.service';
+import { WalletService } from '#core/wallet/wallet.service';
 import { formatTime, pickRandom, pluralize } from '#root/lib/utils';
 
 import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
@@ -29,6 +30,7 @@ export class ActivityJobService {
     private readonly em: EntityManager,
     private readonly discord: Client,
     private readonly userService: UserService,
+    private readonly walletService: WalletService,
     private readonly guildSettings: GuildSettingsService,
   ) {}
 
@@ -116,7 +118,7 @@ export class ActivityJobService {
           BigInt(guild.id),
           activity.user_id,
         );
-        await this.userService.addCoins(user, coins);
+        await this.walletService.credit(user, BigInt(coins), 'daily-reward');
       } catch (err) {
         if (err instanceof Error) {
           this.logger.warn(

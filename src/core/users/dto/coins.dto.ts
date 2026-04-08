@@ -16,3 +16,13 @@ export class CoinTransferDto {
   })
   amount: number;
 }
+
+export class CoinHistoryDto {
+  @MemberOption({
+    name: 'target',
+    description:
+      'Пользователь, историю которого посмотреть (по умолчанию — вы)',
+    required: false,
+  })
+  target: GuildMember | null;
+}
