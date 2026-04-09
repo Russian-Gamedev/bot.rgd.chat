@@ -37,7 +37,9 @@ export class GuildWatcherService {
       await this.userService.rejoinGuild(user);
     }
 
-    const invite = await this.guildInviteService.findRecentUpdated(guild.id);
+    const invite = await this.guildInviteService.findInviteWithUpdatedUses(
+      guild.id,
+    );
 
     if (!invite) {
       this.logger.warn(

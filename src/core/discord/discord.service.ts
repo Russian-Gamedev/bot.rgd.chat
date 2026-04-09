@@ -50,7 +50,7 @@ export class DiscordService {
 
   @Once('clientReady')
   public async onReady() {
-    await Bun.sleep(5000); // wait for discord to be ready
+    await Bun.sleep(5000); // wait for discord cache to stabilize before registering commands
     await this.client.application?.commands
       .create({
         name: 'launch',
@@ -82,11 +82,18 @@ export class DiscordService {
     let totalMembers = 0;
     let onlineMembers = 0;
     for (const guild of guilds.values()) {
-      const members = await guild.members.fetch();
-      totalMembers += members.size;
-      onlineMembers += members.filter(
-        (member) => member.presence?.status === 'online',
-      ).size;
+      try {
+        const members = await guild.members.fetch();
+        totalMembers += members.size;
+        onlineMembers += members.filter(
+          (member) => member.presence?.status === 'online',
+        ).size;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch members for guild ${guild.id}: ${String(error)}`,
+        );
+      }
+      await Bun.sleep(100);
     }
 
     const response = {

@@ -5,3 +5,9 @@ export class InsufficientFundsException extends BadRequestException {
     super(`Недостаточно монет. Баланс: ${balance}, требуется: ${required}`);
   }
 }
+
+export class InvalidAmountException extends BadRequestException {
+  constructor(operation: string) {
+    super(`Сумма должна быть положительной: ${operation}`);
+  }
+}

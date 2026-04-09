@@ -9,7 +9,10 @@ import {
   WalletTransactionEntity,
   WalletTransactionType,
 } from './entities/wallet-transaction.entity';
-import { InsufficientFundsException } from './wallet.exception';
+import {
+  InsufficientFundsException,
+  InvalidAmountException,
+} from './wallet.exception';
 
 export interface WalletHistoryOptions {
   limit?: number;
@@ -42,7 +45,7 @@ export class WalletService {
     metadata?: Record<string, unknown>,
   ): Promise<WalletTransactionEntity> {
     if (amount <= 0n) {
-      throw new Error('Credit amount must be positive');
+      throw new InvalidAmountException('credit');
     }
 
     return this.em.transactional(async (em) => {
@@ -72,7 +75,7 @@ export class WalletService {
     metadata?: Record<string, unknown>,
   ): Promise<WalletTransactionEntity> {
     if (amount <= 0n) {
-      throw new Error('Debit amount must be positive');
+      throw new InvalidAmountException('debit');
     }
 
     if (user.coins < amount) {
@@ -106,7 +109,7 @@ export class WalletService {
     reason = 'transfer',
   ): Promise<[WalletTransactionEntity, WalletTransactionEntity]> {
     if (amount <= 0n) {
-      throw new Error('Transfer amount must be positive');
+      throw new InvalidAmountException('transfer');
     }
 
     if (from.coins < amount) {

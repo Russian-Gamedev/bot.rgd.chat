@@ -148,7 +148,9 @@ export class ActivityWatchService {
       ActivityPeriod.Day,
     );
 
-    activity.reactions -= 1;
+    if (activity.reactions > 0) {
+      activity.reactions -= 1;
+    }
 
     await this.em.persist(activity).flush();
   }
@@ -200,7 +202,7 @@ export class ActivityWatchService {
     const enteredAt = await this.redis.hget(key, member.id).then(Number);
     const now = Date.now();
     if (!enteredAt) return;
-    const elapsed = Math.floor((now - enteredAt) / 1_000) ?? 0;
+    const elapsed = Math.floor((now - enteredAt) / 1_000);
 
     const activity = await this.getOrCreateActivity(
       BigInt(member.guild.id),

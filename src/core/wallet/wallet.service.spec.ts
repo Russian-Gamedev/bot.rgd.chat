@@ -7,7 +7,10 @@ import {
   WalletTransactionEntity,
   WalletTransactionType,
 } from './entities/wallet-transaction.entity';
-import { InsufficientFundsException } from './wallet.exception';
+import {
+  InsufficientFundsException,
+  InvalidAmountException,
+} from './wallet.exception';
 import { WalletService } from './wallet.service';
 
 function createMockUser(overrides: Partial<UserEntity> = {}): UserEntity {
@@ -90,11 +93,11 @@ describe('WalletService', () => {
     it('throws on non-positive amount', async () => {
       const user = createMockUser();
 
-      expect(service.credit(user, 0n, 'bad')).rejects.toThrow(
-        'Credit amount must be positive',
+      expect(service.credit(user, 0n, 'bad')).rejects.toBeInstanceOf(
+        InvalidAmountException,
       );
-      expect(service.credit(user, -5n, 'bad')).rejects.toThrow(
-        'Credit amount must be positive',
+      expect(service.credit(user, -5n, 'bad')).rejects.toBeInstanceOf(
+        InvalidAmountException,
       );
     });
 
@@ -146,8 +149,8 @@ describe('WalletService', () => {
       const user = createMockUser();
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(service.debit(user, 0n, 'bad')).rejects.toThrow(
-        'Debit amount must be positive',
+      await expect(service.debit(user, 0n, 'bad')).rejects.toBeInstanceOf(
+        InvalidAmountException,
       );
     });
 
@@ -200,8 +203,8 @@ describe('WalletService', () => {
       const to = createMockUser();
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
-      await expect(service.transfer(from, to, 0n)).rejects.toThrow(
-        'Transfer amount must be positive',
+      await expect(service.transfer(from, to, 0n)).rejects.toBeInstanceOf(
+        InvalidAmountException,
       );
     });
 

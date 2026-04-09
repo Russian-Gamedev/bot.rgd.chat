@@ -65,7 +65,7 @@ export class GuildInviteService {
     this.logger.log(`Updated ${updated} invites for guild ID: ${guildId}`);
   }
 
-  async findRecentUpdated(guild_id: string) {
+  async findInviteWithUpdatedUses(guild_id: string) {
     const inviteEntities = await this.inviteRepository.find({ guild_id });
 
     const invites = await this.discord.guilds
