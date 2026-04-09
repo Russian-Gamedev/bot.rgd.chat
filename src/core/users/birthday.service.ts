@@ -10,7 +10,7 @@ import { UserService } from './users.service';
 
 interface UpcomingBirthday {
   userId: DiscordID;
-  username: string;
+  displayName: string;
   nextBirthday: Date;
   daysUntil: number;
   age: number;
@@ -126,6 +126,8 @@ export class BirthdayService {
 
     const upcoming: UpcomingBirthday[] = [];
 
+    const guild = await this.discord.guilds.fetch(guildId.toString());
+
     for (const user of users) {
       if (!user.birth_date) continue;
 
@@ -144,9 +146,14 @@ export class BirthdayService {
 
       const age = nextBirthday.getFullYear() - birthDate.getFullYear();
 
+      const displayName = await guild.members
+        .fetch(user.user_id.toString())
+        .then(() => `<@${user.user_id}>`)
+        .catch(() => user.username);
+
       upcoming.push({
         userId: user.user_id,
-        username: user.username,
+        displayName,
         nextBirthday,
         daysUntil,
         age,

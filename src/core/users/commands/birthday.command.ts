@@ -51,10 +51,9 @@ export class BirthdayCommands {
         month: 'long',
       });
       const daysUntil = b.daysUntil;
-      const userMention = `<@${b.userId}>`;
       const daysText = pluralize(daysUntil, ['день', 'дня', 'дней']);
       const upcomingAgeText = pluralize(b.age, ['год', 'года', 'лет']);
-      const value = `${userMention} через ${daysUntil} ${daysText} будет ${b.age} ${upcomingAgeText}`;
+      const value = `${b.displayName} через ${daysUntil} ${daysText} будет ${b.age} ${upcomingAgeText}`;
       return {
         name: date,
         value: value,
