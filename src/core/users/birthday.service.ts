@@ -1,18 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  Client,
-  EmbedBuilder,
-  GuildScheduledEventEntityType,
-  GuildScheduledEventPrivacyLevel,
-  GuildScheduledEventRecurrenceRuleFrequency,
-} from 'discord.js';
-import { Once } from 'necord';
+import { Client, EmbedBuilder } from 'discord.js';
 
 import { Cron } from '#common/schedule';
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
+import { DiscordID } from '#root/lib/types';
 
 import { UserService } from './users.service';
+
+interface UpcomingBirthday {
+  userId: DiscordID;
+  username: string;
+  nextBirthday: Date;
+  daysUntil: number;
+  age: number;
+}
 
 @Injectable()
 export class BirthdayService {
@@ -24,15 +26,8 @@ export class BirthdayService {
     private readonly guildSettings: GuildSettingsService,
   ) {}
 
-  @Once('clientReady')
-  async onClientReady() {
-    await this.setupBirthdayEvents();
-  }
-
   @Cron('0 8 * * *')
   async postBirthdayGreeting() {
-    await this.setupBirthdayEvents();
-
     const guilds = this.discord.guilds.cache;
     for (const guild of guilds.values()) {
       const guildId = BigInt(guild.id);
@@ -121,89 +116,43 @@ export class BirthdayService {
     }
   }
 
-  async setupBirthdayEvents() {
-    const guilds = this.discord.guilds.cache;
-    for (const guild of guilds.values()) {
-      const guildId = BigInt(guild.id);
-      this.logger.log(`Setting up birthday events for guild ${guildId}`);
+  async getUpcomingBirthdays(
+    guildId: bigint,
+    limit = 10,
+  ): Promise<UpcomingBirthday[]> {
+    const users = await this.userService.getUsersWithBirthdaySet(guildId);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-      const createBirthdayEvents = await this.guildSettings
-        .getSetting(guildId, GuildSettings.CreateBirthdayEvents, false)
-        .then((setting) => this.guildSettings.asBoolean(setting));
-      if (!createBirthdayEvents) {
-        this.logger.log(
-          `Birthday events creation disabled for guild ${guildId}, skipping`,
-        );
-        continue;
+    const upcoming: UpcomingBirthday[] = [];
+
+    for (const user of users) {
+      if (!user.birth_date) continue;
+
+      const birthDate = new Date(user.birth_date);
+      const nextBirthday = new Date(today);
+      nextBirthday.setMonth(birthDate.getMonth());
+      nextBirthday.setDate(birthDate.getDate());
+
+      if (nextBirthday < today) {
+        nextBirthday.setFullYear(today.getFullYear() + 1);
       }
 
-      const users = await this.userService.getUsersWithBirthdaySet(guildId);
-      this.logger.log(`Found ${users.length} users with birthdays set`);
-
-      const eventChannel =
-        await this.guildSettings.getEventMessageChannel(guildId);
-      if (!eventChannel) {
-        this.logger.log(`No event channel set for guild ${guildId}, skipping`);
-        continue;
-      }
-
-      const events = await guild.scheduledEvents.fetch();
-      const birthdayEvents = events.filter((event) =>
-        event.name.startsWith('Birthday: '),
+      const daysUntil = Math.ceil(
+        (nextBirthday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
       );
 
-      for (const event of birthdayEvents.values()) {
-        const username = event.name.replace('Birthday: ', '');
-        const user = users.find((u) => u.username === username);
-        if (!user) {
-          this.logger.log(
-            `Deleting birthday event ${event.id} for user ${username} (not found)`,
-          );
-          await event.delete();
-        }
-      }
+      const age = nextBirthday.getFullYear() - birthDate.getFullYear();
 
-      // Create or update events
-      for (const user of users) {
-        const birthdayDate = new Date(user.birth_date!);
-        birthdayDate.setHours(8, 0, 0, 0);
-
-        const now = new Date();
-        if (birthdayDate < now) {
-          birthdayDate.setFullYear(now.getFullYear() + 1);
-        } else {
-          birthdayDate.setFullYear(now.getFullYear());
-        }
-
-        const eventName = `Birthday: ${user.username}`;
-        const event = birthdayEvents.find((e) => e.name === eventName);
-
-        if (!event) {
-          this.logger.log(`Creating birthday event for user ${user.user_id}`);
-          await guild.scheduledEvents.create({
-            name: eventName,
-            scheduledStartTime: birthdayDate,
-            scheduledEndTime: new Date(
-              birthdayDate.getTime() + 24 * 60 * 60 * 1000,
-            ), // 24 hours later
-            reason: 'User birthday event',
-            description: `Празднуем день рождения ${user.username}!`,
-            entityType: GuildScheduledEventEntityType.External,
-            privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
-            channel: eventChannel.id,
-            entityMetadata: {
-              location: 'Чат сервера',
-            },
-            recurrenceRule: {
-              frequency: GuildScheduledEventRecurrenceRuleFrequency.Yearly,
-              startAt: birthdayDate,
-              interval: 1,
-              byMonth: [birthdayDate.getMonth() + 1],
-              byMonthDay: [birthdayDate.getDate()],
-            },
-          });
-        }
-      }
+      upcoming.push({
+        userId: user.user_id,
+        username: user.username,
+        nextBirthday,
+        daysUntil,
+        age,
+      });
     }
+
+    return upcoming.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, limit);
   }
 }

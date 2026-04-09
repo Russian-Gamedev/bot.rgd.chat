@@ -1,6 +1,6 @@
 import { EmbedBuilder } from '@discordjs/builders';
 import { Injectable } from '@nestjs/common';
-import { GuildMember, MessageFlags } from 'discord.js';
+import { GuildMember } from 'discord.js';
 import {
   Context,
   MemberOption,
@@ -16,7 +16,6 @@ import {
   getRelativeFormat,
 } from '#root/lib/utils';
 
-import { SetBirthdayDto } from '../dto/user.dto';
 import { UserEntity } from '../entities/user.entity';
 import { UserService } from '../users.service';
 
@@ -118,47 +117,5 @@ export class UserCommands {
     ]);
 
     return interaction.reply({ embeds: [embed] });
-  }
-
-  @SlashCommand({
-    name: 'set-birthday',
-    description: 'Установить дату рождения',
-  })
-  async setBirthday(
-    @Context() [interaction]: SlashCommandContext,
-    @Options() dto: SetBirthdayDto,
-  ) {
-    const guild = interaction.guild;
-    if (!guild) return;
-
-    let date: Date | null;
-
-    try {
-      if (!dto.date?.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
-        throw new Error('Invalid date');
-      }
-
-      date = dto.date
-        ? new Date(dto.date.split('.').reverse().join('-'))
-        : null;
-      if (date && isNaN(date.getTime())) throw new Error('Invalid date');
-    } catch {
-      return interaction.reply({
-        content: 'Неверный формат даты. Используйте ДД.ММ.ГГГГ',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    const guildId = BigInt(guild.id);
-    const userId = BigInt(interaction.user.id);
-    const user = await this.userService.findOrCreate(guildId, userId);
-
-    await this.userService.setBirthday(user, date);
-
-    await interaction.reply({
-      content: date
-        ? `Дата рождения установлена на ${date.toLocaleDateString('ru')}`
-        : 'Дата рождения удалена',
-    });
   }
 }
