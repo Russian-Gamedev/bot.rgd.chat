@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { Client } from 'discord.js';
 import { Context, type ContextOf, On, Once } from 'necord';
-
-import { Cron } from '#common/schedule';
 
 import { GuildInviteService } from './invite.service';
 

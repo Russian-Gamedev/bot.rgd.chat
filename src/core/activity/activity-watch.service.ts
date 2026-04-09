@@ -1,6 +1,7 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import {
   Client,
   GuildMember,
@@ -13,7 +14,6 @@ import {
 import { Redis } from 'ioredis';
 import { Context, type ContextOf, On, Once } from 'necord';
 
-import { Interval } from '#common/schedule';
 import { UserService } from '#core/users/users.service';
 
 import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
@@ -225,7 +225,7 @@ export class ActivityWatchService {
     await this.redis.hdel(key, member.id);
   }
 
-  @Interval(1_000 * 60, { fireOnStart: true })
+  @Interval(1_000 * 60)
   private async saveAllVoiceActivities() {
     const keys = await this.redis.keys('activity:voice:*');
 

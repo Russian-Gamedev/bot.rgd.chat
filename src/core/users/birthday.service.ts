@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { Client, EmbedBuilder } from 'discord.js';
 
-import { Cron } from '#common/schedule';
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 import { DiscordID } from '#root/lib/types';

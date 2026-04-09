@@ -10,4 +10,9 @@ export class AppController {
   favicon(@Res() res: Response) {
     return res.sendFile(assets + '/icon.webp');
   }
+
+  @Get('health')
+  health() {
+    return { status: 'ok' };
+  }
 }
