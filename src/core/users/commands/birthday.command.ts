@@ -31,7 +31,7 @@ export class BirthdayCommands {
 
     const upcoming = await this.birthdayService.getUpcomingBirthdays(
       BigInt(guild.id),
-      10,
+      5,
     );
 
     if (!upcoming.length) {
