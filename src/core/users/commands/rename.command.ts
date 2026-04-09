@@ -10,17 +10,32 @@ import {
   type TextCommandContext,
 } from 'necord';
 
+import { EmojiCoin } from '#config/emojies';
 import { GuildEvents, GuildSettings } from '#config/guilds';
 import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
+import { InsufficientFundsException } from '#core/wallet/wallet.exception';
+import { WalletService } from '#core/wallet/wallet.service';
+import { formatCoins, hideEmbedLink } from '#root/lib/utils';
 
 import { RenameUserDto } from '../dto/rename.dto';
+import { UserService } from '../users.service';
+
+const RENAME_BOT_COST = 10_000n;
+
+interface RenameResult {
+  error: boolean;
+  message: string;
+  attachments?: string[];
+}
 
 @Injectable()
 export class RenameCommands {
   constructor(
     private readonly guildSettingsService: GuildSettingsService,
     private readonly guildEventService: GuildEventService,
+    private readonly walletService: WalletService,
+    private readonly userService: UserService,
   ) {}
 
   @SlashCommand({
@@ -35,14 +50,20 @@ export class RenameCommands {
     const target = dto.member;
     const new_name = dto.new_name;
 
-    const { error, message } = await this.renameUser(
+    const {
+      error,
+      message,
+      attachments = [],
+    } = await this.renameUser(
       interaction.member as GuildMember,
       target,
       new_name,
     );
 
+    const attach = hideEmbedLink(attachments?.join('\n'));
+
     await interaction.reply({
-      content: message,
+      content: message + attach,
       flags: error ? MessageFlags.Ephemeral : undefined,
     });
   }
@@ -70,14 +91,16 @@ export class RenameCommands {
 
     const targetMember = await message.guild.members.fetch(target);
 
-    const { message: replyMessage } = await this.renameUser(
+    const { message: replyMessage, attachments = [] } = await this.renameUser(
       message.member!,
       targetMember,
       new_nickname,
     );
 
+    const attach = hideEmbedLink(attachments?.join('\n'));
+
     await message.reply({
-      content: replyMessage,
+      content: replyMessage + attach,
     });
   }
 
@@ -85,7 +108,7 @@ export class RenameCommands {
     executor_member: GuildMember,
     target_member: GuildMember,
     new_nickname: string,
-  ) {
+  ): Promise<RenameResult> {
     const guild = executor_member.guild;
     if (!guild) {
       throw new Error('Guild not found');
@@ -110,7 +133,7 @@ export class RenameCommands {
     }
 
     if (target_member.id === guild.client.user.id) {
-      /// TODO rename bot by coins
+      return this.renameBot(executor_member, target_member, new_nickname);
     }
 
     if (target_member.id === guild.ownerId) {
@@ -151,6 +174,59 @@ export class RenameCommands {
     return {
       error: false,
       message,
+    };
+  }
+
+  private async renameBot(
+    executor_member: GuildMember,
+    target_member: GuildMember,
+    new_nickname: string,
+  ): Promise<RenameResult> {
+    const user = await this.userService.findOrCreate(
+      BigInt(executor_member.guild.id),
+      BigInt(executor_member.id),
+    );
+
+    try {
+      await this.walletService.debit(user, RENAME_BOT_COST, 'rename-bot', {
+        new_nickname,
+      });
+    } catch (error) {
+      if (error instanceof InsufficientFundsException) {
+        return {
+          error: true,
+          message: `Недостаточно монет. Нужно: ${RENAME_BOT_COST}`,
+        };
+      }
+      throw error;
+    }
+
+    try {
+      await target_member.setNickname(
+        new_nickname,
+        `Renamed by ${executor_member.user.username} for ${formatCoins(RENAME_BOT_COST)} coins`,
+      );
+    } catch (error) {
+      await this.walletService.credit(
+        user,
+        RENAME_BOT_COST,
+        'rename-bot-refund',
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+      return {
+        error: true,
+        message: `Не удалось переименовать бота: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+
+    return {
+      error: false,
+      message: `Бот переименован в \`${new_nickname}\` за ${formatCoins(RENAME_BOT_COST)} ${EmojiCoin.Animated}`,
+      attachments: [
+        'https://tenor.com/view/when-the-money-vince-mcmahon-big-chungus-wwe-gif-16018373',
+      ],
     };
   }
 }
