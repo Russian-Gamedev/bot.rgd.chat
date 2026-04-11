@@ -15,6 +15,7 @@ import { FunModule } from '#core/fun/fun.module';
 import { GuildModule } from '#core/guilds/guild.module';
 import { ItemsModule } from '#core/items/items.module';
 import { MiniGamesModule } from '#core/mini-games/mini-games.module';
+import { NicknameModule } from '#core/nickname/nickname.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
 import { UserModule } from '#core/users/users.module';
 import { WalletModule } from '#core/wallet/wallet.module';
@@ -39,6 +40,7 @@ import { AppController } from './app.controller';
     BarModule,
     RoleManagerModule,
     FunModule,
+    NicknameModule,
   ],
   controllers: [AppController],
   providers: [GitInfoService, ScheduleLoggerService],

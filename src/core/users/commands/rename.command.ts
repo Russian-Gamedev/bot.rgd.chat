@@ -14,6 +14,7 @@ import { EmojiCoin } from '#config/emojies';
 import { GuildEvents, GuildSettings } from '#config/guilds';
 import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
+import { NicknameService } from '#core/nickname/nickname.service';
 import { InsufficientFundsException } from '#core/wallet/wallet.exception';
 import { WalletService } from '#core/wallet/wallet.service';
 import { formatCoins, hideEmbedLink } from '#root/lib/utils';
@@ -36,6 +37,7 @@ export class RenameCommands {
     private readonly guildEventService: GuildEventService,
     private readonly walletService: WalletService,
     private readonly userService: UserService,
+    private readonly nicknameService: NicknameService,
   ) {}
 
   @SlashCommand({
@@ -58,6 +60,7 @@ export class RenameCommands {
       interaction.member as GuildMember,
       target,
       new_name,
+      dto.lock,
     );
 
     const attach = hideEmbedLink(attachments?.join('\n'));
@@ -108,6 +111,7 @@ export class RenameCommands {
     executor_member: GuildMember,
     target_member: GuildMember,
     new_nickname: string,
+    lock?: string,
   ): Promise<RenameResult> {
     const guild = executor_member.guild;
     if (!guild) {
@@ -132,6 +136,17 @@ export class RenameCommands {
       };
     }
 
+    const hasLockedNickname = await this.nicknameService.hasLockedNickname(
+      BigInt(guild.id),
+      BigInt(target_member.id),
+    );
+    if (hasLockedNickname) {
+      return {
+        error: true,
+        message: 'У пользователя заблокирован никнейм',
+      };
+    }
+
     if (target_member.id === guild.client.user.id) {
       return this.renameBot(executor_member, target_member, new_nickname);
     }
@@ -141,6 +156,15 @@ export class RenameCommands {
         error: false,
         message: `<@${executor_member.id}> пытался переименовать <@${guild.ownerId}> в \`${new_nickname}\`, но у него не получилось.`,
       };
+    }
+
+    if (lock) {
+      return this.renameLockedUser(
+        executor_member,
+        target_member,
+        new_nickname,
+        lock,
+      );
     }
 
     const previous_nickname =
@@ -227,6 +251,57 @@ export class RenameCommands {
       attachments: [
         'https://tenor.com/view/when-the-money-vince-mcmahon-big-chungus-wwe-gif-16018373',
       ],
+    };
+  }
+
+  private async renameLockedUser(
+    executor_member: GuildMember,
+    target_member: GuildMember,
+    new_nickname: string,
+    lock?: string,
+  ): Promise<RenameResult> {
+    const lockDuration = lock ? parseInt(lock) : 0;
+    if (lockDuration <= 0) {
+      return {
+        error: true,
+        message: 'Некорректная длительность блокировки',
+      };
+    }
+
+    const lockCost = BigInt(lockDuration) * 1000n;
+    const user = await this.userService.findOrCreate(
+      BigInt(executor_member.guild.id),
+      BigInt(executor_member.id),
+    );
+
+    try {
+      await this.walletService.debit(user, lockCost, 'lock-nickname', {
+        new_nickname,
+        lock_duration: lockDuration,
+      });
+    } catch (error) {
+      if (error instanceof InsufficientFundsException) {
+        return {
+          error: true,
+          message: `Недостаточно монет для блокировки никнейма. Нужно: ${formatCoins(lockCost)}`,
+        };
+      }
+      throw error;
+    }
+
+    await this.nicknameService.setLockedNickname(
+      BigInt(executor_member.guild.id),
+      BigInt(target_member.id),
+      new_nickname,
+      lockDuration * 3600,
+      BigInt(executor_member.id),
+    );
+
+    const durationText = `<t:${Math.floor(Date.now() / 1000) + lockDuration * 3600}:R>`;
+
+    return {
+      error: false,
+      message: `Участник <@${target_member.user.id}> изменён на \`${new_nickname}\` и заблокирован до ${durationText} за ${formatCoins(lockCost)} ${EmojiCoin.Animated}`,
     };
   }
 }

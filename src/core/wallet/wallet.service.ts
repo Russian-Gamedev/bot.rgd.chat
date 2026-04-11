@@ -170,4 +170,15 @@ export class WalletService {
       offset,
     });
   }
+
+  async getCurrentUserBalance(
+    userId: DiscordID,
+    guildId: DiscordID,
+  ): Promise<bigint> {
+    const user = await this.userRepository.findOne({
+      user_id: BigInt(userId),
+      guild_id: BigInt(guildId),
+    });
+    return user?.coins ?? 0n;
+  }
 }

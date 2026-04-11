@@ -129,5 +129,8 @@ export function choose<T>(array: readonly T[]): T {
 }
 
 export function hideEmbedLink(url: string) {
-  return `[\`](${url})`;
+  if (url.startsWith('https://')) {
+    return `[\`](${url})`;
+  }
+  return url;
 }

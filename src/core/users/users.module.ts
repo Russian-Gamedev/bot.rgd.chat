@@ -3,6 +3,7 @@ import { forwardRef, Module } from '@nestjs/common';
 
 import { GuildEventsModule } from '#core/guilds/events/guild-events.module';
 import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
+import { NicknameModule } from '#core/nickname/nickname.module';
 import { WalletModule } from '#core/wallet/wallet.module';
 
 import { UserEntity } from './entities/user.entity';
@@ -17,6 +18,7 @@ import { UserService } from './users.service';
     GuildSettingsModule,
     GuildEventsModule,
     forwardRef(() => WalletModule),
+    NicknameModule,
   ],
   providers: [UserService, BirthdayService, ...commands],
   exports: [UserService],

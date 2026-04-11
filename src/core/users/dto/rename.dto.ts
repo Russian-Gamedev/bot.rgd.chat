@@ -14,4 +14,11 @@ export class RenameUserDto {
     required: true,
   })
   new_name: string;
+
+  @StringOption({
+    name: 'lock',
+    description: 'Заблокировать никнейм (1000 монет/час)',
+    required: false,
+  })
+  lock?: string;
 }
