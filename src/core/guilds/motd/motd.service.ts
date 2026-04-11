@@ -119,6 +119,24 @@ export class MotdService {
       },
       () =>
         `Я жив уже ${formatTime(Math.floor(process.uptime()))}. Чувствую себя отлично!`,
+      () => {
+        const botBirthday = new Date('2020-07-21');
+        const now = new Date();
+        const age = Math.floor(
+          (now.getTime() - botBirthday.getTime()) / (1000 * 60 * 60 * 24 * 365),
+        );
+        const plural = pluralize(age, ['год', 'года', 'лет']);
+        return `🎂 Мне уже ${age} ${plural}!`;
+      },
+      () => {
+        const rgdBirthday = new Date('2018-10-24');
+        const now = new Date();
+        const age = Math.floor(
+          (now.getTime() - rgdBirthday.getTime()) / (1000 * 60 * 60 * 24 * 365),
+        );
+        const plural = pluralize(age, ['год', 'года', 'лет']);
+        return `🎉 RGD уже ${age} ${plural}!`;
+      },
     ];
   }
 }
