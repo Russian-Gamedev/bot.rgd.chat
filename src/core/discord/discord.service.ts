@@ -12,66 +12,10 @@ export class DiscordService {
     private readonly redis: Redis,
   ) {}
 
-  async onModuleInit() {
-    const token = process.env.DISCORD_BOT_TOKEN;
-    const clientId = process.env.DISCORD_CLIENT_ID;
-
-    const commands = await fetch(
-      'https://discord.com/api/v10/applications/' + clientId + '/commands',
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bot ${token}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    ).then((res) => res.json());
-
-    const oldCommands: string[][] = [];
-
-    const deleteAfter = 1000 * 60 * 60 * 24 * 7; // 7 days ago
-
-    for (const cmd of commands) {
-      const version = SnowflakeUtil.decode(cmd.version);
-      const diff = Date.now() - Number(version.timestamp);
-      if (diff > deleteAfter) {
-        oldCommands.push([cmd.id, cmd.name]);
-      }
-    }
-
-    const launchBarCommand = commands.find(
-      (cmd) => cmd.name === 'launch' || cmd.name === 'launch-bar',
-    );
-    if (launchBarCommand) {
-      oldCommands.push([launchBarCommand.id, launchBarCommand.name]);
-    }
-
-    this.logger.warn(`Found ${oldCommands.length} old commands to delete`);
-
-    for (const [cmdId, cmdName] of oldCommands) {
-      await fetch(
-        'https://discord.com/api/v10/applications/' +
-          clientId +
-          '/commands/' +
-          cmdId,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bot ${token}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      ).then((res) => res.json());
-
-      this.logger.warn(
-        `Deleted command with ID: ${cmdId} and name: ${cmdName}`,
-      );
-    }
-  }
-
   @Once('clientReady')
   public async onReady() {
     await Bun.sleep(5000); // wait for discord cache to stabilize before registering commands
+    await this.cleanUnusedCommands();
     await this.client.application?.commands
       .create({
         name: 'launch',
@@ -154,5 +98,82 @@ export class DiscordService {
       icon_url: invite.guild.iconURL({ extension: 'webp', size: 128 }),
       banner_url: invite.guild.bannerURL({ extension: 'webp', size: 512 }),
     };
+  }
+
+  private async cleanUnusedCommands() {
+    const token = process.env.DISCORD_BOT_TOKEN;
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    const deleteAfter = 1000 * 60 * 60 * 24; // 1 day
+
+    const baseUrl = `https://discord.com/api/v10/applications/${clientId}`;
+    const headers = {
+      Authorization: `Bot ${token}`,
+      'Content-Type': 'application/json',
+    };
+
+    const isOldOrLaunch = (cmd: {
+      id: string;
+      name: string;
+      version: string;
+    }) => {
+      if (cmd.name === 'launch' || cmd.name === 'launch-bar') return true;
+      const diff =
+        Date.now() - Number(SnowflakeUtil.decode(cmd.version).timestamp);
+      return diff > deleteAfter;
+    };
+
+    interface Command {
+      id: string;
+      name: string;
+      version: string;
+    }
+
+    // Global commands
+    const globalCommands: Command[] = await fetch(`${baseUrl}/commands`, {
+      method: 'GET',
+      headers,
+    }).then((res) => res.json());
+
+    const oldGlobal = globalCommands.filter(isOldOrLaunch);
+    this.logger.warn(`Found ${oldGlobal.length} old global commands to delete`);
+
+    for (const cmd of oldGlobal) {
+      await fetch(`${baseUrl}/commands/${cmd.id}`, {
+        method: 'DELETE',
+        headers,
+      });
+      this.logger.warn(`Deleted global command "${cmd.name}" (${cmd.id})`);
+    }
+
+    // Guild commands
+    const guildIds = [...this.client.guilds.cache.keys()];
+    for (const guildId of guildIds) {
+      const guildCommands: Command[] = await fetch(
+        `${baseUrl}/guilds/${guildId}/commands`,
+        {
+          method: 'GET',
+          headers,
+        },
+      ).then((res) => res.json());
+
+      if (!Array.isArray(guildCommands)) continue;
+
+      const oldGuild = guildCommands.filter(isOldOrLaunch);
+      if (oldGuild.length === 0) continue;
+
+      this.logger.warn(
+        `Found ${oldGuild.length} old guild commands to delete in guild ${guildId}`,
+      );
+
+      for (const cmd of oldGuild) {
+        await fetch(`${baseUrl}/guilds/${guildId}/commands/${cmd.id}`, {
+          method: 'DELETE',
+          headers,
+        });
+        this.logger.warn(
+          `Deleted guild command "${cmd.name}" (${cmd.id}) from guild ${guildId}`,
+        );
+      }
+    }
   }
 }
