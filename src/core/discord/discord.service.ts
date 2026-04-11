@@ -12,10 +12,12 @@ export class DiscordService {
     private readonly redis: Redis,
   ) {}
 
+  async onModuleInit() {
+    await this.cleanUnusedCommands();
+  }
+
   @Once('clientReady')
   public async onReady() {
-    await Bun.sleep(5000); // wait for discord cache to stabilize before registering commands
-    await this.cleanUnusedCommands();
     await this.client.application?.commands
       .create({
         name: 'launch',
@@ -145,9 +147,15 @@ export class DiscordService {
       this.logger.warn(`Deleted global command "${cmd.name}" (${cmd.id})`);
     }
 
-    // Guild commands
-    const guildIds = [...this.client.guilds.cache.keys()];
-    for (const guildId of guildIds) {
+    // Guild commands — fetch via REST since guilds.cache is not available before clientReady
+    const botGuilds: { id: string }[] = await fetch(
+      'https://discord.com/api/v10/users/@me/guilds',
+      { method: 'GET', headers },
+    ).then((res) => res.json());
+
+    if (!Array.isArray(botGuilds)) return;
+
+    for (const { id: guildId } of botGuilds) {
       const guildCommands: Command[] = await fetch(
         `${baseUrl}/guilds/${guildId}/commands`,
         {
