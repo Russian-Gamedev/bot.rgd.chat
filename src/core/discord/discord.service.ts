@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Client } from 'discord.js';
+import { Client, SnowflakeUtil } from 'discord.js';
 import Redis from 'ioredis';
 import { Once } from 'necord';
 
@@ -27,25 +27,46 @@ export class DiscordService {
       },
     ).then((res) => res.json());
 
+    const oldCommands: string[][] = [];
+
+    const deleteAfter = 1000 * 60 * 60 * 24 * 7; // 7 days ago
+
+    for (const cmd of commands) {
+      const version = SnowflakeUtil.decode(cmd.version);
+      const diff = Date.now() - Number(version.timestamp);
+      if (diff > deleteAfter) {
+        oldCommands.push([cmd.id, cmd.name]);
+      }
+    }
+
     const launchBarCommand = commands.find(
       (cmd) => cmd.name === 'launch' || cmd.name === 'launch-bar',
     );
-    if (!launchBarCommand) return;
-    await fetch(
-      'https://discord.com/api/v10/applications/' +
-        clientId +
-        '/commands/' +
-        launchBarCommand.id,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bot ${token}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    ).then((res) => res.json());
+    if (launchBarCommand) {
+      oldCommands.push([launchBarCommand.id, launchBarCommand.name]);
+    }
 
-    this.logger.log('Deleted /launch command');
+    this.logger.warn(`Found ${oldCommands.length} old commands to delete`);
+
+    for (const [cmdId, cmdName] of oldCommands) {
+      await fetch(
+        'https://discord.com/api/v10/applications/' +
+          clientId +
+          '/commands/' +
+          cmdId,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bot ${token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      ).then((res) => res.json());
+
+      this.logger.warn(
+        `Deleted command with ID: ${cmdId} and name: ${cmdName}`,
+      );
+    }
   }
 
   @Once('clientReady')
