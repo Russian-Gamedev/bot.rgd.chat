@@ -18,6 +18,7 @@ export class DiscordService {
 
   @Once('clientReady')
   public async onReady() {
+    await Bun.sleep(5000); // Wait a bit to ensure all guilds are available
     await this.client.application?.commands
       .create({
         name: 'launch',
