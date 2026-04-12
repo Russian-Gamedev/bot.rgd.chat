@@ -29,23 +29,10 @@ export class BirthdayService {
   @Cron('0 8 * * *')
   async postBirthdayGreeting() {
     const guilds = this.discord.guilds.cache;
+
     for (const guild of guilds.values()) {
       const guildId = BigInt(guild.id);
       this.logger.log(`Posting birthday greetings for guild ${guildId}`);
-
-      const today = new Date();
-
-      const users = await this.userService.getBirthdayUsers(
-        guildId,
-        today.getMonth() + 1,
-        today.getDate(),
-      );
-
-      if (!users.length) continue;
-
-      this.logger.log(`Found ${users.length} users with birthdays today`);
-      const eventChannel =
-        await this.guildSettings.getEventMessageChannel(guildId);
 
       const birthdayRoleId = await this.guildSettings.getSetting<string>(
         guildId,
@@ -78,6 +65,20 @@ export class BirthdayService {
           }
         }
       });
+
+      const today = new Date();
+
+      const users = await this.userService.getBirthdayUsers(
+        guildId,
+        today.getMonth() + 1,
+        today.getDate(),
+      );
+
+      if (!users.length) continue;
+
+      this.logger.log(`Found ${users.length} users with birthdays today`);
+      const eventChannel =
+        await this.guildSettings.getEventMessageChannel(guildId);
 
       if (!eventChannel) {
         this.logger.log(`No event channel set for guild ${guildId}, skipping`);
