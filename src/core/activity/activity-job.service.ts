@@ -1,4 +1,8 @@
-import { EntityManager, EntityRepository } from '@mikro-orm/core';
+import {
+  EntityManager,
+  EntityRepository,
+  RequestContext,
+} from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
@@ -110,22 +114,24 @@ export class ActivityJobService {
     });
 
     for (const activity of activities) {
-      try {
-        const coinsPerMinute = Math.floor(activity.voice / 60);
-        const coins = activity.message + coinsPerMinute;
-        if (coins === 0) continue;
-        const user = await this.userService.findOrCreate(
-          BigInt(guild.id),
-          activity.user_id,
-        );
-        await this.walletService.credit(user, BigInt(coins), 'daily-reward');
-      } catch (err) {
-        if (err instanceof Error) {
-          this.logger.warn(
-            `Failed to give coins to user ${activity.user_id} in guild ${guild.id}: ${err.message}`,
+      await RequestContext.create(this.em, async () => {
+        try {
+          const coinsPerMinute = Math.floor(activity.voice / 60);
+          const coins = activity.message + coinsPerMinute;
+          if (coins === 0) return;
+          const user = await this.userService.findOrCreate(
+            BigInt(guild.id),
+            activity.user_id,
           );
+          await this.walletService.credit(user, BigInt(coins), 'daily-reward');
+        } catch (err) {
+          if (err instanceof Error) {
+            this.logger.warn(
+              `Failed to give coins to user ${activity.user_id} in guild ${guild.id}: ${err.message}`,
+            );
+          }
         }
-      }
+      });
     }
   }
 
