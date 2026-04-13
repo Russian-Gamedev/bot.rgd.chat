@@ -14,8 +14,8 @@ type MotdEntry = MotdFunction | string;
 @Injectable()
 export class MotdService {
   private readonly logger = new Logger(MotdService.name);
+  private readonly INTERVAL = 60 * 1000; // 1 minute
   private motdCache = new Set<MotdEntry>();
-  private interval = 60 * 1000; // 1 minute
 
   constructor(
     @InjectRepository(MotdEntity)
@@ -28,7 +28,7 @@ export class MotdService {
   async onBotReady() {
     /// fires immediately on startup to set the bot's MOTD status, then every minute via the Interval
     await this.setBotMotd();
-    setInterval(() => this.setBotMotd(), this.interval);
+    setInterval(() => this.setBotMotd(), this.INTERVAL);
   }
 
   private async loadMotd() {
@@ -136,6 +136,17 @@ export class MotdService {
         );
         const plural = pluralize(age, ['год', 'года', 'лет']);
         return `🎉 RGD уже ${age} ${plural}!`;
+      },
+      () => `Новый проект №${Math.floor(Math.random() * 1000) + 100}!`,
+      () =>
+        `Опечаток в чате: ${Math.floor(Math.random() * 10) + 1} (autofix не помог)`,
+      () => {
+        const chars = '•၊၊||၊|။||||||||။၊|';
+        let voice = '';
+        for (let i = 0; i < 12; i++) {
+          voice += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return `▶︎ •${voice}• 0:${Math.floor(Math.random() * 59)}`;
       },
     ];
   }
