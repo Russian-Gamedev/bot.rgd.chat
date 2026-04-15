@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Client } from 'discord.js';
 import { Context, type ContextOf, On, Once } from 'necord';
 
@@ -37,7 +37,7 @@ export class GuildInviteWatcher {
   }
 
   /// Sync invites for all guilds every 1 hour
-  @Cron('0 */1 * * *')
+  @Cron(CronExpression.EVERY_HOUR)
   private async syncInvitesForAllGuilds() {
     const guilds = this.discord.guilds.cache.values();
     for (const guild of guilds) {

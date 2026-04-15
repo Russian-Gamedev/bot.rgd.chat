@@ -28,9 +28,6 @@ export class GuildInviteService {
     inviteEntity.uses = invite.uses ?? 0;
     inviteEntity.inviter_id = invite.inviter?.id ?? '0';
     await this.entityManager.persist(inviteEntity).flush();
-    this.logger.log(
-      `Created invite with ID: ${inviteEntity.id} by ${inviteEntity.inviter_id}`,
-    );
     return inviteEntity;
   }
 
@@ -45,24 +42,20 @@ export class GuildInviteService {
     for (const inviteEntity of inviteEntities) {
       if (!invites.has(inviteEntity.id)) {
         await this.entityManager.remove(inviteEntity).flush();
-        this.logger.log(`Deleted invite with ID: ${inviteEntity.id}`);
       }
     }
-
-    let updated = 0;
 
     /// update existing invites and create new ones
     for (const invite of invites.values()) {
       const inviteEntity = inviteEntities.find((i) => i.id === invite.code);
       if (inviteEntity) {
         inviteEntity.uses = invite.uses ?? inviteEntity.uses;
-        await this.entityManager.flush();
-        updated++;
+        this.entityManager.persist(inviteEntity);
       } else {
         await this.create(invite);
       }
     }
-    this.logger.log(`Updated ${updated} invites for guild ID: ${guildId}`);
+    await this.entityManager.flush();
   }
 
   async findInviteWithUpdatedUses(guild_id: string) {
