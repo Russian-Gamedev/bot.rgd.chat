@@ -54,6 +54,12 @@ export function messageLinkRaw(
 }
 
 export function getTimeInfo(t: number) {
+  const years = Math.floor(t / 31_536_000);
+  t -= years * 31_536_000;
+  const month = Math.floor(t / 2_592_000);
+  t -= month * 2_592_000;
+  const weeks = Math.floor(t / 604800);
+  t -= weeks * 604800;
   const days = Math.floor(t / 86400);
   t -= days * 86400;
   const hours = Math.floor(t / 3600);
@@ -63,31 +69,37 @@ export function getTimeInfo(t: number) {
   const seconds = t;
 
   return {
+    years,
+    month,
+    weeks,
     days,
     hours,
     minutes,
     seconds,
-    toString: () =>
-      `${hours} ч ${minutes.toString().padStart(2, '0')} мин ${seconds
-        .toString()
-        .padStart(2, '0')} сек`,
   };
 }
 
+const formatMap: Record<
+  keyof ReturnType<typeof getTimeInfo>,
+  (value: number) => string
+> = {
+  years: (value) => `${value} год.`,
+  month: (value) => `${value} мес.`,
+  weeks: (value) => `${value} нед.`,
+  days: (value) => `${value} дн.`,
+  hours: (value) => `${value} ч.`,
+  minutes: (value) => `${value} мин.`,
+  seconds: (value) => `${value} сек.`,
+};
+
 export function formatTime(t: number) {
-  const time = getTimeInfo(t);
+  const time = getTimeInfo(Math.abs(t));
   let result = '';
-  if (time.days > 0) {
-    result += `${time.days} д `;
-  }
-  if (time.hours > 0) {
-    result += `${time.hours} ч `;
-  }
-  if (time.minutes > 0) {
-    result += `${time.minutes} мин `;
-  }
-  if (time.seconds > 0 || result === '') {
-    result += `${time.seconds} сек`;
+  const keys = Object.keys(time) as (keyof ReturnType<typeof getTimeInfo>)[];
+  for (const key of keys) {
+    if (time[key] > 0) {
+      result += formatMap[key](time[key]) + ' ';
+    }
   }
   return result.trim();
 }
@@ -119,7 +131,7 @@ export function hashStringToInt(str: string) {
   return Math.abs(hash);
 }
 
-export function formatCoins(amount: bigint): string {
+export function formatCoins(amount: bigint | number): string {
   return Number(amount).toLocaleString('ru-RU');
 }
 
