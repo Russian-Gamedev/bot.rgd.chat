@@ -2,11 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { MessageFlags } from 'discord.js';
 import {
   Context,
+  createCommandGroupDecorator,
   Options,
-  SlashCommand,
   type SlashCommandContext,
   StringOption,
+  Subcommand,
 } from 'necord';
+
+export const PruneGroupDecorator = createCommandGroupDecorator({
+  name: 'prune',
+  description: 'Команды для очистки чего-либо',
+  defaultMemberPermissions: 'Administrator',
+});
 
 class PruneDto {
   @StringOption({
@@ -24,12 +31,12 @@ class PruneDto {
   before?: string;
 }
 
+@PruneGroupDecorator()
 @Injectable()
 export class PruneCommand {
-  @SlashCommand({
-    name: 'prune',
+  @Subcommand({
+    name: 'messages',
     description: 'Prune messages in a channel',
-    defaultMemberPermissions: ['ManageMessages'],
   })
   async prune(
     @Context() [interaction]: SlashCommandContext,

@@ -236,4 +236,17 @@ export class UserService {
       birth_date: { $ne: null },
     });
   }
+
+  async getInactiveUsers(
+    guildID: DiscordID,
+    since: Date,
+    excludeUserIds: DiscordID[],
+  ): Promise<UserEntity[]> {
+    return this.userRepository.find({
+      guild_id: BigInt(guildID),
+      lastActiveAt: { $lte: since },
+      is_left_guild: false,
+      user_id: { $nin: excludeUserIds.map((id) => BigInt(id)) },
+    });
+  }
 }
