@@ -1,4 +1,11 @@
-import { IsEnum, IsNumber, IsString, ValidateIf } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
 
 export enum Environment {
   Development = 'development',
@@ -47,4 +54,9 @@ export class EnvironmentVariables {
 
   @IsString()
   TELEGRAM_API_ROOT: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  @Transform(({ value }) => value.split(',').map((s) => s.trim()))
+  API_ACCESS_WHITELIST: string[];
 }

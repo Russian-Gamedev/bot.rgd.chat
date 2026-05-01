@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Client } from 'discord.js';
+import { ConfigService } from '@nestjs/config';
 import {
   Arguments,
   Context,
@@ -13,7 +13,7 @@ import { BotsService } from './bots.service';
 export class BotsManagerService {
   constructor(
     private readonly botsService: BotsService,
-    private readonly discord: Client,
+    private readonly config: ConfigService,
   ) {}
 
   @TextCommand({
@@ -26,7 +26,7 @@ export class BotsManagerService {
   ) {
     if (message.author.bot) return;
     const author = await message.author.fetch();
-    if (author.id !== message.guild?.ownerId) return;
+    if (!this.inWhitelist(author.id)) return;
 
     const name = args.join(' ');
     if (!name) {
@@ -62,7 +62,7 @@ export class BotsManagerService {
   ) {
     if (message.author.bot) return;
     const author = await message.author.fetch();
-    if (author.id !== message.guild?.ownerId) return;
+    if (!this.inWhitelist(author.id)) return;
 
     const name = args.join(' ');
     if (!name) {
@@ -82,5 +82,10 @@ export class BotsManagerService {
     }
     await this.botsService.deleteBot(bot.id);
     await message.reply(`Bot with ID ${bot.id} has been deleted.`);
+  }
+
+  private inWhitelist(userId: string): boolean {
+    const whitelist = this.config.get<string[]>('API_ACCESS_WHITELIST', []);
+    return whitelist.includes(userId);
   }
 }
