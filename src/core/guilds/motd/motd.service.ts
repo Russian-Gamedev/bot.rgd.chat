@@ -154,7 +154,7 @@ export class MotdService {
       const plural = pluralize(age, ['год', 'года', 'лет']);
       return `🎉 RGD уже ${age} ${plural}!`;
     },
-    () => `Новый проект №${Math.floor(Math.random() * 1000) + 100}!`,
+    () => `Новый проект #${Math.floor(Math.random() * 1000) + 100}!`,
     () =>
       `Опечаток в чате: ${Math.floor(Math.random() * 10) + 1} (autofix не помог)`,
     () => {
@@ -163,7 +163,10 @@ export class MotdService {
       for (let i = 0; i < 12; i++) {
         voice += chars.charAt(Math.floor(Math.random() * chars.length));
       }
-      return `▶︎ •${voice}• 0:${Math.floor(Math.random() * 59)}`;
+      const seconds = Math.floor(1 + Math.random() * 58)
+        .toString()
+        .padStart(2, '0');
+      return `▶︎ •${voice}• 00:${seconds}`;
     },
   ];
 }
