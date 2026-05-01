@@ -66,7 +66,7 @@ export class ActivityJobService {
     await interaction.reply({ embeds: [embed] });
   }
 
-  @Cron('0 15 * * *', { timeZone: 'Europe/Moscow' })
+  @Cron('0 15 * * *', { name: 'daily-activity' })
   async handleDailyJob() {
     /// Runs every day at 15:00 MSK
     this.logger.log('Running daily activity job');

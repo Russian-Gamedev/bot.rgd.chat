@@ -26,7 +26,7 @@ export class BirthdayService {
     private readonly guildSettings: GuildSettingsService,
   ) {}
 
-  @Cron('0 8 * * *')
+  @Cron('0 8 * * *', { name: 'birthday-greeting' })
   async postBirthdayGreeting() {
     const guilds = this.discord.guilds.cache;
 

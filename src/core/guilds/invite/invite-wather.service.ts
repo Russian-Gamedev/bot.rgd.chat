@@ -37,7 +37,7 @@ export class GuildInviteWatcher {
   }
 
   /// Sync invites for all guilds every 1 hour
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_HOUR, { name: 'sync-invites' })
   private async syncInvitesForAllGuilds() {
     const guilds = this.discord.guilds.cache.values();
     for (const guild of guilds) {
