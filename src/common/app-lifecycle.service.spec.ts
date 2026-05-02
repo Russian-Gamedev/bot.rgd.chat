@@ -9,6 +9,7 @@ import {
   type AppLifecycleStopRecord,
   createShutdownLogPayload,
   createStartupLogPayload,
+  determineRestartCount,
   determineStartupReason,
 } from './app-lifecycle.service';
 import { type GitInfoService } from './git-info.service';
@@ -21,6 +22,7 @@ function createStartRecord(
     instanceId: 'instance-a',
     branch: 'main',
     commit: 'abcdef1234567890',
+    restartCount: 0,
     startedAt: '2026-05-02T12:00:00.000Z',
     ...overrides,
   };
@@ -122,6 +124,30 @@ describe('determineStartupReason', () => {
   });
 });
 
+describe('determineRestartCount', () => {
+  it('returns 0 when there is no previous start record', () => {
+    expect(determineRestartCount(undefined, 'abcdef1234567890')).toBe(0);
+  });
+
+  it('returns 0 when the commit changes', () => {
+    expect(
+      determineRestartCount(
+        createStartRecord({ commit: 'oldcommit1234567', restartCount: 4 }),
+        'newcommit1234567',
+      ),
+    ).toBe(0);
+  });
+
+  it('increments the restart count for the same commit', () => {
+    expect(
+      determineRestartCount(
+        createStartRecord({ restartCount: 4 }),
+        'abcdef1234567890',
+      ),
+    ).toBe(5);
+  });
+});
+
 describe('AppLifecycleService', () => {
   it('loads previous lifecycle state and stores the current startup record', async () => {
     const previousStart = createStartRecord({
@@ -155,8 +181,56 @@ describe('AppLifecycleService', () => {
       rawCurrentStart!,
     ) as AppLifecycleStartRecord;
     expect(currentStart.commit).toBe('newcommit1234567');
+    expect(currentStart.restartCount).toBe(0);
     expect(currentStart.instanceId).toBeString();
     expect(currentStart.instanceId).not.toBe(previousStart.instanceId);
+  });
+
+  it('increments restartCount when the same commit starts again', async () => {
+    const previousStart = createStartRecord({
+      instanceId: 'instance-prev',
+      restartCount: 2,
+    });
+    const previousStop = createStopRecord({
+      instanceId: previousStart.instanceId,
+      commit: previousStart.commit,
+    });
+    const redis = createRedisMock({
+      [APP_LIFECYCLE_LAST_START_KEY]: JSON.stringify(previousStart),
+      [APP_LIFECYCLE_LAST_STOP_KEY]: JSON.stringify(previousStop),
+    });
+    const service = new AppLifecycleService(redis, createGitInfoService());
+
+    await service.onApplicationBootstrap();
+
+    const startupContext = await service.getStartupContext();
+    expect(startupContext.reason).toBe('same_version_restart');
+    expect(startupContext.currentStart.restartCount).toBe(3);
+  });
+
+  it('treats legacy start records without restartCount as 0', async () => {
+    const legacyStartRecord = {
+      schemaVersion: 1,
+      instanceId: 'instance-prev',
+      branch: 'main',
+      commit: 'abcdef1234567890',
+      startedAt: '2026-05-02T12:00:00.000Z',
+    };
+    const previousStop = createStopRecord({
+      instanceId: legacyStartRecord.instanceId,
+      commit: legacyStartRecord.commit,
+    });
+    const redis = createRedisMock({
+      [APP_LIFECYCLE_LAST_START_KEY]: JSON.stringify(legacyStartRecord),
+      [APP_LIFECYCLE_LAST_STOP_KEY]: JSON.stringify(previousStop),
+    });
+    const service = new AppLifecycleService(redis, createGitInfoService());
+
+    await service.onApplicationBootstrap();
+
+    const startupContext = await service.getStartupContext();
+    expect(startupContext.previousStart?.restartCount).toBe(0);
+    expect(startupContext.currentStart.restartCount).toBe(1);
   });
 
   it('persists graceful shutdown details with signal', async () => {
@@ -198,6 +272,7 @@ describe('lifecycle log payloads', () => {
     });
 
     expect(payload.currentCommit).toBe('newcommit1234567');
+    expect(payload.restartCount).toBe(0);
     expect(payload.previousCommit).toBe('oldcommit1234567');
     expect(payload.previousGraceful).toBe(true);
     expect(payload.previousSignal).toBe('SIGTERM');

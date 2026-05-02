@@ -25,6 +25,7 @@ export interface AppLifecycleStartRecord {
   instanceId: string;
   branch: string;
   commit: string;
+  restartCount: number;
   startedAt: string;
 }
 
@@ -48,6 +49,7 @@ export interface AppStartupContext {
 export interface StartupLogPayload {
   event: 'app_start';
   reason: StartupReason;
+  restartCount: number;
   currentInstanceId: string;
   currentCommit: string;
   currentBranch: string;
@@ -89,6 +91,21 @@ export function determineStartupReason(
   return 'crash_restart';
 }
 
+export function determineRestartCount(
+  previousStart: AppLifecycleStartRecord | undefined,
+  currentCommit: string,
+) {
+  if (!previousStart) {
+    return 0;
+  }
+
+  if (previousStart.commit !== currentCommit) {
+    return 0;
+  }
+
+  return (previousStart.restartCount ?? 0) + 1;
+}
+
 export function describeStartupReason(reason: StartupReason): string {
   switch (reason) {
     case 'initial_start':
@@ -112,6 +129,7 @@ export function createStartupLogPayload(
   return {
     event: 'app_start',
     reason: startupContext.reason,
+    restartCount: startupContext.currentStart.restartCount,
     currentInstanceId: startupContext.currentStart.instanceId,
     currentCommit: startupContext.currentStart.commit,
     currentBranch: startupContext.currentStart.branch,
@@ -165,11 +183,11 @@ export class AppLifecycleService
   async onApplicationBootstrap() {
     try {
       const [previousStart, previousStop] = await Promise.all([
-        this.readRecord<AppLifecycleStartRecord>(APP_LIFECYCLE_LAST_START_KEY),
+        this.readStartRecord(),
         this.readRecord<AppLifecycleStopRecord>(APP_LIFECYCLE_LAST_STOP_KEY),
       ]);
 
-      const currentStart = this.createStartRecord();
+      const currentStart = this.createStartRecord(previousStart);
       const reason = determineStartupReason(
         previousStart,
         previousStop,
@@ -219,12 +237,18 @@ export class AppLifecycleService
     return this.startupContext;
   }
 
-  private createStartRecord(): AppLifecycleStartRecord {
+  private createStartRecord(
+    previousStart?: AppLifecycleStartRecord,
+  ): AppLifecycleStartRecord {
     return {
       schemaVersion: APP_LIFECYCLE_SCHEMA_VERSION,
       instanceId: this.instanceId,
       branch: this.currentGitInfo.branch,
       commit: this.currentGitInfo.commit,
+      restartCount: determineRestartCount(
+        previousStart,
+        this.currentGitInfo.commit,
+      ),
       startedAt: new Date().toISOString(),
     };
   }
@@ -255,6 +279,24 @@ export class AppLifecycleService
       );
       return undefined;
     }
+  }
+
+  private async readStartRecord() {
+    const record = await this.readRecord<Partial<AppLifecycleStartRecord>>(
+      APP_LIFECYCLE_LAST_START_KEY,
+    );
+    if (!record) {
+      return undefined;
+    }
+
+    return {
+      schemaVersion: record.schemaVersion ?? APP_LIFECYCLE_SCHEMA_VERSION,
+      instanceId: record.instanceId ?? 'unknown',
+      branch: record.branch ?? 'unknown',
+      commit: record.commit ?? 'unknown',
+      restartCount: record.restartCount ?? 0,
+      startedAt: record.startedAt ?? new Date(0).toISOString(),
+    } satisfies AppLifecycleStartRecord;
   }
 
   private async writeRecord(key: string, value: unknown) {

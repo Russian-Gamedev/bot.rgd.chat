@@ -36,6 +36,11 @@ export function buildGitInfoEmbed(
       ].join('\n'),
       inline: false,
     });
+    fields.push({
+      name: '🔁 Количество рестартов',
+      value: `\`${startupContext.currentStart.restartCount}\``,
+      inline: true,
+    });
 
     if (startupContext.previousStart) {
       fields.push({

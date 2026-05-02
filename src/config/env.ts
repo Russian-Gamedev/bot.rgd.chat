@@ -36,6 +36,10 @@ export class EnvironmentVariables {
   @IsString()
   DISCORD_CLIENT_ID: string;
 
+  @IsOptional()
+  @IsString()
+  DEBUG_CHANNEL_ID?: string;
+
   @IsString()
   @ValidateIf((o) => o.NODE_ENV === Environment.Development)
   DISCORD_DEVELOPMENT_GUILD_ID: string;

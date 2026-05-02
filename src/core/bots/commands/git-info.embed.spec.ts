@@ -23,6 +23,7 @@ describe('buildGitInfoEmbed', () => {
         instanceId: 'instance-current',
         branch: 'main',
         commit: gitInfo.commit,
+        restartCount: 3,
         startedAt: '2026-05-02T12:00:00.000Z',
       },
       previousStart: {
@@ -30,6 +31,7 @@ describe('buildGitInfoEmbed', () => {
         instanceId: 'instance-previous',
         branch: 'main',
         commit: '1234567fedcba',
+        restartCount: 2,
         startedAt: '2026-05-02T11:00:00.000Z',
       },
     };
@@ -40,6 +42,12 @@ describe('buildGitInfoEmbed', () => {
       expect.objectContaining({
         name: '🔄 Причина запуска',
         value: expect.stringContaining('crash_restart'),
+      }),
+    );
+    expect(embed.fields).toContainEqual(
+      expect.objectContaining({
+        name: '🔁 Количество рестартов',
+        value: '`3`',
       }),
     );
     expect(embed.fields).toContainEqual(
