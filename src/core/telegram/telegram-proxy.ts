@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TelegrafModuleOptions } from 'nestjs-telegraf';
 import type { Agent } from 'node:http';
@@ -6,6 +7,7 @@ import { SocksProxyAgent } from 'socks-proxy-agent';
 import { EnvironmentVariables } from '#config/env';
 
 const telegramProxyAgents = new Map<string, SocksProxyAgent>();
+const logger = new Logger('TelegramProxy');
 
 type TelegramConfigReader = Pick<
   ConfigService<EnvironmentVariables>,
@@ -42,7 +44,12 @@ export function getTelegramProxyAgent(proxyUrl?: string): Agent | undefined {
 export function createTelegramModuleOptions(
   config: TelegramConfigReader,
 ): TelegrafModuleOptions {
-  const agent = getTelegramProxyAgent(getTelegramSocksProxyUrl(config));
+  const proxyUrl = getTelegramSocksProxyUrl(config);
+  const agent = getTelegramProxyAgent(proxyUrl);
+
+  if (proxyUrl) {
+    logger.log(`Using SOCKS proxy for Telegram Bot API: ${proxyUrl}`);
+  }
 
   return {
     token: config.getOrThrow<string>('TELEGRAM_BOT_TOKEN'),

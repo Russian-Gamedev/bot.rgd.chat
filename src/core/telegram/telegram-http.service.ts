@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Agent } from 'node:http';
 import { request as httpRequest } from 'node:http';
@@ -24,10 +24,16 @@ export interface TelegramBinaryResponse {
 
 @Injectable()
 export class TelegramHttpService {
+  private readonly logger = new Logger(TelegramHttpService.name);
+
   constructor(private readonly config: ConfigService<EnvironmentVariables>) {}
 
   async fetchBinary(url: string | URL): Promise<TelegramBinaryResponse> {
     const agent = getTelegramProxyAgent(getTelegramSocksProxyUrl(this.config));
+    if (agent) {
+      const targetUrl = typeof url === 'string' ? url : url.toString();
+      this.logger.log(`Fetching Telegram binary via SOCKS proxy: ${targetUrl}`);
+    }
     return fetchTelegramBinary(url, agent);
   }
 }
