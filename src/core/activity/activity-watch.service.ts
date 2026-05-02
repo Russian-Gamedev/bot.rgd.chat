@@ -1,7 +1,6 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
 import {
   Client,
   GuildMember,
@@ -59,6 +58,9 @@ export class ActivityWatchService {
         }
       }
     }
+
+    this.logger.log(`Finished processing voice channels on startup`);
+    setInterval(() => this.saveAllVoiceActivities(), 1_000 * 60);
   }
 
   @On('messageCreate')
@@ -225,7 +227,6 @@ export class ActivityWatchService {
     await this.redis.hdel(key, member.id);
   }
 
-  @Interval(1_000 * 60)
   private async saveAllVoiceActivities() {
     const keys = await this.redis.keys('activity:voice:*');
 
