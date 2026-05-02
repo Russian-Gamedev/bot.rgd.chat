@@ -29,6 +29,8 @@ services:
         condition: service_healthy
     networks:
       - app_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   database:
     image: postgres:18-alpine
     container_name: "${COMPOSE_PROJECT_NAME}_database"
@@ -44,7 +46,7 @@ services:
     volumes:
       - $PWD/docker/postgresql:/var/lib/postgresql/18/docker
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U root"]
+      test: [ "CMD-SHELL", "pg_isready -U root" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,7 +60,7 @@ services:
     ports:
       - ":6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
