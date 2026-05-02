@@ -29,6 +29,7 @@ services:
         condition: service_healthy
     networks:
       - app_network
+      - telegram-bot-api
     extra_hosts:
       - "host.docker.internal:host-gateway"
   database:
@@ -69,3 +70,6 @@ services:
 
 networks:
   app_network:
+  telegram-bot-api:
+    external: true
+    name: telegram-bot-api
