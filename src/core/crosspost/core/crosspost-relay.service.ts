@@ -28,14 +28,14 @@ export class CrossPostRelayService {
     );
 
     for (const route of routes) {
-      if (event.kind === 'edit' && !route.settings.relayEdits) continue;
-      if (event.kind === 'delete' && !route.settings.relayDeletes) continue;
-
-      await this.relayRoute(route, event);
+      await this.relayToRoute(route, event);
     }
   }
 
-  private async relayRoute(route: CrossPostRouteEntity, event: CrossPostEvent) {
+  async relayToRoute(route: CrossPostRouteEntity, event: CrossPostEvent) {
+    if (event.kind === 'edit' && !route.settings.relayEdits) return;
+    if (event.kind === 'delete' && !route.settings.relayDeletes) return;
+
     const targets = route.targets.filter((target) => target.enabled);
 
     for (const target of targets) {

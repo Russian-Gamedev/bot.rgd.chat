@@ -72,7 +72,7 @@ export class CreateCrossPostRouteDto {
 
   @ApiProperty({
     description:
-      'Discord: { guildId, channelId }. Telegram: { chatId, chatTitle? }',
+      'Discord: { guildId, channelId }. Telegram: { chatId, chatTitle?, username?, printFooter?, footerTemplate?, onlyWithLinks? }',
   })
   @IsObject()
   sourceConfig: CrossPostSourceConfig;

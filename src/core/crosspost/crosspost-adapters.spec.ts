@@ -25,6 +25,26 @@ describe('Crosspost adapters', () => {
     ).toBe('telegram:chat:-100');
   });
 
+  it('normalizes Telegram username info', () => {
+    const adapter = new TelegramSourceAdapter();
+
+    expect(
+      adapter.normalizeConfig({ chatId: '-100', username: ' @rgdchat ' }),
+    ).toMatchObject({
+      username: 'rgdchat',
+    });
+  });
+
+  it('applies Telegram source setting defaults', () => {
+    const adapter = new TelegramSourceAdapter();
+
+    expect(adapter.normalizeConfig({ chatId: '-100' })).toMatchObject({
+      printFooter: false,
+      footerTemplate: undefined,
+      onlyWithLinks: false,
+    });
+  });
+
   it('rejects invalid Discord webhook target URLs', () => {
     const adapter = new DiscordWebhookTargetAdapter({} as never);
 
