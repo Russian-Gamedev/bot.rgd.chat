@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Client } from 'discord.js';
 import { Once } from 'necord';
 
@@ -9,7 +9,7 @@ import { Environment } from '#config/env';
 import { buildGitInfoEmbed } from './commands/git-info.embed';
 
 @Injectable()
-export class StartupNotifierService {
+export class StartupNotifierService implements OnModuleInit {
   private readonly logger = new Logger(StartupNotifierService.name);
 
   constructor(
@@ -18,9 +18,20 @@ export class StartupNotifierService {
     private readonly appLifecycleService: AppLifecycleService,
   ) {}
 
+  onModuleInit() {
+    this.logger.log(
+      `Startup notifier initialized: NODE_ENV=${process.env.NODE_ENV ?? 'undefined'}, DEBUG_CHANNEL_ID=${this.getDebugChannelIdForLogs()}`,
+    );
+  }
+
   @Once('clientReady')
   async onReady() {
+    this.logger.log(
+      `Startup notifier clientReady: NODE_ENV=${process.env.NODE_ENV ?? 'undefined'}, DEBUG_CHANNEL_ID=${this.getDebugChannelIdForLogs()}`,
+    );
+
     if (process.env.NODE_ENV === Environment.Development) {
+      this.logger.log('Skipping startup notification in development mode');
       return;
     }
 
@@ -65,5 +76,10 @@ export class StartupNotifierService {
     const gitInfo = this.gitInfoService.getGitInfo();
     const startupContext = await this.appLifecycleService.getStartupContext();
     return buildGitInfoEmbed(gitInfo, startupContext);
+  }
+
+  private getDebugChannelIdForLogs() {
+    const channelId = process.env.DEBUG_CHANNEL_ID?.trim();
+    return (channelId === '' ? undefined : channelId) ?? 'missing';
   }
 }

@@ -91,6 +91,16 @@ describe('StartupNotifierService', () => {
     process.env.DEBUG_CHANNEL_ID = originalDebugChannelId;
   });
 
+  it('logs notifier initialization context', () => {
+    const { service, logger } = createService();
+
+    service.onModuleInit();
+
+    expect(logger.log).toHaveBeenCalledWith(
+      'Startup notifier initialized: NODE_ENV=production, DEBUG_CHANNEL_ID=1234567890',
+    );
+  });
+
   it('sends the startup notification in production when the channel is sendable', async () => {
     const send = mock(async () => undefined);
     const { service, fetch, logger } = createService({
@@ -105,16 +115,27 @@ describe('StartupNotifierService', () => {
 
     expect(fetch).toHaveBeenCalledWith('1234567890');
     expect(send).toHaveBeenCalledTimes(1);
-    expect(logger.log).toHaveBeenCalledTimes(1);
+    expect(logger.log).toHaveBeenCalledWith(
+      'Startup notifier clientReady: NODE_ENV=production, DEBUG_CHANNEL_ID=1234567890',
+    );
+    expect(logger.log).toHaveBeenCalledWith(
+      'Startup notification sent to Discord channel 1234567890',
+    );
   });
 
   it('skips sending in development', async () => {
     process.env.NODE_ENV = Environment.Development;
-    const { service, fetch } = createService();
+    const { service, fetch, logger } = createService();
 
     await service.onReady();
 
     expect(fetch).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      'Startup notifier clientReady: NODE_ENV=development, DEBUG_CHANNEL_ID=1234567890',
+    );
+    expect(logger.log).toHaveBeenCalledWith(
+      'Skipping startup notification in development mode',
+    );
   });
 
   it('warns when DEBUG_CHANNEL_ID is missing', async () => {
@@ -124,6 +145,9 @@ describe('StartupNotifierService', () => {
     await service.onReady();
 
     expect(fetch).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      'Startup notifier clientReady: NODE_ENV=production, DEBUG_CHANNEL_ID=missing',
+    );
     expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
