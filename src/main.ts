@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
@@ -20,6 +20,8 @@ async function getSwaggerCustom() {
 }
 
 async function main() {
+  const logger = new Logger('Bootstrap');
+  logger.log('Starting application...');
   const app = await NestFactory.create(AppModule);
 
   const config = app.get(ConfigService<EnvironmentVariables>);
@@ -50,6 +52,12 @@ async function main() {
 
   const port = config.get<number>('PORT', 3000);
   await app.listen(port, '0.0.0.0');
+
+  const currentIP = await fetch('https://api.ipify.org').then((res) =>
+    res.text(),
+  );
+  logger.log(`Server is running on port ${port}`);
+  logger.log(`Current IP: ${currentIP}`);
 }
 
 main().catch((err) => {

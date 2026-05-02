@@ -9,15 +9,20 @@ import { TelegramBotService } from './events.service';
 import { TelegramController } from './telegram.controller';
 import { TelegramService } from './telegram.service';
 import { TelegramHttpService } from './telegram-http.service';
-import { createTelegramModuleOptions } from './telegram-proxy';
 
 @Module({
   imports: [
     TelegrafModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService<EnvironmentVariables>) =>
-        createTelegramModuleOptions(config),
+      useFactory: (config: ConfigService<EnvironmentVariables>) => ({
+        token: config.getOrThrow<string>('TELEGRAM_BOT_TOKEN'),
+        options: {
+          telegram: {
+            apiRoot: config.getOrThrow<string>('TELEGRAM_API_ROOT'),
+          },
+        },
+      }),
     }),
   ],
   controllers: [TelegramController],

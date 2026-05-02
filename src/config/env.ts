@@ -58,10 +58,6 @@ export class EnvironmentVariables {
   TELEGRAM_API_ROOT: string;
 
   @IsOptional()
-  @IsString()
-  TELEGRAM_SOCKS_PROXY_URL?: string;
-
-  @IsOptional()
   @IsString({ each: true })
   @Transform(({ value }) => value.split(',').map((s) => s.trim()))
   API_ACCESS_WHITELIST: string[];
