@@ -9,6 +9,7 @@ import { validate } from './validate';
       validate,
       isGlobal: true,
       expandVariables: true,
+      ignoreEnvFile: true,
     }),
   ],
   providers: [ConfigService],

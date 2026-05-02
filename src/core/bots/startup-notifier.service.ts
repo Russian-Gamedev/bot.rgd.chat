@@ -1,10 +1,11 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Client } from 'discord.js';
 import { Once } from 'necord';
 
 import { AppLifecycleService } from '#common/app-lifecycle.service';
 import { GitInfoService } from '#common/git-info.service';
-import { Environment } from '#config/env';
+import { Environment, EnvironmentVariables } from '#config/env';
 
 import { buildGitInfoEmbed } from './commands/git-info.embed';
 
@@ -16,26 +17,27 @@ export class StartupNotifierService implements OnModuleInit {
     private readonly discord: Client,
     private readonly gitInfoService: GitInfoService,
     private readonly appLifecycleService: AppLifecycleService,
+    private readonly config: ConfigService<EnvironmentVariables>,
   ) {}
 
   onModuleInit() {
     this.logger.log(
-      `Startup notifier initialized: NODE_ENV=${process.env.NODE_ENV ?? 'undefined'}, DEBUG_CHANNEL_ID=${this.getDebugChannelIdForLogs()}`,
+      `Startup notifier initialized: NODE_ENV=${this.getNodeEnv()}, DEBUG_CHANNEL_ID=${this.getDebugChannelIdForLogs()}`,
     );
   }
 
   @Once('clientReady')
   async onReady() {
     this.logger.log(
-      `Startup notifier clientReady: NODE_ENV=${process.env.NODE_ENV ?? 'undefined'}, DEBUG_CHANNEL_ID=${this.getDebugChannelIdForLogs()}`,
+      `Startup notifier clientReady: NODE_ENV=${this.getNodeEnv()}, DEBUG_CHANNEL_ID=${this.getDebugChannelIdForLogs()}`,
     );
 
-    if (process.env.NODE_ENV === Environment.Development) {
+    if (this.getNodeEnv() === Environment.Development) {
       this.logger.log('Skipping startup notification in development mode');
       return;
     }
 
-    const debugChannelId = process.env.DEBUG_CHANNEL_ID?.trim();
+    const debugChannelId = this.getDebugChannelId();
     if (!debugChannelId) {
       this.logger.warn(
         'DEBUG_CHANNEL_ID is not configured, skipping startup notification',
@@ -79,7 +81,15 @@ export class StartupNotifierService implements OnModuleInit {
   }
 
   private getDebugChannelIdForLogs() {
-    const channelId = process.env.DEBUG_CHANNEL_ID?.trim();
-    return (channelId === '' ? undefined : channelId) ?? 'missing';
+    return this.getDebugChannelId() ?? 'missing';
+  }
+
+  private getDebugChannelId() {
+    const channelId = this.config.get<string>('DEBUG_CHANNEL_ID')?.trim();
+    return channelId === '' ? undefined : channelId;
+  }
+
+  private getNodeEnv() {
+    return this.config.getOrThrow<Environment>('NODE_ENV');
   }
 }

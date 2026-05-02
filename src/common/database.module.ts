@@ -1,8 +1,9 @@
 import { MikroOrmMiddleware, MikroOrmModule } from '@mikro-orm/nestjs';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { Logger, MiddlewareConsumer, Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
-import { Environment } from '#config/env';
+import { Environment, EnvironmentVariables } from '#config/env';
 import config from '#root/mikro-orm.config';
 
 @Module({
@@ -11,11 +12,15 @@ import config from '#root/mikro-orm.config';
 export class DatabaseModule {
   private logger = new Logger(DatabaseModule.name);
 
-  constructor(private readonly orm: MikroORM) {}
+  constructor(
+    private readonly orm: MikroORM,
+    private readonly config: ConfigService<EnvironmentVariables>,
+  ) {}
 
   async onModuleInit(): Promise<void> {
-    this.logger.log('Environment: ' + process.env.NODE_ENV);
-    if (process.env.NODE_ENV === Environment.Development) {
+    const nodeEnv = this.config.getOrThrow<Environment>('NODE_ENV');
+    this.logger.log('Environment: ' + nodeEnv);
+    if (nodeEnv === Environment.Development) {
       await this.orm.schema.update();
       this.logger.log('Running migrations in development environment');
     } else {

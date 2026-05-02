@@ -12,8 +12,6 @@ export enum Environment {
   Production = 'production',
 }
 
-process.env.NODE_ENV ??= Environment.Development;
-
 export class EnvironmentVariables {
   @IsEnum(Environment)
   NODE_ENV: Environment;

@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { Client } from 'discord.js';
 
@@ -6,7 +7,7 @@ import {
   type AppStartupContext,
 } from '#common/app-lifecycle.service';
 import { type GitInfo, type GitInfoService } from '#common/git-info.service';
-import { Environment } from '#config/env';
+import { Environment, EnvironmentVariables } from '#config/env';
 
 import { StartupNotifierService } from './startup-notifier.service';
 
@@ -38,6 +39,8 @@ function createService(options?: {
     type?: string;
   };
   fetchError?: Error;
+  nodeEnv?: Environment;
+  debugChannelId?: string;
 }) {
   const fetch = mock(async () => {
     if (options?.fetchError) {
@@ -57,10 +60,27 @@ function createService(options?: {
   const appLifecycleService = {
     getStartupContext: async () => startupContext,
   } as AppLifecycleService;
+  const config = {
+    get: (key: keyof EnvironmentVariables) => {
+      if (key === 'DEBUG_CHANNEL_ID') {
+        return options?.debugChannelId ?? '1234567890';
+      }
+
+      return undefined;
+    },
+    getOrThrow: (key: keyof EnvironmentVariables) => {
+      if (key === 'NODE_ENV') {
+        return options?.nodeEnv ?? Environment.Production;
+      }
+
+      throw new Error(`Missing config key ${key}`);
+    },
+  } as ConfigService<EnvironmentVariables>;
   const service = new StartupNotifierService(
     discord,
     gitInfoService,
     appLifecycleService,
+    config,
   );
   const logger = {
     log: mock<(message: string) => void>(() => undefined),
@@ -78,17 +98,12 @@ function createService(options?: {
 }
 
 describe('StartupNotifierService', () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-  const originalDebugChannelId = process.env.DEBUG_CHANNEL_ID;
-
   beforeEach(() => {
-    process.env.NODE_ENV = Environment.Production;
-    process.env.DEBUG_CHANNEL_ID = '1234567890';
+    mock.restore();
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
-    process.env.DEBUG_CHANNEL_ID = originalDebugChannelId;
+    mock.restore();
   });
 
   it('logs notifier initialization context', () => {
@@ -124,8 +139,9 @@ describe('StartupNotifierService', () => {
   });
 
   it('skips sending in development', async () => {
-    process.env.NODE_ENV = Environment.Development;
-    const { service, fetch, logger } = createService();
+    const { service, fetch, logger } = createService({
+      nodeEnv: Environment.Development,
+    });
 
     await service.onReady();
 
@@ -139,8 +155,9 @@ describe('StartupNotifierService', () => {
   });
 
   it('warns when DEBUG_CHANNEL_ID is missing', async () => {
-    process.env.DEBUG_CHANNEL_ID = '   ';
-    const { service, fetch, logger } = createService();
+    const { service, fetch, logger } = createService({
+      debugChannelId: '   ',
+    });
 
     await service.onReady();
 

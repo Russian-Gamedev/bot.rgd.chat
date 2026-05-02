@@ -11,12 +11,15 @@ export function validate(config: Record<string, unknown>) {
   const errors = validateSync(validatedConfig, { forbidUnknownValues: false });
 
   if (errors.length > 0) {
-    console.error(
+    throw new Error(
       `Error while parsing env variables\n` +
         errors.map((error) => error.toString(true, true, '', true)).join(''),
     );
-    process.exit(1);
   }
+
+  console.log(
+    `Config NODE_ENV=${validatedConfig.NODE_ENV}, raw NODE_ENV=${process.env.NODE_ENV ?? 'missing'}`,
+  );
 
   return validatedConfig;
 }
