@@ -35,7 +35,7 @@ export class BarGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const socket = new Socket(client);
     this.clients.push(socket);
     const ip =
-      req.headers.get('x-forwarded-for') ??
+      req?.headers?.['x-forwarded-for'] ??
       ///@ts-expect-error -- Bun.WebSocket extends WebSocket but TS doesn't know about it yet
       req.socket.remoteAddress ??
       'unknown';
