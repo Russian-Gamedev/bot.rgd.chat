@@ -1,5 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+export interface GitInfo {
+  branch: string;
+  commit: string;
+  commitMessage: string;
+  shortCommit: string;
+  branchLink: string;
+  commitLink: string;
+}
+
 @Injectable()
 export class GitInfoService {
   private readonly logger = new Logger(GitInfoService.name);
@@ -16,7 +25,7 @@ export class GitInfoService {
       process.env.GIT_COMMIT_MESSAGE ?? 'No commit message';
   }
 
-  getGitInfo() {
+  getGitInfo(): GitInfo {
     return {
       branch: this.gitBranch,
       commit: this.gitCommit,

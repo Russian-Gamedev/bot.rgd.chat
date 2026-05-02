@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 
+import { CommonServicesModule } from '#common/common-services.module';
 import { AppConfigModule } from '#common/config/config.module';
 import { DatabaseModule } from '#common/database.module';
-import { GitInfoService } from '#common/git-info.service';
 import { RedisModule } from '#common/redis.module';
 import { ScheduleLoggerService } from '#common/schedule-logger.service';
 import { ActivityModule } from '#core/activity/activity.module';
@@ -27,6 +27,7 @@ import { AppController } from './app.controller';
 @Module({
   imports: [
     AppConfigModule,
+    CommonServicesModule,
     ScheduleModule.forRoot(),
     DatabaseModule,
     RedisModule,
@@ -47,7 +48,6 @@ import { AppController } from './app.controller';
     NicknameModule,
   ],
   controllers: [AppController],
-  providers: [GitInfoService, ScheduleLoggerService],
-  exports: [GitInfoService],
+  providers: [ScheduleLoggerService],
 })
 export class AppModule {}
