@@ -27,7 +27,7 @@ describe('Telegram source formatting', () => {
         footerTemplate: 'Больше про геймдев в %',
       }),
     ).toBe(
-      'Новый пост\n\nБольше про геймдев в [@rgdchat](https://t.me/rgdchat)',
+      'Новый пост\n\nБольше про геймдев в [@rgdchat](<https://t.me/rgdchat>)',
     );
   });
 
@@ -40,7 +40,7 @@ describe('Telegram source formatting', () => {
         footerTemplate: '% и еще раз %',
       }),
     ).toBe(
-      'Пост\n\n[@rgdchat](https://t.me/rgdchat) и еще раз [@rgdchat](https://t.me/rgdchat)',
+      'Пост\n\n[@rgdchat](<https://t.me/rgdchat>) и еще раз [@rgdchat](<https://t.me/rgdchat>)',
     );
   });
 

@@ -139,7 +139,7 @@ export function formatTelegramText(
 
   const footer = config.footerTemplate.replaceAll(
     '%',
-    `[@${config.username}](https://t.me/${config.username})`,
+    `[@${config.username}](<https://t.me/${config.username}>)`,
   );
 
   return [text.trim(), footer].filter(Boolean).join('\n\n');
