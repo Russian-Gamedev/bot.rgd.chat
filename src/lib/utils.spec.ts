@@ -41,4 +41,23 @@ describe('formatTime', () => {
     expect(formatTime(-3660)).toBe('1 ч. 1 мин.');
     expect(formatTime(-86401)).toBe('1 дн. 1 сек.');
   });
+
+  it('limits formatted time parts', () => {
+    expect(formatTime(3661, 1)).toBe('1 ч.');
+    expect(formatTime(3661, 2)).toBe('1 ч. 1 мин.');
+    expect(formatTime(90061, 3)).toBe('1 дн. 1 ч. 1 мин.');
+    expect(formatTime(31_536_000 + 30 * 86400 + 604800 + 86400, 2)).toBe(
+      '1 год. 1 мес.',
+    );
+  });
+
+  it('skips empty units while limiting formatted time parts', () => {
+    expect(formatTime(3601, 2)).toBe('1 ч. 1 сек.');
+    expect(formatTime(86401, 2)).toBe('1 дн. 1 сек.');
+  });
+
+  it('returns empty string when formatted parts limit is not positive', () => {
+    expect(formatTime(3661, 0)).toBe('');
+    expect(formatTime(3661, -2)).toBe('');
+  });
 });

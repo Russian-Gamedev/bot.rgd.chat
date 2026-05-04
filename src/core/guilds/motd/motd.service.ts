@@ -135,7 +135,7 @@ export class MotdService {
       return `🎉 Следующий джем через ${days} ${plural}!`;
     },
     () =>
-      `Я жив уже ${formatTime(Math.floor(process.uptime()))}. Чувствую себя отлично!`,
+      `Я жив уже ${formatTime(Math.floor(process.uptime()), 2)}. Чувствую себя отлично!`,
     () => {
       const botBirthday = new Date('2020-07-21');
       const now = new Date();

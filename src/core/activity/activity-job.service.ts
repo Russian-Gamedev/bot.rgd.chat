@@ -345,7 +345,7 @@ export class ActivityJobService {
 
     const topVoice = buildTop(
       sort(activities, 'voice'),
-      (item, rank) => buildLine(item.user, formatTime(item.value), rank),
+      (item, rank) => buildLine(item.user, formatTime(item.value, 3), rank),
       'никто не заходил в войс :(',
     );
 

@@ -79,10 +79,9 @@ export function getTimeInfo(t: number) {
   };
 }
 
-const formatMap: Record<
-  keyof ReturnType<typeof getTimeInfo>,
-  (value: number) => string
-> = {
+type TimeKeys = keyof ReturnType<typeof getTimeInfo>;
+
+const formatMap: Record<TimeKeys, (value: number) => string> = {
   years: (value) => `${value} год.`,
   month: (value) => `${value} мес.`,
   weeks: (value) => `${value} нед.`,
@@ -92,13 +91,14 @@ const formatMap: Record<
   seconds: (value) => `${value} сек.`,
 };
 
-export function formatTime(t: number) {
+export function formatTime(t: number, parts = -1) {
   const time = getTimeInfo(Math.abs(t));
   let result = '';
-  const keys = Object.keys(time) as (keyof ReturnType<typeof getTimeInfo>)[];
+  const keys = Object.keys(time) as TimeKeys[];
   for (const key of keys) {
-    if (time[key] > 0) {
+    if (time[key] > 0 && (parts === -1 || parts > 0)) {
       result += formatMap[key](time[key]) + ' ';
+      if (parts > 0) parts--;
     }
   }
   return result.trim();
