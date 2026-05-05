@@ -15,7 +15,7 @@ import {
 } from '#core/wallet/entities/wallet-transaction.entity';
 import { InsufficientFundsException } from '#core/wallet/wallet.exception';
 import { WalletService } from '#core/wallet/wallet.service';
-import { formatCoins } from '#root/lib/utils';
+import { formatCoins } from '#lib/utils';
 
 import { CoinHistoryDto, CoinTransferDto } from '../dto/coins.dto';
 import { UserService } from '../users.service';

@@ -10,7 +10,7 @@ import {
   type UserCommandContext,
 } from 'necord';
 
-import { cast, getDisplayAvatar } from '#root/lib/utils';
+import { cast, getDisplayAvatar } from '#lib/utils';
 
 import { MemberDto } from './user.dto';
 

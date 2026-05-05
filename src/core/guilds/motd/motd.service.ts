@@ -5,7 +5,7 @@ import { ActivityType, Client } from 'discord.js';
 import Redis from 'ioredis';
 import { On } from 'necord';
 
-import { formatTime, pluralize } from '#root/lib/utils';
+import { formatTime, pluralize } from '#lib/utils';
 
 import { MotdEntity } from './entities/motd.entity';
 

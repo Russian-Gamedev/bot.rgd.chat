@@ -14,7 +14,7 @@ import {
   formatTime,
   getDisplayAvatar,
   getRelativeFormat,
-} from '#root/lib/utils';
+} from '#lib/utils';
 
 import { UserEntity } from '../entities/user.entity';
 import { UserService } from '../users.service';

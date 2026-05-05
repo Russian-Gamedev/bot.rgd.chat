@@ -10,7 +10,7 @@ import {
 
 import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
-import { formatCoins } from '#root/lib/utils';
+import { formatCoins } from '#lib/utils';
 
 import { MotdService } from '../motd.service';
 

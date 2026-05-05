@@ -11,8 +11,8 @@ import {
 import { EmojiCoin, EmojiCoinId } from '#config/emojies';
 import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
+import { formatCoins } from '#lib/utils';
 import { DiscordID } from '#root/lib/types';
-import { formatCoins } from '#root/lib/utils';
 
 class FlipGameDto {
   @StringOption({

@@ -1,7 +1,7 @@
 import { GuildMember, type HexColorString } from 'discord.js';
 import { BooleanOption, MemberOption, StringOption } from 'necord';
 
-import { formatCoins } from '#root/lib/utils';
+import { formatCoins } from '#lib/utils';
 
 import { ItemRarity } from '../entities/item.entity';
 

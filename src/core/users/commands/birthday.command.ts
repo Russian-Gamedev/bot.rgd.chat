@@ -8,7 +8,7 @@ import {
   type SlashCommandContext,
 } from 'necord';
 
-import { pluralize } from '#root/lib/utils';
+import { pluralize } from '#lib/utils';
 
 import { BirthdayService } from '../birthday.service';
 import { SetBirthdayDto } from '../dto/user.dto';

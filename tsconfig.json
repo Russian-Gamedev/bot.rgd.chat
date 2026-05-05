@@ -24,6 +24,7 @@
       "#common/*": ["./src/common/*"],
       "#config/*": ["./src/config/*"],
       "#core/*": ["./src/core/*"],
+      "#lib/*": ["./src/lib/*"],
       "#root/*": ["./src/*"]
     },
     "types": ["bun"]

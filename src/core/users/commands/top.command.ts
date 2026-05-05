@@ -8,7 +8,7 @@ import {
 } from 'necord';
 
 import { Colors } from '#config/constants';
-import { formatCoins, formatTime } from '#root/lib/utils';
+import { formatCoins, formatTime } from '#lib/utils';
 
 import { UserService } from '../users.service';
 

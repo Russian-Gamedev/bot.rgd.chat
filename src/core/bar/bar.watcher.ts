@@ -20,7 +20,7 @@ import {
 
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
-import { cast, getDisplayAvatar } from '#root/lib/utils';
+import { cast, getDisplayAvatar } from '#lib/utils';
 
 import { type BarGateway } from './bar.gateway';
 import { ChannelType, ConnectedPayload } from './bar.protocol';

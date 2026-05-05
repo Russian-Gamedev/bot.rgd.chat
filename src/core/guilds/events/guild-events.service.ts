@@ -4,8 +4,8 @@ import { Injectable } from '@nestjs/common';
 import { Client } from 'discord.js';
 
 import { GuildEvents } from '#config/guilds';
+import { pickRandom } from '#lib/utils';
 import { DiscordID } from '#root/lib/types';
-import { pickRandom } from '#root/lib/utils';
 
 import { GuildEventEntity } from './entities/events.entity';
 

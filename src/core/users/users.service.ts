@@ -3,8 +3,8 @@ import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 import { Client, Collection, Role } from 'discord.js';
 
+import { getDefaultAvatar, getDisplayAvatar, noop } from '#lib/utils';
 import { DiscordID } from '#root/lib/types';
-import { getDefaultAvatar, getDisplayAvatar, noop } from '#root/lib/utils';
 
 import { UserEntity } from './entities/user.entity';
 import { UserRoleEntity } from './entities/user-roles.entity';

@@ -20,7 +20,7 @@ import { GuildSettingsService } from '#core/guilds/settings/guild-settings.servi
 import { UserEntity } from '#core/users/entities/user.entity';
 import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
-import { formatTime, pickRandom, pluralize } from '#root/lib/utils';
+import { formatTime, pickRandom, pluralize } from '#lib/utils';
 
 import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
 

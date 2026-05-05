@@ -17,7 +17,7 @@ import { GuildSettingsService } from '#core/guilds/settings/guild-settings.servi
 import { NicknameService } from '#core/nickname/nickname.service';
 import { InsufficientFundsException } from '#core/wallet/wallet.exception';
 import { WalletService } from '#core/wallet/wallet.service';
-import { formatCoins, hideEmbedLink } from '#root/lib/utils';
+import { formatCoins, hideEmbedLink } from '#lib/utils';
 
 import { RenameUserDto } from '../dto/rename.dto';
 import { UserService } from '../users.service';

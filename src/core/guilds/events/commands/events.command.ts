@@ -13,7 +13,7 @@ import {
 } from 'necord';
 
 import { GuildEventsParameters } from '#config/guilds';
-import { cast } from '#root/lib/utils';
+import { cast } from '#lib/utils';
 
 import { GuildEventService } from '../guild-events.service';
 
