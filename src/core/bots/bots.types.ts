@@ -3,4 +3,5 @@ export const enum BotScope {
   SendMessages = 'send:messages',
   ManageWallet = 'manage:wallet',
   ManageCrosspost = 'manage:crosspost',
+  ManageMahoraga = 'manage:mahoraga',
 }

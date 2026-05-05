@@ -15,6 +15,7 @@ import { DiscordModule } from '#core/discord/discord.module';
 import { FunModule } from '#core/fun/fun.module';
 import { GuildModule } from '#core/guilds/guild.module';
 import { ItemsModule } from '#core/items/items.module';
+import { MahoragaModule } from '#core/mahoraga/mahoraga.module';
 import { MiniGamesModule } from '#core/mini-games/mini-games.module';
 import { NicknameModule } from '#core/nickname/nickname.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
@@ -41,6 +42,7 @@ import { AppController } from './app.controller';
     MiniGamesModule,
     AuthModule,
     ItemsModule,
+    MahoragaModule,
     WalletModule,
     BarModule,
     RoleManagerModule,
