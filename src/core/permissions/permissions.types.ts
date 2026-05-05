@@ -7,6 +7,7 @@ export enum Permission {
   GuildEventsRead = 'guild_events:read',
   ReadMessages = 'read:messages',
   SendMessages = 'send:messages',
+  MahoragaManage = 'manage:mahoraga',
 }
 
 export enum ActorType {
