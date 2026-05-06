@@ -68,7 +68,7 @@
     "class-validator": "^0.15.1",
     "discord.js": "^14.26.2",
     "ioredis": "^5.10.1",
-    "necord": "^6.12.4",
+    "necord": "npm:@damirlut/necord@latest",
     "nestjs-telegraf": "^2.9.1",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",

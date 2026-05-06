@@ -1,7 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Client, SnowflakeUtil } from 'discord.js';
 import Redis from 'ioredis';
-import { Once } from 'necord';
 
 @Injectable()
 export class DiscordService {
@@ -11,28 +10,6 @@ export class DiscordService {
     private readonly client: Client,
     private readonly redis: Redis,
   ) {}
-
-  async onModuleInit() {
-    await this.cleanUnusedCommands();
-  }
-
-  @Once('clientReady')
-  public async onReady() {
-    await Bun.sleep(5000); // Wait a bit to ensure all guilds are available
-    await this.client.application?.commands
-      .create({
-        name: 'launch',
-        description: 'Start rgdbar',
-        type: 4,
-        handler: 2,
-        integration_types: [0],
-        contexts: [0],
-      })
-      .catch((err) => {
-        this.logger.error('Failed to create application command:', err);
-      });
-    this.logger.log('Registered /launch command');
-  }
 
   public async getEmojiImage(emoji: string, size = 128) {
     const emojiId = this.client.emojis.cache.find((e) => e.name === emoji);
@@ -103,6 +80,7 @@ export class DiscordService {
     };
   }
 
+  // TODO: call from API route in future instead of on every bot start, to avoid hitting rate limits
   private async cleanUnusedCommands() {
     const token = process.env.DISCORD_BOT_TOKEN;
     const clientId = process.env.DISCORD_CLIENT_ID;
