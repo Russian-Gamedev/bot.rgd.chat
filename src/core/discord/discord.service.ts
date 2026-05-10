@@ -18,7 +18,8 @@ export class DiscordService {
   }
 
   public async getMembersStats() {
-    const cached = await this.redis.get('discord:members_stats');
+    const key = 'discord:member_stats';
+    const cached = await this.redis.get(key);
     if (cached) {
       return JSON.parse(cached);
     }
@@ -38,7 +39,6 @@ export class DiscordService {
           `Failed to fetch members for guild ${guild.id}: ${String(error)}`,
         );
       }
-      await Bun.sleep(100);
     }
 
     const response = {
@@ -46,12 +46,7 @@ export class DiscordService {
       online: onlineMembers,
     };
 
-    await this.redis.set(
-      'discord:members_stats',
-      JSON.stringify(response),
-      'EX',
-      300,
-    );
+    await this.redis.set(key, JSON.stringify(response), 'EX', 60 * 60);
 
     return response;
   }
