@@ -1,0 +1,8 @@
+.env.*
+docker/postgresql
+.cache
+bin/
+.vscode
+.idea
+
+.DS_Store
