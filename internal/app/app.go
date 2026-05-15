@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"bot.rgd.chat/internal/config"
-	httpServer "bot.rgd.chat/internal/http"
+	"bot.rgd.chat/internal/domain/users"
+	httpServer "bot.rgd.chat/internal/platforms/http"
+	usersHttp "bot.rgd.chat/internal/platforms/http/users"
 	"go.uber.org/zap"
 )
 
@@ -31,7 +33,15 @@ func New(ctx context.Context, cfg *config.Config, log *zap.Logger) (*App, error)
 		return nil, err
 	}
 
-	httpModule, err := httpServer.New(cfg, log)
+	userModule := users.NewModule(&users.ModuleDeps{
+		Logger: log.Named("users"),
+		DB:     resources.Postgres,
+		Redis:  resources.Redis,
+	})
+
+	httpModule, err := httpServer.New(cfg, log, []httpServer.RouterRegistrar{
+		usersHttp.NewHTTPHandler(userModule.Service()),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http server: %w", err)
 	}
@@ -39,6 +49,7 @@ func New(ctx context.Context, cfg *config.Config, log *zap.Logger) (*App, error)
 	return &App{
 		log: log,
 		modules: []Module{
+			userModule,
 			httpModule,
 		},
 		resources: resources,
@@ -46,40 +57,49 @@ func New(ctx context.Context, cfg *config.Config, log *zap.Logger) (*App, error)
 }
 
 func (app *App) Start(ctx context.Context) error {
-	/// Start resource first
 
-	log := app.log.Sugar()
+	app.log.Info("Starting application")
 
 	for _, module := range app.modules {
 		if err := module.Start(ctx); err != nil {
-			log.Error("failed to start module", zap.Error(err))
-			return fmt.Errorf("module: %w", err)
+			app.log.Error("failed to start module",
+				zap.String("module", module.Name()),
+				zap.Error(err),
+			)
+			return fmt.Errorf("start module %s: %w", module.Name(), err)
 		}
 
-		log.Named(module.Name()).Info("started")
+		app.log.Info("module started", zap.String("module", module.Name()))
 	}
 
 	return nil
 }
-
 func (app *App) Stop(ctx context.Context) error {
-
 	var result error
 
-	log := app.log.Sugar()
-
 	for i := len(app.modules) - 1; i >= 0; i-- {
-		if err := app.modules[i].Stop(ctx); err != nil {
-			log.Error("failed to stop module", zap.Error(err))
-			result = errors.Join(result, fmt.Errorf("module: %w", err))
+		module := app.modules[i]
+
+		if err := module.Stop(ctx); err != nil {
+			app.log.Error("failed to stop module",
+				zap.String("module", module.Name()),
+				zap.Error(err),
+			)
+
+			result = errors.Join(result, fmt.Errorf("stop module %s: %w", module.Name(), err))
+			continue
 		}
 
-		log.Named(app.modules[i].Name()).Info("stopped")
+		app.log.Info("module stopped", zap.String("module", module.Name()))
 	}
 
 	if err := app.resources.Close(ctx); err != nil {
-		result = errors.Join(result, fmt.Errorf("resources: %w", err))
+		result = errors.Join(result, fmt.Errorf("close resources: %w", err))
 	}
 
 	return result
+}
+
+func (app *App) Name() string {
+	return "application"
 }
