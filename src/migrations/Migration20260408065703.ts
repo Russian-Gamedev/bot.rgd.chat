@@ -14,7 +14,7 @@ export class Migration20260408065703 extends Migration {
 
     this.addSql(`do $$ begin
   alter table "wallet_transactions" add constraint "wallet_transactions_type_check" check ("type" in ('credit', 'debit', 'transfer_in', 'transfer_out'));
-exception when duplicate_object then null;
+exception when others then null;
 end $$;`);
 
     this.addSql(`do $$ begin

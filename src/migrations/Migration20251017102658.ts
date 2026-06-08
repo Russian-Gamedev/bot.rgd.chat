@@ -17,7 +17,7 @@ end $$;`);
     );
     this.addSql(`do $$ begin
   alter table "users" add constraint "users_user_id_guild_id_unique" unique ("user_id", "guild_id");
-exception when duplicate_object then null;
+exception when others then null;
 end $$;`);
   }
 

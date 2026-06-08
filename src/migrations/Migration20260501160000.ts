@@ -16,7 +16,7 @@ export class Migration20260501160000 extends Migration {
     );
     this.addSql(`do $$ begin
   alter table "crosspost_routes" add constraint "crosspost_routes_source_kind_check" check ("source_kind" in ('discord_channel', 'telegram_channel'));
-exception when duplicate_object then null;
+exception when others then null;
 end $$;`);
 
     this.addSql(
@@ -30,7 +30,7 @@ end $$;`);
     );
     this.addSql(`do $$ begin
   alter table "crosspost_deliveries" add constraint "crosspost_deliveries_route_target_source_message_unique" unique ("route_id", "target_id", "source_message_id");
-exception when duplicate_object then null;
+exception when others then null;
 end $$;`);
   }
 

@@ -7,12 +7,12 @@ export class Migration20251024185824 extends Migration {
     );
     this.addSql(`do $$ begin
   alter table "auth" add constraint "auth_user_id_unique" unique ("user_id");
-exception when duplicate_object then null;
+exception when others then null;
 end $$;`);
 
     this.addSql(`do $$ begin
   alter table "auth" add constraint "auth_user_id_foreign" foreign key ("user_id") references "users" ("id") on update cascade on delete CASCADE;
-exception when duplicate_object then null;
+exception when others then null;
 end $$;`);
   }
 
