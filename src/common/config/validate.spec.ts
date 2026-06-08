@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { Logger } from '@nestjs/common';
 
 import { Environment } from '#config/env';
 
@@ -37,7 +38,12 @@ describe('config validation', () => {
   });
 
   it('fails when NODE_ENV is missing', () => {
-    expect(() => validate(baseConfig)).toThrow('NODE_ENV');
+    const spy = mock(() => undefined);
+    Logger.prototype.error = spy;
+
+    validate(baseConfig);
+
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('NODE_ENV'));
   });
 
   it('allows production without DISCORD_DEVELOPMENT_GUILD_ID', () => {
@@ -53,12 +59,18 @@ describe('config validation', () => {
   });
 
   it('requires DISCORD_DEVELOPMENT_GUILD_ID in development', () => {
-    expect(() =>
-      validate({
-        ...baseConfig,
-        NODE_ENV: Environment.Development,
-      }),
-    ).toThrow('DISCORD_DEVELOPMENT_GUILD_ID');
+    const spy = mock(() => undefined);
+    Logger.prototype.error = spy;
+
+    const config = validate({
+      ...baseConfig,
+      NODE_ENV: Environment.Development,
+    });
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('DISCORD_DEVELOPMENT_GUILD_ID'),
+    );
+    expect(config.NODE_ENV).toBe(Environment.Development);
   });
 
   it('allows development with DISCORD_DEVELOPMENT_GUILD_ID', () => {
