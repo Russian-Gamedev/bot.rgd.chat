@@ -24,5 +24,6 @@ export default defineConfig({
     emit: 'ts',
     snapshotName: 'snapshot',
     migrationsList: migrations,
+    safe: true,
   },
 });
