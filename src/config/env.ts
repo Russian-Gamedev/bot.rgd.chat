@@ -51,9 +51,11 @@ export class EnvironmentVariables {
   @IsString()
   JWT_SECRET: string;
 
+  @IsOptional()
   @IsString()
   TELEGRAM_BOT_TOKEN: string;
 
+  @IsOptional()
   @IsString()
   TELEGRAM_API_ROOT: string;
 
