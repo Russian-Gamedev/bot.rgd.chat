@@ -44,6 +44,7 @@ export function validate(config: Record<string, unknown>) {
 
   if (errors.length > 0) {
     logger.error(`Environment validation failed:\n${formatErrors(errors)}`);
+    throw new Error('Environment validation failed');
   }
 
   if (process.env.NODE_ENV === 'development') {

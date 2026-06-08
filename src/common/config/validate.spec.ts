@@ -41,8 +41,7 @@ describe('config validation', () => {
     const spy = mock(() => undefined);
     Logger.prototype.error = spy;
 
-    validate(baseConfig);
-
+    expect(() => validate(baseConfig)).toThrow('Environment validation failed');
     expect(spy).toHaveBeenCalledWith(expect.stringContaining('NODE_ENV'));
   });
 
@@ -62,15 +61,15 @@ describe('config validation', () => {
     const spy = mock(() => undefined);
     Logger.prototype.error = spy;
 
-    const config = validate({
-      ...baseConfig,
-      NODE_ENV: Environment.Development,
-    });
-
+    expect(() =>
+      validate({
+        ...baseConfig,
+        NODE_ENV: Environment.Development,
+      }),
+    ).toThrow('Environment validation failed');
     expect(spy).toHaveBeenCalledWith(
       expect.stringContaining('DISCORD_DEVELOPMENT_GUILD_ID'),
     );
-    expect(config.NODE_ENV).toBe(Environment.Development);
   });
 
   it('allows development with DISCORD_DEVELOPMENT_GUILD_ID', () => {
