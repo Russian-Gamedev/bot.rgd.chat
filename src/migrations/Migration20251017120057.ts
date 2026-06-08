@@ -2,9 +2,10 @@ import { Migration } from '@mikro-orm/migrations';
 
 export class Migration20251017120057 extends Migration {
   override async up(): Promise<void> {
-    this.addSql(
-      `alter table "users" add column "last_active_at" timestamptz not null default now(), add column "active_streak" int not null default 0, add column "max_active_streak" int not null default 0;`,
-    );
+    this.addSql(`do $$ begin
+  alter table "users" add column "last_active_at" timestamptz not null default now(), add column "active_streak" int not null default 0, add column "max_active_streak" int not null default 0;
+exception when duplicate_column then null;
+end $$;`);
   }
 
   override async down(): Promise<void> {
