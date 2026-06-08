@@ -70,31 +70,3 @@ jobs:
             GIT_COMMIT_MESSAGE=${{ github.event.head_commit.message }}
           cache-from: type=registry,ref=ghcr.io/russian-gamedev/bot.rgd.chat:cache
           cache-to: type=registry,ref=ghcr.io/russian-gamedev/bot.rgd.chat:cache,mode=max
-
-  deploy:
-    needs: [build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: docker/docker-compose.yml
-          sparse-checkout-cone-mode: false
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Transfer Docker Compose file to remote server
-        run: |
-          cd docker && scp docker-compose.yml ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}
-
-      - name: Deploy Docker containers on remote server
-        run: |
-          ssh ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
-          echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          cd ${{ secrets.REMOTE_PATH }} && docker compose pull && docker compose up -d
-          ENDSSH

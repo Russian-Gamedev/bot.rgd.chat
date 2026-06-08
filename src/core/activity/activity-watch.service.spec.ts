@@ -1,10 +1,16 @@
-import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
+import type { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { Client, Collection, Guild, GuildMember, VoiceState } from 'discord.js';
-import Redis from 'ioredis';
-import { ContextOf } from 'necord';
+import {
+  type Client,
+  Collection,
+  type Guild,
+  type GuildMember,
+  type VoiceState,
+} from 'discord.js';
+import type Redis from 'ioredis';
+import type { ContextOf } from 'necord';
 
-import { UserService } from '#core/users/users.service';
+import type { UserService } from '#core/users/users.service';
 
 import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
 import {
@@ -55,7 +61,7 @@ interface SaveAllVoiceActivities {
 const originalDateNow = Date.now;
 
 function setNow(now: number) {
-  Date.now = mock(() => now) as unknown as typeof Date.now;
+  Date.now = mock(() => now);
 }
 
 function createRedisMock(
