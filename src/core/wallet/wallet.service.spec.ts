@@ -1,5 +1,5 @@
-import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 
 import { UserEntity } from '#core/users/entities/user.entity';
 

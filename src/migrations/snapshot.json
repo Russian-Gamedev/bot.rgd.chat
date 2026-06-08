@@ -1,8 +1,6 @@
 {
   "name": "public",
-  "namespaces": [
-    "public"
-  ],
+  "namespaces": ["public"],
   "tables": [
     {
       "name": "activities",
@@ -155,9 +153,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "guild_id"
-          ],
+          "columnNames": ["guild_id"],
           "composite": false,
           "keyName": "activities_guild_id_index",
           "constraint": false,
@@ -165,9 +161,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "composite": false,
           "keyName": "activities_user_id_index",
           "constraint": false,
@@ -175,9 +169,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "period"
-          ],
+          "columnNames": ["period"],
           "composite": false,
           "keyName": "activities_period_index",
           "constraint": false,
@@ -186,9 +178,7 @@
         },
         {
           "keyName": "activities_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -334,9 +324,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "name"
-          ],
+          "columnNames": ["name"],
           "composite": false,
           "keyName": "bots_name_unique",
           "constraint": true,
@@ -345,9 +333,7 @@
         },
         {
           "keyName": "bots_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -478,9 +464,7 @@
       "indexes": [
         {
           "keyName": "guilds_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -626,9 +610,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "guild_id"
-          ],
+          "columnNames": ["guild_id"],
           "composite": false,
           "keyName": "guild_events_guild_id_index",
           "constraint": false,
@@ -636,9 +618,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "event"
-          ],
+          "columnNames": ["event"],
           "composite": false,
           "keyName": "guild_events_event_index",
           "constraint": false,
@@ -647,9 +627,7 @@
         },
         {
           "keyName": "guild_events_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -780,9 +758,7 @@
       "indexes": [
         {
           "keyName": "guild_invites_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -913,9 +889,7 @@
       "indexes": [
         {
           "keyName": "guild_invites_history_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -1030,9 +1004,7 @@
       "indexes": [
         {
           "keyName": "guild_settings_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -1227,9 +1199,7 @@
       "indexes": [
         {
           "keyName": "items_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -1328,9 +1298,7 @@
       "indexes": [
         {
           "keyName": "guild_motds_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -1477,10 +1445,7 @@
       "indexes": [
         {
           "keyName": "nickname_history_user_id_guild_id_index",
-          "columnNames": [
-            "user_id",
-            "guild_id"
-          ],
+          "columnNames": ["user_id", "guild_id"],
           "composite": true,
           "constraint": false,
           "primary": false,
@@ -1488,9 +1453,7 @@
         },
         {
           "keyName": "nickname_history_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -1637,9 +1600,7 @@
       "indexes": [
         {
           "keyName": "roles_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -1738,9 +1699,7 @@
       "indexes": [
         {
           "keyName": "role_reactions_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -2127,10 +2086,7 @@
       "indexes": [
         {
           "keyName": "users_user_id_guild_id_index",
-          "columnNames": [
-            "user_id",
-            "guild_id"
-          ],
+          "columnNames": ["user_id", "guild_id"],
           "composite": true,
           "constraint": false,
           "primary": false,
@@ -2138,10 +2094,7 @@
         },
         {
           "keyName": "users_user_id_guild_id_unique",
-          "columnNames": [
-            "user_id",
-            "guild_id"
-          ],
+          "columnNames": ["user_id", "guild_id"],
           "composite": true,
           "constraint": true,
           "primary": false,
@@ -2149,9 +2102,7 @@
         },
         {
           "keyName": "users_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -2249,9 +2200,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "composite": false,
           "keyName": "auth_user_id_unique",
           "constraint": true,
@@ -2260,9 +2209,7 @@
         },
         {
           "keyName": "auth_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -2273,13 +2220,9 @@
       "foreignKeys": {
         "auth_user_id_foreign": {
           "constraintName": "auth_user_id_foreign",
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "localTableName": "public.auth",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "public.users",
           "deleteRule": "CASCADE"
         }
@@ -2357,9 +2300,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "guild_id"
-          ],
+          "columnNames": ["guild_id"],
           "composite": false,
           "keyName": "user_roles_guild_id_index",
           "constraint": false,
@@ -2367,9 +2308,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "composite": false,
           "keyName": "user_roles_user_id_index",
           "constraint": false,
@@ -2378,9 +2317,7 @@
         },
         {
           "keyName": "user_roles_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,
@@ -2520,12 +2457,7 @@
           "scale": null,
           "default": null,
           "comment": null,
-          "enumItems": [
-            "credit",
-            "debit",
-            "transfer_in",
-            "transfer_out"
-          ],
+          "enumItems": ["credit", "debit", "transfer_in", "transfer_out"],
           "mappedType": "enum"
         },
         "reason": {
@@ -2580,9 +2512,7 @@
       "indexes": [
         {
           "keyName": "wallet_transactions_type_index",
-          "columnNames": [
-            "type"
-          ],
+          "columnNames": ["type"],
           "composite": false,
           "constraint": false,
           "primary": false,
@@ -2590,10 +2520,7 @@
         },
         {
           "keyName": "wallet_transactions_user_id_guild_id_index",
-          "columnNames": [
-            "user_id",
-            "guild_id"
-          ],
+          "columnNames": ["user_id", "guild_id"],
           "composite": true,
           "constraint": false,
           "primary": false,
@@ -2601,9 +2528,7 @@
         },
         {
           "keyName": "wallet_transactions_pkey",
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "primary": true,

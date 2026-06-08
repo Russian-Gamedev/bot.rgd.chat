@@ -10,7 +10,7 @@ import { UserService } from '#core/users/users.service';
 export class RandomMuteGame {
   private readonly logger = new Logger(RandomMuteGame.name);
   constructor(
-    private readonly userService: UserService,
+    readonly _userService: UserService,
     private readonly guildSettings: GuildSettingsService,
     private readonly discord: Client,
   ) {}

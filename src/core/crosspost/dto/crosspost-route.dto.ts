@@ -16,8 +16,10 @@ import type {
   CrossPostSettings,
   CrossPostSourceConfig,
 } from '../types/crosspost.types';
-import { CrossPostSourceKind } from '../types/crosspost.types';
-import { CrossPostTargetKind } from '../types/crosspost.types';
+import {
+  CrossPostSourceKind,
+  CrossPostTargetKind,
+} from '../types/crosspost.types';
 
 export class CrossPostTargetDto {
   @ApiPropertyOptional()

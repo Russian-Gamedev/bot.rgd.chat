@@ -1,4 +1,4 @@
-export const enum EmojiMedals {
+export enum EmojiMedals {
   First = '🥇',
   Second = '🥈',
   Third = '🥉',
@@ -18,13 +18,13 @@ export const EmojiNumber: Record<string, string> = {
   '0': '0️⃣',
 };
 
-export const enum EmojiCoinId {
+export enum EmojiCoinId {
   Top = '1428759054402191482',
   Bottom = '1428759056486502496',
   Animated = '1428758842602426560',
 }
 
-export const enum EmojiCoin {
+export enum EmojiCoin {
   Top = `<:coin:${EmojiCoinId.Top}>`,
   Bottom = `<:coin_flipped:${EmojiCoinId.Bottom}>`,
   Animated = `<a:coin_flip:${EmojiCoinId.Animated}>`,

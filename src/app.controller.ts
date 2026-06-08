@@ -1,6 +1,6 @@
+import * as path from 'node:path';
 import { Controller, Get, Res } from '@nestjs/common';
 import { type Response } from 'express';
-import * as path from 'path';
 
 const assets = path.resolve('./assets');
 @Controller()

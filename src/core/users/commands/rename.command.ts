@@ -260,7 +260,7 @@ export class RenameCommands {
     new_nickname: string,
     lock?: string,
   ): Promise<RenameResult> {
-    const lockDuration = lock ? parseInt(lock) : 0;
+    const lockDuration = lock ? parseInt(lock, 10) : 0;
     if (lockDuration <= 0) {
       return {
         error: true,

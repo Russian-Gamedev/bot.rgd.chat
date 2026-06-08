@@ -5,9 +5,9 @@ import { GuildEvents } from '#config/guilds';
 import { UserService } from '#core/users/users.service';
 
 import { GuildEventService } from './events/guild-events.service';
+import { GuildWatcherService } from './guild-watcher.service';
 import { GuildInviteService } from './invite/invite.service';
 import { GuildSettingsService } from './settings/guild-settings.service';
-import { GuildWatcherService } from './guild-watcher.service';
 
 interface FakeAuditEntry {
   target: { id: string } | null;

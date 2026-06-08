@@ -12,6 +12,7 @@ import { CrossPostRelayService } from './core/crosspost-relay.service';
 import { CrossPostRouteService } from './core/crosspost-route.service';
 import { CrossPostSourceRegistry } from './core/source-registry.service';
 import { CrossPostTargetRegistry } from './core/target-registry.service';
+import { CrosspostController } from './crosspost.controller';
 import { CrossPostDeliveryEntity } from './entities/crosspost-delivery.entity';
 import { CrossPostRouteEntity } from './entities/crosspost-route.entity';
 import { DiscordSourceAdapter } from './sources/discord/discord-source.adapter';
@@ -20,7 +21,6 @@ import { TelegramSourceAdapter } from './sources/telegram/telegram-source.adapte
 import { TelegramSourceUpdate } from './sources/telegram/telegram-source.update';
 import { DiscordWebhookPublisher } from './targets/discord-webhook/discord-webhook-publisher.service';
 import { DiscordWebhookTargetAdapter } from './targets/discord-webhook/discord-webhook-target.adapter';
-import { CrosspostController } from './crosspost.controller';
 
 @Module({
   imports: [

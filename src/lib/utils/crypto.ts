@@ -1,5 +1,5 @@
-import { Buffer } from 'buffer';
-import { createHash } from 'crypto';
+import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 
 /** Returns a SHA-256 hex digest for a string value. */
 export function hashValue(value: string): string {

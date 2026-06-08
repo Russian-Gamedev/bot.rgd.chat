@@ -6,12 +6,11 @@ import { PassportModule } from '@nestjs/passport';
 
 import { EnvironmentVariables } from '#config/env';
 import { UserModule } from '#core/users/users.module';
-
-import { AuthEntity } from './entities/auth.entity';
 import { AuthController } from './auth.controller';
 import { DiscordAuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { DiscordStrategy } from './discord.strategy';
+import { AuthEntity } from './entities/auth.entity';
 import { JwtStrategy } from './jwt.strategy';
 
 @Module({

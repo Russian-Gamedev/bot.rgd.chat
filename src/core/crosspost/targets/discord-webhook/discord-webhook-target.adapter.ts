@@ -1,5 +1,5 @@
+import crypto from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
-import crypto from 'crypto';
 
 import type {
   CrossPostEvent,

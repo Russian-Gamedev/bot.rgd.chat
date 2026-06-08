@@ -44,7 +44,7 @@ export class SlotGame {
   constructor(
     private readonly userService: UserService,
     private readonly walletService: WalletService,
-    private readonly discord: Client,
+    readonly _discord: Client,
   ) {}
 
   @SlashCommand({

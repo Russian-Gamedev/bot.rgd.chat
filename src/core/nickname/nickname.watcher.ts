@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Client } from 'discord.js';
 import { Context, type ContextOf, On } from 'necord';
 
@@ -6,11 +6,9 @@ import { NicknameService } from './nickname.service';
 
 @Injectable()
 export class NicknameWatcher {
-  private readonly logger = new Logger(NicknameWatcher.name);
-
   constructor(
     private readonly nicknameService: NicknameService,
-    private readonly client: Client,
+    readonly _client: Client,
   ) {}
 
   @On('guildMemberUpdate')

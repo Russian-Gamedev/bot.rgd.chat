@@ -1,5 +1,5 @@
-import { ConfigService } from '@nestjs/config';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { ConfigService } from '@nestjs/config';
 import { Client } from 'discord.js';
 
 import {

@@ -1,5 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it } from 'bun:test';
+import { BadRequestException } from '@nestjs/common';
 
 import { DiscordSourceAdapter } from './sources/discord/discord-source.adapter';
 import { TelegramSourceAdapter } from './sources/telegram/telegram-source.adapter';

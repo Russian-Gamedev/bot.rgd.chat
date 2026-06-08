@@ -1,5 +1,5 @@
-import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { beforeEach, describe, expect, it } from 'bun:test';
+import { EntityManager, EntityRepository } from '@mikro-orm/core';
 
 import { RoleReactionEntity } from './entities/role-reaction.entity';
 import { RoleReactionService } from './role-reaction.service';

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   type BeforeApplicationShutdown,
   Inject,
@@ -6,7 +7,6 @@ import {
   type OnApplicationBootstrap,
 } from '@nestjs/common';
 import Redis from 'ioredis';
-import { randomUUID } from 'node:crypto';
 
 import { type GitInfo, GitInfoService } from '#common/git-info.service';
 

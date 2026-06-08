@@ -3,7 +3,7 @@ import { Context, Telegraf } from 'telegraf';
 
 @Update()
 export class TelegramBotService {
-  constructor(@InjectBot() private readonly bot: Telegraf<Context>) {}
+  constructor(@InjectBot() readonly _bot: Telegraf<Context>) {}
 
   @Start()
   async onStart(@Ctx() ctx: Context) {

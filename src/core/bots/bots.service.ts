@@ -1,10 +1,9 @@
+import crypto from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
-import crypto from 'crypto';
-
-import { BotEntity } from './entities/bot.entity';
 import { BotScope } from './bots.types';
+import { BotEntity } from './entities/bot.entity';
 
 @Injectable()
 export class BotsService {
@@ -40,7 +39,7 @@ export class BotsService {
   async verifyToken(token: string): Promise<BotEntity | null> {
     const [idStr, tokenStr] = token.split(':', 2);
     const id = parseInt(idStr, 10);
-    if (isNaN(id) || !tokenStr) return null;
+    if (Number.isNaN(id) || !tokenStr) return null;
 
     const bot = await this.botsRepository.findOne({ id });
     if (!bot) return null;

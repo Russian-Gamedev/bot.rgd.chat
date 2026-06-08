@@ -5,11 +5,10 @@ import { GuildEventsModule } from '#core/guilds/events/guild-events.module';
 import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
 import { NicknameModule } from '#core/nickname/nickname.module';
 import { WalletModule } from '#core/wallet/wallet.module';
-
-import { UserEntity } from './entities/user.entity';
-import { UserRoleEntity } from './entities/user-roles.entity';
 import { BirthdayService } from './birthday.service';
 import { commands } from './commands';
+import { UserEntity } from './entities/user.entity';
+import { UserRoleEntity } from './entities/user-roles.entity';
 import { UserService } from './users.service';
 
 @Module({

@@ -1,6 +1,6 @@
+import { describe, expect, it, mock } from 'bun:test';
 import { NotFoundException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import { describe, expect, it, mock } from 'bun:test';
 import type { Context, Telegraf } from 'telegraf';
 
 import { EnvironmentVariables } from '#config/env';

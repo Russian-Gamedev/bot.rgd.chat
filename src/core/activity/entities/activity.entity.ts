@@ -2,7 +2,7 @@ import { Entity, PrimaryKey, Property } from '@mikro-orm/decorators/legacy';
 
 import { BaseEntity } from '#common/entities/base.entity';
 
-export const enum ActivityPeriod {
+export enum ActivityPeriod {
   Day = 'day',
   Week = 'week',
   Month = 'month',

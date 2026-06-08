@@ -86,7 +86,7 @@ export class BirthdayCommands {
       date = dto.date
         ? new Date(dto.date.split('.').reverse().join('-'))
         : null;
-      if (date && isNaN(date.getTime())) throw new Error('Invalid date');
+      if (date && Number.isNaN(date.getTime())) throw new Error('Invalid date');
     } catch {
       return interaction.reply({
         content: 'Неверный формат даты. Используйте ДД.ММ.ГГГГ',

@@ -1,4 +1,4 @@
-export const enum BotScope {
+export enum BotScope {
   ReadMessages = 'read:messages',
   SendMessages = 'send:messages',
   ManageWallet = 'manage:wallet',

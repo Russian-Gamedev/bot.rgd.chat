@@ -1,5 +1,5 @@
-import type { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import {
   type Client,
   Collection,
@@ -11,12 +11,11 @@ import type Redis from 'ioredis';
 import type { ContextOf } from 'necord';
 
 import type { UserService } from '#core/users/users.service';
-
-import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
 import {
   ActivityWatchService,
   VOICE_ACTIVITY_STALE_TIMEOUT_MS,
 } from './activity-watch.service';
+import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
 
 const GUILD_ID = '100';
 const MEMBER_ID = '200';

@@ -44,7 +44,7 @@ export class PruneCommand {
   ) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const count = dto.count;
-    if (isNaN(count) || count < 1 || count > 100) {
+    if (Number.isNaN(count) || count < 1 || count > 100) {
       return interaction.reply({
         content: 'Please provide a valid number between 1 and 100.',
         flags: MessageFlags.Ephemeral,

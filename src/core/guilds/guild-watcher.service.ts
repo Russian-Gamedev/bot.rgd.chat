@@ -14,7 +14,7 @@ export class GuildWatcherService {
   private readonly logger = new Logger(GuildWatcherService.name);
 
   constructor(
-    private readonly discord: Client,
+    readonly _discord: Client,
     private readonly guildSettingsService: GuildSettingsService,
     private readonly guildEventsService: GuildEventService,
     private readonly userService: UserService,
