@@ -1,9 +1,8 @@
-import path from 'node:path';
 import { ReflectMetadataProvider } from '@mikro-orm/decorators/legacy';
 import { Migrator } from '@mikro-orm/migrations';
 import { defineConfig, PostgreSqlDriver } from '@mikro-orm/postgresql';
+import { migrations } from './migrations';
 
-const migrationPath = path.join(__dirname, './migrations');
 const isMikroOrmCli = process.argv.some((arg) => arg.includes('mikro-orm'));
 
 const entities = isMikroOrmCli ? ['./**/entities/*.entity.ts'] : [];
@@ -19,12 +18,11 @@ export default defineConfig({
   allowGlobalContext: true,
   migrations: {
     tableName: 'mikro_orm_migrations',
-    path: migrationPath,
-    pathTs: path.join(process.cwd(), 'src/migrations'),
     transactional: true,
     disableForeignKeys: true,
     allOrNothing: true,
     emit: 'ts',
     snapshotName: 'snapshot',
+    migrationsList: migrations,
   },
 });
