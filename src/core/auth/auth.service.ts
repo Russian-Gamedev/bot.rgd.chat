@@ -28,7 +28,8 @@ export class AuthService {
       {
         guild_id: BigInt(profile.guild_id),
         user: {
-          id: Number(profile.user_id),
+          user_id: BigInt(profile.user_id),
+          guild_id: BigInt(profile.guild_id),
         },
       },
       { populate: ['user'] },
@@ -54,7 +55,7 @@ export class AuthService {
 
   private generateJwtToken(user: UserEntity) {
     const payload: JwtPayload = {
-      user_id: String(user.id),
+      user_id: String(user.user_id),
       guild_id: String(user.guild_id),
       username: user.username,
     };

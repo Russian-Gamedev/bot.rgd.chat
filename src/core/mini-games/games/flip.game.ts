@@ -67,18 +67,17 @@ export class FlipGame {
       });
     }
 
-    if (user.coins < coins) {
+    const oldBalance = await this.walletService.getBalance(user.user_id);
+    if (oldBalance < coins) {
       return interaction.reply({
         content: 'У вас недостаточно монет для этой игры. ||бомжара||',
         ephemeral: true,
       });
     }
 
-    const oldBalance = user.coins;
-
     this.flipping.add(interaction.user.id);
 
-    const description = `**ПОДБРАСЫВАЕМ...**\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ${formatCoins(user.coins)} ${EmojiCoin.Bottom}`;
+    const description = `**ПОДБРАСЫВАЕМ...**\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ${formatCoins(oldBalance)} ${EmojiCoin.Bottom}`;
 
     const embed = new EmbedBuilder()
       .setColor('#FF9900')
@@ -95,17 +94,20 @@ export class FlipGame {
 
     await Bun.sleep(3_000);
 
+    let balanceAfter = oldBalance;
     const isWin = Math.floor(Math.random() * 100) % 2;
     if (isWin) {
-      await this.walletService.credit(user, coins, 'mini-game:flip');
+      const tx = await this.walletService.credit(user, coins, 'mini-game:flip');
+      balanceAfter = tx.balance_after;
     } else {
-      await this.walletService.debit(user, coins, 'mini-game:flip');
+      const tx = await this.walletService.debit(user, coins, 'mini-game:flip');
+      balanceAfter = tx.balance_after;
     }
 
     this.flipping.delete(interaction.user.id);
 
     embed.setDescription(
-      `**${isWin ? 'ПОБЕДА' : 'ПОСАСАКА'}**\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(oldBalance)}~~ -> ${formatCoins(user.coins)} ${EmojiCoin.Bottom}`,
+      `**${isWin ? 'ПОБЕДА' : 'ПОСАСАКА'}**\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(oldBalance)}~~ -> ${formatCoins(balanceAfter)} ${EmojiCoin.Bottom}`,
     );
     embed.setThumbnail(
       isWin

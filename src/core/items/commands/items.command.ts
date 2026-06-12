@@ -81,7 +81,8 @@ export class ItemsCommands {
 
     const user_id = interaction.user.id;
     const user = await this.userService.findOrCreate(guild_id, user_id);
-    if (user.coins < cost) {
+    const balance = await this.walletService.getBalance(user.user_id);
+    if (balance < cost) {
       return interaction.reply({
         content: `У вас недостаточно монет. Создание предмета стоит ${formatCoins(cost)} монет.`,
         flags: MessageFlags.Ephemeral,

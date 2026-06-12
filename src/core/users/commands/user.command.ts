@@ -8,14 +8,13 @@ import {
   SlashCommand,
   type SlashCommandContext,
 } from 'necord';
-
+import { WalletService } from '#core/wallet/wallet.service';
 import {
   formatCoins,
   formatTime,
   getDisplayAvatar,
   getRelativeFormat,
 } from '#lib/utils';
-
 import { UserEntity } from '../entities/user.entity';
 import { UserService } from '../users.service';
 
@@ -30,7 +29,10 @@ class GetUserDto {
 
 @Injectable()
 export class UserCommands {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly walletService: WalletService,
+  ) {}
 
   @SlashCommand({
     name: 'user',
@@ -50,6 +52,7 @@ export class UserCommands {
     if (!target) return;
     const guildUser = await this.userService.findOrCreate(guildId, targetId);
     const allUser = await this.userService.getUserFromGuilds(targetId);
+    const balance = await this.walletService.getBalance(targetId);
     if (!allUser) return;
 
     const embed = new EmbedBuilder();
@@ -96,7 +99,7 @@ export class UserCommands {
       },
       {
         name: 'Баланс',
-        value: formatCoins(guildUser.coins),
+        value: formatCoins(balance),
         inline: true,
       },
       {

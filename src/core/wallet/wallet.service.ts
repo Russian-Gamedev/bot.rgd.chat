@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common';
 
 import { UserEntity } from '#core/users/entities/user.entity';
 import { DiscordID } from '#root/lib/types';
-
+import { WalletEntity } from './entities/wallet.entity';
 import {
   WalletTransactionEntity,
   WalletTransactionType,
@@ -23,19 +23,42 @@ export interface WalletHistoryOptions {
 @Injectable()
 export class WalletService {
   constructor(
+    @InjectRepository(WalletEntity)
+    private readonly walletRepository: EntityRepository<WalletEntity>,
     @InjectRepository(WalletTransactionEntity)
     private readonly txRepository: EntityRepository<WalletTransactionEntity>,
-    @InjectRepository(UserEntity)
-    private readonly userRepository: EntityRepository<UserEntity>,
     private readonly em: EntityManager,
   ) {}
 
-  async getBalance(userId: DiscordID, guildId: DiscordID): Promise<bigint> {
-    const user = await this.userRepository.findOne({
+  async getBalance(userId: DiscordID): Promise<bigint> {
+    const wallet = await this.walletRepository.findOne({
       user_id: BigInt(userId),
-      guild_id: BigInt(guildId),
     });
-    return user?.coins ?? 0n;
+    return wallet?.coins ?? 0n;
+  }
+
+  async getOrCreateWallet(userId: DiscordID): Promise<WalletEntity> {
+    const normalizedUserId = BigInt(userId);
+    const existing = await this.walletRepository.findOne({
+      user_id: normalizedUserId,
+    });
+    if (existing) return existing;
+
+    const wallet = new WalletEntity();
+    wallet.user_id = normalizedUserId;
+    wallet.coins = 0n;
+    await this.em.persist(wallet).flush();
+    return wallet;
+  }
+
+  async getTopWallets(limit: number): Promise<WalletEntity[]> {
+    return this.walletRepository.find(
+      { coins: { $gt: 0n } },
+      {
+        orderBy: { coins: 'DESC' },
+        limit,
+      },
+    );
   }
 
   async credit(
@@ -49,18 +72,19 @@ export class WalletService {
     }
 
     return this.em.transactional(async (em) => {
-      user.coins += amount;
+      const wallet = await this.getOrCreateWalletForUpdate(user.user_id, em);
+      wallet.coins += amount;
 
       const tx = new WalletTransactionEntity();
       tx.user_id = user.user_id;
       tx.guild_id = user.guild_id;
       tx.amount = amount;
-      tx.balance_after = user.coins;
+      tx.balance_after = wallet.coins;
       tx.type = WalletTransactionType.CREDIT;
       tx.reason = reason;
       tx.metadata = metadata ?? null;
 
-      em.persist(user);
+      em.persist(wallet);
       em.persist(tx);
       await em.flush();
 
@@ -78,23 +102,24 @@ export class WalletService {
       throw new InvalidAmountException('debit');
     }
 
-    if (user.coins < amount) {
-      throw new InsufficientFundsException(user.coins, amount);
-    }
-
     return this.em.transactional(async (em) => {
-      user.coins -= amount;
+      const wallet = await this.getOrCreateWalletForUpdate(user.user_id, em);
+      if (wallet.coins < amount) {
+        throw new InsufficientFundsException(wallet.coins, amount);
+      }
+
+      wallet.coins -= amount;
 
       const tx = new WalletTransactionEntity();
       tx.user_id = user.user_id;
       tx.guild_id = user.guild_id;
       tx.amount = amount;
-      tx.balance_after = user.coins;
+      tx.balance_after = wallet.coins;
       tx.type = WalletTransactionType.DEBIT;
       tx.reason = reason;
       tx.metadata = metadata ?? null;
 
-      em.persist(user);
+      em.persist(wallet);
       em.persist(tx);
       await em.flush();
 
@@ -112,19 +137,28 @@ export class WalletService {
       throw new InvalidAmountException('transfer');
     }
 
-    if (from.coins < amount) {
-      throw new InsufficientFundsException(from.coins, amount);
-    }
-
     return this.em.transactional(async (em) => {
-      from.coins -= amount;
-      to.coins += amount;
+      const fromWallet = await this.getOrCreateWalletForUpdate(
+        from.user_id,
+        em,
+      );
+      if (fromWallet.coins < amount) {
+        throw new InsufficientFundsException(fromWallet.coins, amount);
+      }
+
+      const toWallet =
+        from.user_id === to.user_id
+          ? fromWallet
+          : await this.getOrCreateWalletForUpdate(to.user_id, em);
+
+      fromWallet.coins -= amount;
+      toWallet.coins += amount;
 
       const debitTx = new WalletTransactionEntity();
       debitTx.user_id = from.user_id;
       debitTx.guild_id = from.guild_id;
       debitTx.amount = amount;
-      debitTx.balance_after = from.coins;
+      debitTx.balance_after = fromWallet.coins;
       debitTx.type = WalletTransactionType.TRANSFER_OUT;
       debitTx.reason = reason;
       debitTx.related_user_id = to.user_id;
@@ -133,13 +167,13 @@ export class WalletService {
       creditTx.user_id = to.user_id;
       creditTx.guild_id = to.guild_id;
       creditTx.amount = amount;
-      creditTx.balance_after = to.coins;
+      creditTx.balance_after = toWallet.coins;
       creditTx.type = WalletTransactionType.TRANSFER_IN;
       creditTx.reason = reason;
       creditTx.related_user_id = from.user_id;
 
-      em.persist(from);
-      em.persist(to);
+      em.persist(fromWallet);
+      em.persist(toWallet);
       em.persist(debitTx);
       em.persist(creditTx);
       await em.flush();
@@ -171,14 +205,24 @@ export class WalletService {
     });
   }
 
-  async getCurrentUserBalance(
+  async getCurrentUserBalance(userId: DiscordID): Promise<bigint> {
+    return this.getBalance(userId);
+  }
+
+  private async getOrCreateWalletForUpdate(
     userId: DiscordID,
-    guildId: DiscordID,
-  ): Promise<bigint> {
-    const user = await this.userRepository.findOne({
-      user_id: BigInt(userId),
-      guild_id: BigInt(guildId),
+    em: EntityManager,
+  ): Promise<WalletEntity> {
+    const normalizedUserId = BigInt(userId);
+    const wallet = await em.findOne(WalletEntity, {
+      user_id: normalizedUserId,
     });
-    return user?.coins ?? 0n;
+    if (wallet) return wallet;
+
+    const created = new WalletEntity();
+    created.user_id = normalizedUserId;
+    created.coins = 0n;
+    em.persist(created);
+    return created;
   }
 }

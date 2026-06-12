@@ -8,6 +8,7 @@ import {
 } from 'necord';
 
 import { Colors } from '#config/constants';
+import { WalletService } from '#core/wallet/wallet.service';
 import { formatCoins, formatTime } from '#lib/utils';
 
 import { UserService } from '../users.service';
@@ -21,7 +22,10 @@ const TopCommandDecorator = createCommandGroupDecorator({
 @TopCommandDecorator()
 @Injectable()
 export class TopCommand {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly walletService: WalletService,
+  ) {}
 
   @Subcommand({
     name: 'voice',
@@ -72,17 +76,11 @@ export class TopCommand {
     description: 'Показать топ по монетам',
   })
   async topCoins(@Context() [interaction]: SlashCommandContext) {
-    const guildId = BigInt(interaction.guildId!);
+    const wallets = await this.walletService.getTopWallets(10);
 
-    const users = await this.userService.getTopUsersByField(
-      guildId,
-      'coins',
-      10,
-    );
-
-    const formattedUsers = users.map((user) => ({
-      user_id: user.user_id,
-      value: formatCoins(user.coins),
+    const formattedUsers = wallets.map((wallet) => ({
+      user_id: wallet.user_id,
+      value: formatCoins(wallet.coins),
     }));
 
     const embed = this.buildEmbed('Топ по монетам', formattedUsers);

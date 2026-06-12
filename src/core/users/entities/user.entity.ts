@@ -24,6 +24,9 @@ export class UserEntity extends BaseEntity {
   @Property({ type: 'text', defaultRaw: "''" })
   username: string;
 
+  @Property({ type: 'text', nullable: true })
+  nickname: string | null;
+
   @Property({ type: 'text' })
   avatar: string;
 
@@ -50,9 +53,6 @@ export class UserEntity extends BaseEntity {
 
   @Property({ type: 'integer', default: 0 })
   left_count = 0;
-
-  @Property({ type: 'bigint', default: 0 })
-  coins = 0n;
 
   @Property({ type: 'timestamptz', nullable: true })
   birth_date: Date | null = null;

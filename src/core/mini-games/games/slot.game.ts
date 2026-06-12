@@ -87,13 +87,13 @@ export class SlotGame {
       });
     }
 
-    if (user.coins < coins) {
+    const oldBalance = await this.walletService.getBalance(user.user_id);
+    if (oldBalance < coins) {
       return interaction.reply({
         content: 'У вас недостаточно монет для этой игры. ||бомжара||',
         ephemeral: true,
       });
     }
-    const oldBalance = user.coins;
 
     const embed = new EmbedBuilder()
       .setTitle('🎰 Слот машина 🎰')
@@ -164,17 +164,24 @@ export class SlotGame {
 
     const resultKey = finalSymbols.join('');
     let isWin = false;
+    let balanceAfter = oldBalance;
     if (PAYOUTS[resultKey]) {
       isWin = true;
       const winnings = coins * BigInt(PAYOUTS[resultKey]);
-      await this.walletService.credit(user, winnings, 'mini-game:slot');
+      const tx = await this.walletService.credit(
+        user,
+        winnings,
+        'mini-game:slot',
+      );
+      balanceAfter = tx.balance_after;
       outputMessage += `🎉 Вы выиграли ${formatCoins(winnings)} монет! 🎉`;
     } else {
-      await this.walletService.debit(user, coins, 'mini-game:slot');
+      const tx = await this.walletService.debit(user, coins, 'mini-game:slot');
+      balanceAfter = tx.balance_after;
       outputMessage += `К сожалению, вы проиграли.`;
     }
 
-    outputMessage += `\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(oldBalance)}~~ -> ${formatCoins(user.coins)} ${EmojiCoin.Bottom}`;
+    outputMessage += `\n__Ставка:__ ${formatCoins(coins)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(oldBalance)}~~ -> ${formatCoins(balanceAfter)} ${EmojiCoin.Bottom}`;
 
     embed.setColor(isWin ? '#5fdb00' : '#ff2f00');
     embed.setDescription(outputMessage);

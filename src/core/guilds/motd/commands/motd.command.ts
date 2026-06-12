@@ -48,10 +48,11 @@ export class MotdCommands {
       guildId,
       interaction.user.id,
     );
+    const balance = await this.walletService.getBalance(user.user_id);
 
-    if (user.coins < MOTD_COST) {
+    if (balance < MOTD_COST) {
       return interaction.reply({
-        content: `У вас недостаточно монет. Добавление MOTD стоит ${formatCoins(MOTD_COST)} монет, а у вас ${formatCoins(user.coins)}.`,
+        content: `У вас недостаточно монет. Добавление MOTD стоит ${formatCoins(MOTD_COST)} монет, а у вас ${formatCoins(balance)}.`,
         flags: MessageFlags.Ephemeral,
       });
     }

@@ -38,10 +38,7 @@ export class WalletController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get own balance' })
   async getOwnBalance(@JwtUser() user: JwtPayload) {
-    const balance = await this.walletService.getBalance(
-      user.user_id,
-      user.guild_id,
-    );
+    const balance = await this.walletService.getBalance(user.user_id);
     return { balance: balance.toString() };
   }
 
@@ -71,23 +68,19 @@ export class WalletController {
 
   // ─── System/Admin (Bot API auth) ─────────────────────────
 
-  @Get(':userId/balance')
+  @Get('/balance/:userId')
   @UseGuards(BotApiGuard)
   @BotScopes(BotScope.ManageWallet)
   @ApiOperation({ summary: 'Get user balance (system)' })
-  async getUserBalance(
-    @Param('userId') userId: string,
-    @Query() query: GuildQueryDto,
-  ) {
-    const balance = await this.walletService.getBalance(userId, query.guild_id);
+  async getUserBalance(@Param('userId') userId: string) {
+    const balance = await this.walletService.getBalance(userId);
     return {
       user_id: userId,
-      guild_id: query.guild_id,
       balance: balance.toString(),
     };
   }
 
-  @Get(':userId/history')
+  @Get('history/:userId')
   @UseGuards(BotApiGuard)
   @BotScopes(BotScope.ManageWallet)
   @ApiOperation({ summary: 'Get user transaction history (system)' })
