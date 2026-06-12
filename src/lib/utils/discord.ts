@@ -19,9 +19,7 @@ export function getDisplayAvatar(
   extension: BaseImageURLOptions['extension'] = 'webp',
   size: BaseImageURLOptions['size'] = 1024,
 ) {
-  const avatar = user.avatarURL({ extension, size });
-  if (avatar) return avatar;
-  return getDefaultAvatar(user.id);
+  return user.displayAvatarURL({ extension, size });
 }
 
 /** Returns a user's banner URL with a consistent default size. */

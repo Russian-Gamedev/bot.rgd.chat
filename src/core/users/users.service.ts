@@ -37,6 +37,8 @@ export class UserService {
       user.guild_id = guildId;
       user.avatar = getDefaultAvatar(userId.toString());
       await this.updateUserData(user).catch(noop);
+    } else if (!user.avatar || isDefaultAvatar(user.avatar)) {
+      await this.updateUserData(user).catch(noop);
     }
     return user;
   }
@@ -60,8 +62,9 @@ export class UserService {
   async updateUserData(user: UserEntity): Promise<void> {
     const guild = await this.client.guilds.fetch(user.guild_id.toString());
     if (!guild) return;
+    const userId = user.user_id.toString();
     const discordUser = await guild.members
-      .fetch(user.user_id.toString())
+      .fetch({ user: userId, force: true })
       .catch(() => guild.members.cache.get(user.user_id.toString()));
     if (!discordUser) return;
     user.username = discordUser.user.username;
@@ -249,4 +252,8 @@ export class UserService {
       user_id: { $nin: excludeUserIds.map((id) => BigInt(id)) },
     });
   }
+}
+
+function isDefaultAvatar(avatar: string): boolean {
+  return avatar.includes('/embed/avatars/');
 }
