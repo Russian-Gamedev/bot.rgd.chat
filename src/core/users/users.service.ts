@@ -76,6 +76,43 @@ export class UserService {
     await this.save(user);
   }
 
+  async refreshUsersData(batchSize = 50): Promise<{
+    refreshed: number;
+    failed: number;
+  }> {
+    let lastId = 0;
+    let refreshed = 0;
+    let failed = 0;
+
+    while (true) {
+      const users = await this.userRepository.find(
+        {
+          id: { $gt: lastId },
+          is_left_guild: false,
+        },
+        {
+          limit: batchSize,
+          orderBy: { id: 'asc' },
+        },
+      );
+
+      if (users.length === 0) break;
+
+      for (const user of users) {
+        lastId = user.id;
+
+        try {
+          await this.updateUserData(user);
+          refreshed++;
+        } catch {
+          failed++;
+        }
+      }
+    }
+
+    return { refreshed, failed };
+  }
+
   async addExperience(user: UserEntity, amount: number): Promise<void> {
     user.experience += amount;
     await this.save(user);

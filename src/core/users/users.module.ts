@@ -9,6 +9,7 @@ import { BirthdayService } from './birthday.service';
 import { commands } from './commands';
 import { UserEntity } from './entities/user.entity';
 import { UserRoleEntity } from './entities/user-roles.entity';
+import { UserRefreshService } from './user-refresh.service';
 import { UserService } from './users.service';
 
 @Module({
@@ -19,7 +20,7 @@ import { UserService } from './users.service';
     forwardRef(() => WalletModule),
     NicknameModule,
   ],
-  providers: [UserService, BirthdayService, ...commands],
+  providers: [UserService, UserRefreshService, BirthdayService, ...commands],
   exports: [UserService],
 })
 export class UserModule {}
