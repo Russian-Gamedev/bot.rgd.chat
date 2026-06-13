@@ -27,7 +27,11 @@ async function main() {
   const config = app.get(ConfigService<EnvironmentVariables>);
 
   app.enableShutdownHooks();
-  app.enableCors();
+  const origin = config.get<string[]>('CORS_ORIGINS', []);
+  app.enableCors({
+    credentials: true,
+    origin,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   app.useWebSocketAdapter(new WsAdapter(app));
