@@ -1,3 +1,4 @@
+import { raw } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
@@ -135,7 +136,7 @@ export class UserService {
     refreshed: number;
     failed: number;
   }> {
-    let lastId = 0;
+    let lastId = 0n;
     let refreshed = 0;
     let failed = 0;
 
@@ -172,18 +173,22 @@ export class UserService {
     user: MemberProfileEntity,
     amount: number,
   ): Promise<void> {
-    const profile = await this.findOrCreateProfile(user.user_id);
-    profile.experience += amount;
-    await this.save(profile);
+    await this.findOrCreateProfile(user.user_id);
+    await this.userRepository.nativeUpdate(
+      { user_id: BigInt(user.user_id) },
+      { experience: raw('experience + ?', [amount]) },
+    );
   }
 
   async addReputation(
     user: MemberProfileEntity,
     amount: number,
   ): Promise<void> {
-    const profile = await this.findOrCreateProfile(user.user_id);
-    profile.reputation += amount;
-    await this.save(profile);
+    await this.findOrCreateProfile(user.user_id);
+    await this.userRepository.nativeUpdate(
+      { user_id: BigInt(user.user_id) },
+      { reputation: raw('reputation + ?', [amount]) },
+    );
   }
 
   async leaveGuild(user: MemberProfileEntity): Promise<void> {
@@ -216,32 +221,30 @@ export class UserService {
     month: number,
     day: number,
   ): Promise<UserProfileEntity[]> {
-    const activeMemberships = await this.memberProfileRepository.find({
-      guild_id: BigInt(guild_id),
-      isLeftGuild: false,
-    });
-    const userIds = activeMemberships.map((user) => user.user_id);
-    if (userIds.length === 0) return [];
-
-    const qb = this.userRepository.createQueryBuilder('u');
-    qb.where({ user_id: { $in: userIds } });
-    qb.andWhere('EXTRACT(MONTH FROM u.birth_date) = ?', [month]);
-    qb.andWhere('EXTRACT(DAY FROM u.birth_date) = ?', [day]);
-    return qb.getResult();
+    return this.userRepository
+      .createQueryBuilder('u')
+      .where(
+        raw(
+          'EXISTS (SELECT 1 FROM member_profiles m WHERE m.user_id = u.user_id AND m.guild_id = ? AND m.is_left_guild = false)',
+          [BigInt(guild_id)],
+        ),
+      )
+      .andWhere(raw('EXTRACT(MONTH FROM u.birth_date) = ?', [month]))
+      .andWhere(raw('EXTRACT(DAY FROM u.birth_date) = ?', [day]))
+      .getResult();
   }
 
   async getUsersWithBirthdaySet(guild_id: DiscordID) {
-    const activeMemberships = await this.memberProfileRepository.find({
-      guild_id: BigInt(guild_id),
-      isLeftGuild: false,
-    });
-    const userIds = activeMemberships.map((user) => user.user_id);
-    if (userIds.length === 0) return [];
-
-    return this.userRepository.find({
-      user_id: { $in: userIds },
-      birthDate: { $ne: null },
-    });
+    return this.userRepository
+      .createQueryBuilder('u')
+      .where(
+        raw(
+          'EXISTS (SELECT 1 FROM member_profiles m WHERE m.user_id = u.user_id AND m.guild_id = ? AND m.is_left_guild = false)',
+          [BigInt(guild_id)],
+        ),
+      )
+      .andWhere({ birthDate: { $ne: null } })
+      .getResult();
   }
 }
 

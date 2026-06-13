@@ -12,8 +12,8 @@ import { BaseEntity } from '#common/entities/base.entity';
 @Unique({ properties: ['user_id', 'guild_id'] })
 @Index({ properties: ['user_id', 'guild_id'] })
 export class MemberProfileEntity extends BaseEntity {
-  @PrimaryKey()
-  id: number;
+  @PrimaryKey({ type: 'bigint' })
+  id: bigint;
 
   @Property({ type: 'bigint' })
   user_id: bigint;

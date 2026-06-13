@@ -107,11 +107,11 @@ describe('UserService', () => {
 
   it('refreshes active guild users in batches and counts failed updates', async () => {
     const first = new MemberProfileEntity();
-    first.id = 1;
+    first.id = 1n;
     const second = new MemberProfileEntity();
-    second.id = 2;
+    second.id = 2n;
     const third = new MemberProfileEntity();
-    third.id = 3;
+    third.id = 3n;
 
     (memberProfileRepository.find as ReturnType<typeof mock>)
       .mockResolvedValueOnce([first, second])
@@ -126,11 +126,11 @@ describe('UserService', () => {
       failed: 1,
     });
     expect(memberProfileRepository.find).toHaveBeenCalledWith(
-      { id: { $gt: 0 }, isLeftGuild: false },
+      { id: { $gt: 0n }, isLeftGuild: false },
       { limit: 2, orderBy: { id: 'asc' } },
     );
     expect(memberProfileRepository.find).toHaveBeenCalledWith(
-      { id: { $gt: 2 }, isLeftGuild: false },
+      { id: { $gt: 2n }, isLeftGuild: false },
       { limit: 2, orderBy: { id: 'asc' } },
     );
   });
