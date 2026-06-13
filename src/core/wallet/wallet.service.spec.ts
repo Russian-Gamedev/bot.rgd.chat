@@ -17,7 +17,7 @@ function createMockUser(
   overrides: Partial<MemberProfileEntity> = {},
 ): MemberProfileEntity {
   const user = new MemberProfileEntity();
-  user.id = 1;
+  user.id = 1n;
   user.user_id = 123456789n;
   user.guild_id = 987654321n;
   Object.assign(user, overrides);
@@ -302,7 +302,27 @@ describe('WalletService', () => {
   });
 
   describe('getHistory', () => {
-    it('queries with correct filters', async () => {
+    it('queries all guild history by default', async () => {
+      await service.getHistory('123', null, {
+        limit: 10,
+        offset: 5,
+        type: WalletTransactionType.CREDIT,
+      });
+
+      expect(mockTxRepo.find).toHaveBeenCalledWith(
+        {
+          user_id: 123n,
+          type: WalletTransactionType.CREDIT,
+        },
+        {
+          orderBy: { createdAt: 'DESC' },
+          limit: 10,
+          offset: 5,
+        },
+      );
+    });
+
+    it('queries with guild filter when provided', async () => {
       await service.getHistory('123', '456', {
         limit: 10,
         offset: 5,
@@ -324,12 +344,11 @@ describe('WalletService', () => {
     });
 
     it('uses defaults when no options provided', async () => {
-      await service.getHistory('123', '456');
+      await service.getHistory('123');
 
       expect(mockTxRepo.find).toHaveBeenCalledWith(
         {
           user_id: 123n,
-          guild_id: 456n,
         },
         {
           orderBy: { createdAt: 'DESC' },
@@ -340,12 +359,11 @@ describe('WalletService', () => {
     });
 
     it('caps limit at 100', async () => {
-      await service.getHistory('123', '456', { limit: 500 });
+      await service.getHistory('123', null, { limit: 500 });
 
       expect(mockTxRepo.find).toHaveBeenCalledWith(
         {
           user_id: 123n,
-          guild_id: 456n,
         },
         {
           orderBy: { createdAt: 'DESC' },

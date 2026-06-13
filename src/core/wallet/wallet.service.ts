@@ -184,15 +184,18 @@ export class WalletService {
 
   async getHistory(
     userId: DiscordID,
-    guildId: DiscordID,
+    guildId?: DiscordID | null,
     options: WalletHistoryOptions = {},
   ): Promise<WalletTransactionEntity[]> {
     const { limit = 50, offset = 0, type } = options;
 
     const where: Record<string, unknown> = {
       user_id: BigInt(userId),
-      guild_id: BigInt(guildId),
     };
+
+    if (guildId) {
+      where.guild_id = BigInt(guildId);
+    }
 
     if (type) {
       where.type = type;
