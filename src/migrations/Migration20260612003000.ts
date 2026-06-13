@@ -9,11 +9,32 @@ export class Migration20260612003000 extends Migration {
       `alter table "auth" drop constraint if exists "auth_user_id_unique";`,
     );
     this.addSql(`drop index if exists "auth_user_id_unique";`);
-
-    this.addSql(`alter table "users" rename to "users_legacy";`);
+    this.addSql(
+      `alter table "auth" alter column "user_id" type bigint using ("user_id"::bigint);`,
+    );
 
     this.addSql(`
-      create table "users" (
+      do $$
+      begin
+        if exists (
+          select 1
+          from information_schema.columns
+          where table_schema = current_schema()
+            and table_name = 'users'
+            and column_name = 'guild_id'
+        ) and not exists (
+          select 1
+          from information_schema.tables
+          where table_schema = current_schema()
+            and table_name = 'users_legacy'
+        ) then
+          alter table "users" rename to "users_legacy";
+        end if;
+      end $$;
+    `);
+
+    this.addSql(`
+      create table if not exists "users" (
         "id" bigserial primary key,
         "created_at" timestamptz not null default now(),
         "updated_at" timestamptz not null default now(),
@@ -105,19 +126,32 @@ export class Migration20260612003000 extends Migration {
         aggregated."active_streak",
         greatest(aggregated."max_active_streak", aggregated."active_streak")
       from aggregated
-      join latest on latest."user_id" = aggregated."user_id";
+      join latest on latest."user_id" = aggregated."user_id"
+      where not exists (
+        select 1
+        from "users" existing
+        where existing."user_id" = aggregated."user_id"
+      );
     `);
 
     this.addSql(
       `select setval(pg_get_serial_sequence('users', 'id'), coalesce((select max("id") from "users"), 1));`,
     );
+    this.addSql(`
+      delete from "users" duplicate
+      using "users" canonical
+      where duplicate."user_id" = canonical."user_id"
+        and duplicate."id" > canonical."id";
+    `);
     this.addSql(
-      `create unique index "users_user_id_unique" on "users" ("user_id");`,
+      `create unique index if not exists "users_user_id_unique" on "users" ("user_id");`,
     );
-    this.addSql(`create index "users_user_id_index" on "users" ("user_id");`);
+    this.addSql(
+      `create index if not exists "users_user_id_index" on "users" ("user_id");`,
+    );
 
     this.addSql(`
-      create table "guild_users" (
+      create table if not exists "guild_users" (
         "id" bigserial primary key,
         "created_at" timestamptz not null default now(),
         "updated_at" timestamptz not null default now(),
@@ -158,24 +192,29 @@ export class Migration20260612003000 extends Migration {
         "left_count",
         "active_streak",
         greatest("max_active_streak", "active_streak")
-      from "users_legacy";
+      from "users_legacy" as legacy
+      where not exists (
+        select 1
+        from "guild_users" existing
+        where existing."user_id" = legacy."user_id"
+          and existing."guild_id" = legacy."guild_id"
+      );
     `);
 
     this.addSql(
       `select setval(pg_get_serial_sequence('guild_users', 'id'), coalesce((select max("id") from "guild_users"), 1));`,
     );
     this.addSql(
-      `create unique index "guild_users_user_id_guild_id_unique" on "guild_users" ("user_id", "guild_id");`,
+      `create unique index if not exists "guild_users_user_id_guild_id_unique" on "guild_users" ("user_id", "guild_id");`,
     );
     this.addSql(
-      `create index "guild_users_user_id_guild_id_index" on "guild_users" ("user_id", "guild_id");`,
+      `create index if not exists "guild_users_user_id_guild_id_index" on "guild_users" ("user_id", "guild_id");`,
     );
 
     this.addSql(`
       update "auth" as auth
-      set "user_id" = users."id"
+      set "user_id" = legacy."user_id"
       from "users_legacy" as legacy
-      join "users" as users on users."user_id" = legacy."user_id"
       where auth."user_id" = legacy."id";
     `);
     this.addSql(`
@@ -186,14 +225,14 @@ export class Migration20260612003000 extends Migration {
         and a."user_id" = b."user_id";
     `);
     this.addSql(
-      `alter table "auth" add constraint "auth_user_id_foreign" foreign key ("user_id") references "users" ("id") on delete cascade;`,
+      `alter table "auth" drop constraint if exists "auth_user_id_foreign";`,
     );
     this.addSql(
-      `create unique index "auth_user_id_guild_id_unique" on "auth" ("user_id", "guild_id");`,
+      `create unique index if not exists "auth_user_id_guild_id_unique" on "auth" ("user_id", "guild_id");`,
     );
 
     this.addSql(`
-      create table "user_activity_daily" (
+      create table if not exists "user_activity_daily" (
         "id" uuid not null default uuidv7(),
         "created_at" timestamptz not null default now(),
         "updated_at" timestamptz not null default now(),
@@ -207,23 +246,23 @@ export class Migration20260612003000 extends Migration {
       );
     `);
     this.addSql(
-      `create index "user_activity_daily_date_index" on "user_activity_daily" ("date");`,
+      `create index if not exists "user_activity_daily_date_index" on "user_activity_daily" ("date");`,
     );
     this.addSql(
-      `create index "user_activity_daily_user_id_index" on "user_activity_daily" ("user_id");`,
+      `create index if not exists "user_activity_daily_user_id_index" on "user_activity_daily" ("user_id");`,
     );
     this.addSql(
-      `create index "user_activity_daily_guild_id_index" on "user_activity_daily" ("guild_id");`,
+      `create index if not exists "user_activity_daily_guild_id_index" on "user_activity_daily" ("guild_id");`,
     );
     this.addSql(
-      `create unique index "user_activity_daily_global_unique" on "user_activity_daily" ("date", "user_id") where "guild_id" is null;`,
+      `create unique index if not exists "user_activity_daily_global_unique" on "user_activity_daily" ("date", "user_id") where "guild_id" is null;`,
     );
     this.addSql(
-      `create unique index "user_activity_daily_guild_unique" on "user_activity_daily" ("date", "user_id", "guild_id") where "guild_id" is not null;`,
+      `create unique index if not exists "user_activity_daily_guild_unique" on "user_activity_daily" ("date", "user_id", "guild_id") where "guild_id" is not null;`,
     );
 
     this.addSql(`
-      create table "user_activity_totals" (
+      create table if not exists "user_activity_totals" (
         "id" serial primary key,
         "created_at" timestamptz not null default now(),
         "updated_at" timestamptz not null default now(),
@@ -236,16 +275,16 @@ export class Migration20260612003000 extends Migration {
       );
     `);
     this.addSql(
-      `create index "user_activity_totals_user_id_index" on "user_activity_totals" ("user_id");`,
+      `create index if not exists "user_activity_totals_user_id_index" on "user_activity_totals" ("user_id");`,
     );
     this.addSql(
-      `create index "user_activity_totals_guild_id_index" on "user_activity_totals" ("guild_id");`,
+      `create index if not exists "user_activity_totals_guild_id_index" on "user_activity_totals" ("guild_id");`,
     );
     this.addSql(
-      `create unique index "user_activity_totals_global_unique" on "user_activity_totals" ("user_id") where "guild_id" is null;`,
+      `create unique index if not exists "user_activity_totals_global_unique" on "user_activity_totals" ("user_id") where "guild_id" is null;`,
     );
     this.addSql(
-      `create unique index "user_activity_totals_guild_unique" on "user_activity_totals" ("user_id", "guild_id") where "guild_id" is not null;`,
+      `create unique index if not exists "user_activity_totals_guild_unique" on "user_activity_totals" ("user_id", "guild_id") where "guild_id" is not null;`,
     );
 
     this.addSql(`
@@ -292,7 +331,8 @@ export class Migration20260612003000 extends Migration {
         coalesce(sum("reaction_count"), 0)::int,
         max("last_active_at")
       from combined
-      group by "user_id", "guild_id";
+      group by "user_id", "guild_id"
+      on conflict do nothing;
     `);
 
     this.addSql(`
@@ -337,7 +377,8 @@ export class Migration20260612003000 extends Migration {
         coalesce(sum("reaction_count"), 0)::int,
         max("last_active_at")
       from combined
-      group by "user_id";
+      group by "user_id"
+      on conflict do nothing;
     `);
 
     this.addSql(`drop table if exists "activities" cascade;`);
@@ -440,10 +481,10 @@ export class Migration20260612003000 extends Migration {
       `select setval(pg_get_serial_sequence('users', 'id'), coalesce((select max("id") from "users"), 1));`,
     );
     this.addSql(
-      `create unique index "users_user_id_guild_id_unique" on "users" ("user_id", "guild_id");`,
+      `create unique index if not exists "users_user_id_guild_id_unique" on "users" ("user_id", "guild_id");`,
     );
     this.addSql(
-      `create index "users_user_id_guild_id_index" on "users" ("user_id", "guild_id");`,
+      `create index if not exists "users_user_id_guild_id_index" on "users" ("user_id", "guild_id");`,
     );
 
     this.addSql(`
@@ -458,7 +499,7 @@ export class Migration20260612003000 extends Migration {
       `alter table "auth" add constraint "auth_user_id_foreign" foreign key ("user_id") references "users" ("id") on delete cascade;`,
     );
     this.addSql(
-      `create unique index "auth_user_id_unique" on "auth" ("user_id");`,
+      `create unique index if not exists "auth_user_id_unique" on "auth" ("user_id");`,
     );
 
     this.addSql(`
@@ -476,13 +517,13 @@ export class Migration20260612003000 extends Migration {
       );
     `);
     this.addSql(
-      `create index "activities_guild_id_index" on "activities" ("guild_id");`,
+      `create index if not exists "activities_guild_id_index" on "activities" ("guild_id");`,
     );
     this.addSql(
-      `create index "activities_user_id_index" on "activities" ("user_id");`,
+      `create index if not exists "activities_user_id_index" on "activities" ("user_id");`,
     );
     this.addSql(
-      `create index "activities_period_index" on "activities" ("period");`,
+      `create index if not exists "activities_period_index" on "activities" ("period");`,
     );
 
     this.addSql(`drop table if exists "user_activity_daily" cascade;`);

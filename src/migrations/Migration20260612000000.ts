@@ -6,7 +6,7 @@ export class Migration20260612000000 extends Migration {
       `create table if not exists "patrons" ("id" serial primary key, "created_at" timestamptz not null default now(), "updated_at" timestamptz not null default now(), "user_id" bigint not null, "value" double precision not null default 0);`,
     );
     this.addSql(
-      `alter table "patrons" add constraint "patrons_user_id_unique" unique ("user_id");`,
+      `create unique index if not exists "patrons_user_id_unique" on "patrons" ("user_id");`,
     );
     this.addSql(
       `create index if not exists "patrons_user_id_index" on "patrons" ("user_id");`,

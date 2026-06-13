@@ -11,9 +11,36 @@ export class Migration20260612002000 extends Migration {
     this.addSql(
       `create index if not exists "wallets_user_id_index" on "wallets" ("user_id");`,
     );
-    this.addSql(
-      `insert into "wallets" ("created_at", "updated_at", "user_id", "coins") select min("created_at"), max("updated_at"), "user_id", coalesce(sum("coins"), 0)::bigint from "users" group by "user_id" on conflict ("user_id") do update set "coins" = excluded."coins", "updated_at" = excluded."updated_at";`,
-    );
+    this.addSql(`
+      do $$
+      begin
+        if exists (
+          select 1
+          from information_schema.columns
+          where table_schema = current_schema()
+            and table_name = 'users'
+            and column_name = 'coins'
+        ) then
+          insert into "wallets" (
+            "created_at",
+            "updated_at",
+            "user_id",
+            "coins"
+          )
+          select
+            min(users."created_at"),
+            max(users."updated_at"),
+            users."user_id",
+            coalesce(sum(users."coins"), 0)::bigint
+          from "users" as users
+          group by users."user_id"
+          on conflict ("user_id") do update
+          set
+            "coins" = excluded."coins",
+            "updated_at" = excluded."updated_at";
+        end if;
+      end $$;
+    `);
     this.addSql(`alter table "users" drop column if exists "coins";`);
   }
 
