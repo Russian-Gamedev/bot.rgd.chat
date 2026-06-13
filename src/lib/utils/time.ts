@@ -38,8 +38,8 @@ const formatMap: Record<TimeKeys, (value: number) => string> = {
 };
 
 /** Formats seconds into a compact Russian duration string. */
-export function formatTime(t: number, parts = -1) {
-  const time = getTimeInfo(Math.abs(t));
+export function formatTime(t: number | bigint, parts = -1) {
+  const time = getTimeInfo(Math.abs(Number(t)));
   let result = '';
   const keys = Object.keys(time) as TimeKeys[];
   for (const key of keys) {
