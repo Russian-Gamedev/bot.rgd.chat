@@ -3,7 +3,7 @@ import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
 import { Client, Invite } from 'discord.js';
 
-import { UserEntity } from '#core/users/entities/user.entity';
+import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 
 import { GuildInviteEntity } from './entities/invite.entity';
 import { GuildInviteHistoryEntity } from './entities/invite-history.entity';
@@ -85,7 +85,7 @@ export class GuildInviteService {
     }
   }
 
-  async trackJoin(user: UserEntity, inviteCode: string) {
+  async trackJoin(user: MemberProfileEntity, inviteCode: string) {
     const inviteEntity = await this.inviteRepository.findOne({
       id: inviteCode,
     });
@@ -100,7 +100,7 @@ export class GuildInviteService {
     await this.entityManager.persist(inviteHistory).flush();
   }
 
-  async trackLeave(user: UserEntity) {
+  async trackLeave(user: MemberProfileEntity) {
     const inviteHistory = await this.inviteHistoryRepository.findOne(
       {
         user_id: user.user_id,

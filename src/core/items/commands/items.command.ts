@@ -80,7 +80,7 @@ export class ItemsCommands {
     if (!guild_id) return null;
 
     const user_id = interaction.user.id;
-    const user = await this.userService.findOrCreate(guild_id, user_id);
+    const user = await this.userService.findOrCreateMember(guild_id, user_id);
     const balance = await this.walletService.getBalance(user.user_id);
     if (balance < cost) {
       return interaction.reply({

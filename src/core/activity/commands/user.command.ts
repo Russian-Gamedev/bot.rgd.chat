@@ -8,6 +8,8 @@ import {
   SlashCommand,
   type SlashCommandContext,
 } from 'necord';
+import { ActivityService } from '#core/activity/activity.service';
+import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
 import {
   formatCoins,
@@ -15,8 +17,6 @@ import {
   getDisplayAvatar,
   getRelativeFormat,
 } from '#lib/utils';
-import { UserEntity } from '../entities/user.entity';
-import { UserService } from '../users.service';
 
 class GetUserDto {
   @MemberOption({
@@ -31,6 +31,7 @@ class GetUserDto {
 export class UserCommands {
   constructor(
     private readonly userService: UserService,
+    private readonly activityService: ActivityService,
     private readonly walletService: WalletService,
   ) {}
 
@@ -50,22 +51,22 @@ export class UserCommands {
       .fetch(targetId.toString())
       .catch(() => null);
     if (!target) return;
-    const guildUser = await this.userService.findOrCreate(guildId, targetId);
-    const allUser = await this.userService.getUserFromGuilds(targetId);
+    const guildUser = await this.userService.findOrCreateMember(
+      guildId,
+      targetId,
+    );
+    const profile = await this.userService.getProfile(targetId);
+    const allGuildUsers = await this.userService.getMemberProfiles(targetId);
+    const stats = await this.activityService.getGlobalActivityTotal(targetId);
     const balance = await this.walletService.getBalance(targetId);
-    if (!allUser) return;
+    if (!profile) return;
 
     const embed = new EmbedBuilder();
 
-    const getTotal = (key: keyof UserEntity) =>
-      allUser.reduce((acc, user) => acc + (user[key] as number), 0);
-
-    const getMin = (key: keyof UserEntity) =>
-      allUser.reduce(
-        (min, user) =>
-          (user[key] as number) < min ? (user[key] as number) : min,
-        Infinity,
-      );
+    const leftCount = allGuildUsers.reduce(
+      (acc, user) => acc + user.leftCount,
+      0,
+    );
 
     embed.setColor(target.displayColor);
     embed.setThumbnail(getDisplayAvatar(target.user));
@@ -84,17 +85,17 @@ export class UserCommands {
       },
       {
         name: 'Первый вход / на ргд',
-        value: getRelativeFormat(getMin('first_joined_at')),
+        value: getRelativeFormat(profile.firstJoinedAt.getTime()),
         inline: true,
       },
       {
         name: 'Первый вход / на этом сервере',
-        value: getRelativeFormat(guildUser.first_joined_at.getTime()),
+        value: getRelativeFormat(guildUser.firstJoinedAt.getTime()),
         inline: true,
       },
       {
         name: 'Уровень уважения',
-        value: getTotal('reputation').toLocaleString('ru'),
+        value: profile.reputation.toLocaleString('ru'),
         inline: true,
       },
       {
@@ -104,17 +105,17 @@ export class UserCommands {
       },
       {
         name: 'Понаписал',
-        value: getTotal('experience').toLocaleString('ru'),
+        value: profile.experience.toLocaleString('ru'),
         inline: true,
       },
       {
         name: 'Наговорил',
-        value: formatTime(getTotal('voice_time')),
+        value: formatTime(stats?.voice_seconds ?? 0),
         inline: true,
       },
       {
         name: 'Ливал раз',
-        value: `${getTotal('left_count')}`,
+        value: `${leftCount}`,
         inline: true,
       },
     ]);

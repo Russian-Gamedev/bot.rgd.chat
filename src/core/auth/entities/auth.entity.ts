@@ -1,14 +1,16 @@
 import {
   Entity,
-  OneToOne,
+  ManyToOne,
   PrimaryKey,
   Property,
+  Unique,
 } from '@mikro-orm/decorators/legacy';
 
 import { BaseEntity } from '#common/entities/base.entity';
-import { UserEntity } from '#core/users/entities/user.entity';
+import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 
 @Entity({ tableName: 'auth' })
+@Unique({ properties: ['guild_id', 'user'] })
 export class AuthEntity extends BaseEntity {
   @PrimaryKey()
   id: number;
@@ -16,11 +18,9 @@ export class AuthEntity extends BaseEntity {
   @Property({ type: 'bigint' })
   guild_id: bigint;
 
-  @OneToOne(() => UserEntity, {
-    owner: true,
-    orphanRemoval: true,
+  @ManyToOne(() => UserProfileEntity, {
     deleteRule: 'CASCADE',
     type: 'bigint',
   })
-  user: UserEntity;
+  user: UserProfileEntity;
 }

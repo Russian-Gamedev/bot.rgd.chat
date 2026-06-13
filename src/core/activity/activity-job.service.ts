@@ -1,9 +1,4 @@
-import {
-  EntityManager,
-  EntityRepository,
-  RequestContext,
-} from '@mikro-orm/core';
-import { InjectRepository } from '@mikro-orm/nestjs';
+import { EntityManager, RequestContext } from '@mikro-orm/core';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
@@ -16,26 +11,31 @@ import { Context, SlashCommand, type SlashCommandContext } from 'necord';
 
 import { Colors } from '#config/constants';
 import { GuildSettings } from '#config/guilds';
+import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
-import { UserEntity } from '#core/users/entities/user.entity';
 import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
 import { formatTime, pickRandom, pluralize } from '#lib/utils';
+import { ActivityService, ActivityStats } from './activity.service';
 
-import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
+export enum ActivityPeriod {
+  Day = 'day',
+  Week = 'week',
+  Month = 'month',
+}
 
 @Injectable()
 export class ActivityJobService {
   private readonly logger = new Logger(ActivityJobService.name);
 
   constructor(
-    @InjectRepository(ActivityEntity)
-    private readonly activityRepository: EntityRepository<ActivityEntity>,
     private readonly em: EntityManager,
     private readonly discord: Client,
+    private readonly activityService: ActivityService,
     private readonly userService: UserService,
     private readonly walletService: WalletService,
     private readonly guildSettings: GuildSettingsService,
+    private readonly guildMemberRolesService: GuildMemberRolesService,
   ) {}
 
   @SlashCommand({
@@ -47,11 +47,13 @@ export class ActivityJobService {
     if (!interaction.guild) return;
 
     const period = ActivityPeriod.Day;
+    const [start, end] = this.getPeriodRange(period);
 
-    const activities = await this.activityRepository.find({
-      guild_id: BigInt(interaction.guild.id),
-      period,
-    });
+    const activities = await this.activityService.getActivityStatsInRange(
+      interaction.guild.id,
+      start,
+      end,
+    );
 
     if (activities.length === 0) {
       await interaction.reply({
@@ -61,7 +63,11 @@ export class ActivityJobService {
       return;
     }
 
-    const embed = await this.buildEmbed(activities, period);
+    const embed = await this.buildEmbed(
+      activities,
+      period,
+      BigInt(interaction.guild.id),
+    );
 
     await interaction.reply({ embeds: [embed] });
   }
@@ -72,14 +78,21 @@ export class ActivityJobService {
     this.logger.log('Running daily activity job');
 
     const guilds = await this.discord.guilds.fetch();
+    const globalActiveUsers = new Set<bigint>();
+
     for (const { id } of guilds.values()) {
       const guild = await this.discord.guilds.fetch(id);
 
-      await this.calculateDailyActivity(guild).catch((err) => {
-        this.logger.error(
-          `Failed to calculate daily activity for guild ${guild.id}: ${err.message}`,
-        );
-      });
+      const activeUsers = await this.calculateDailyActivity(guild).catch(
+        (err) => {
+          this.logger.error(
+            `Failed to calculate daily activity for guild ${guild.id}: ${err.message}`,
+          );
+          return [];
+        },
+      );
+      for (const userId of activeUsers) globalActiveUsers.add(userId);
+
       await this.giveAwayDailyCoins(guild).catch((err) => {
         this.logger.error(
           `Failed to give away daily coins for guild ${guild.id}: ${err.message}`,
@@ -87,14 +100,12 @@ export class ActivityJobService {
       });
 
       await this.postActivitySummary(guild, ActivityPeriod.Day);
-      await this.moveToNextPeriod(guild, ActivityPeriod.Day);
       const today = new Date();
 
       const isSaturday = today.getDay() === 6;
 
       if (isSaturday) {
         await this.postActivitySummary(guild, ActivityPeriod.Week);
-        await this.moveToNextPeriod(guild, ActivityPeriod.Week);
       }
 
       const isLastDayOfMonth =
@@ -102,24 +113,27 @@ export class ActivityJobService {
 
       if (isLastDayOfMonth) {
         await this.postActivitySummary(guild, ActivityPeriod.Month);
-        await this.moveToNextPeriod(guild, ActivityPeriod.Month);
       }
     }
+
+    await this.activityService.updateProfileStreaks([...globalActiveUsers]);
   }
 
   private async giveAwayDailyCoins(guild: Guild) {
-    const activities = await this.activityRepository.find({
-      guild_id: BigInt(guild.id),
-      period: ActivityPeriod.Day,
-    });
+    const [start, end] = this.getPeriodRange(ActivityPeriod.Day);
+    const activities = await this.activityService.getActivityStatsInRange(
+      guild.id,
+      start,
+      end,
+    );
 
     for (const activity of activities) {
       await RequestContext.create(this.em, async () => {
         try {
-          const coinsPerMinute = Math.floor(activity.voice / 60);
-          const coins = activity.message + coinsPerMinute;
+          const coinsPerMinute = Math.floor(activity.voice_seconds / 60);
+          const coins = activity.message_score + coinsPerMinute;
           if (coins === 0) return;
-          const user = await this.userService.findOrCreate(
+          const user = await this.userService.findOrCreateMember(
             BigInt(guild.id),
             activity.user_id,
           );
@@ -135,7 +149,7 @@ export class ActivityJobService {
     }
   }
 
-  private async calculateDailyActivity(guild: Guild) {
+  private async calculateDailyActivity(guild: Guild): Promise<bigint[]> {
     const activeRole = await this.guildSettings.getActiveRole(guild.id);
     const enabledAutoRole = await this.guildSettings.getSetting<boolean>(
       BigInt(guild.id),
@@ -153,10 +167,12 @@ export class ActivityJobService {
       30,
     );
 
-    const activities = await this.activityRepository.find({
-      guild_id: BigInt(guild.id),
-      period: ActivityPeriod.Day,
-    });
+    const [start, end] = this.getPeriodRange(ActivityPeriod.Day);
+    const activities = await this.activityService.getActivityStatsInRange(
+      guild.id,
+      start,
+      end,
+    );
 
     const activeUsers: bigint[] = [];
 
@@ -164,8 +180,8 @@ export class ActivityJobService {
       const MESSAGE_THRESHOLD = 25;
       const VOICE_THRESHOLD = 60 * 30; // in seconds
       if (
-        activity.message > MESSAGE_THRESHOLD ||
-        activity.voice > VOICE_THRESHOLD
+        activity.message_score > MESSAGE_THRESHOLD ||
+        activity.voice_seconds > VOICE_THRESHOLD
       ) {
         activeUsers.push(activity.user_id);
       }
@@ -176,15 +192,9 @@ export class ActivityJobService {
     );
 
     /// reset streaks for inactive users
-    await this.em.nativeUpdate(
-      UserEntity,
-      {
-        user_id: { $nin: activeUsers as unknown as number[] },
-        guild_id: BigInt(guild.id),
-      },
-      {
-        activeStreak: 0,
-      },
+    await this.activityService.resetInactiveMemberStreaks(
+      guild.id,
+      activeUsers,
     );
 
     const checkAutoRole = enabledAutoRole && activeRole;
@@ -192,8 +202,11 @@ export class ActivityJobService {
     // increase streaks for active users
     for (const userId of activeUsers) {
       try {
-        const user = await this.userService.findOrCreate(guild.id, userId);
-        await this.userService.increaseActiveStreak(user);
+        const user = await this.userService.findOrCreateMember(
+          guild.id,
+          userId,
+        );
+        await this.activityService.increaseMemberStreak(user);
         if (!checkAutoRole) continue;
 
         if (user.activeStreak >= activeRoleThreshold!) {
@@ -201,8 +214,13 @@ export class ActivityJobService {
             `User ${user.user_id} in guild ${guild.id} has an active streak of ${user.activeStreak} days!`,
           );
 
-          await this.userService
-            .giveRoleToUser(user, activeRole.id)
+          await this.guildMemberRolesService
+            .addGuildRole(
+              guild.id,
+              user.user_id,
+              activeRole.id,
+              'Active streak threshold reached',
+            )
             .catch((err) => {
               this.logger.warn(
                 `Failed to give active role to user ${user.user_id} in guild ${guild.id}: ${err.message}`,
@@ -221,18 +239,30 @@ export class ActivityJobService {
     for (const member of activeRole?.members ?? []) {
       try {
         const userId = BigInt(member[0]);
-        const user = await this.userService.findOrCreate(guild.id, userId);
+        const user = await this.userService.findOrCreateMember(
+          guild.id,
+          userId,
+        );
+        const activityTotal = await this.activityService.getGuildActivityTotal(
+          guild.id,
+          userId,
+        );
         if (!checkAutoRole) continue;
         if (
-          user.lastActiveAt == null ||
-          Date.now() - user.lastActiveAt.getTime() >
+          activityTotal?.lastActiveAt == null ||
+          Date.now() - activityTotal.lastActiveAt.getTime() >
             activeRemoveThreshold! * 24 * 60 * 60 * 1000
         ) {
           this.logger.log(
             `Removing active role from user ${user.user_id} in guild ${guild.id} due to inactivity`,
           );
-          await this.userService
-            .removeRoleFromUser(user, activeRole.id)
+          await this.guildMemberRolesService
+            .removeGuildRole(
+              guild.id,
+              user.user_id,
+              activeRole.id,
+              'Active streak inactivity threshold reached',
+            )
             .catch((err) => {
               this.logger.warn(
                 `Failed to remove active role from user ${user.user_id} in guild ${guild.id}: ${err.message}`,
@@ -247,6 +277,8 @@ export class ActivityJobService {
         }
       }
     }
+
+    return activeUsers;
   }
 
   private async postActivitySummary(guild: Guild, period: ActivityPeriod) {
@@ -256,10 +288,12 @@ export class ActivityJobService {
 
     if (!postMessages) return;
 
-    const activities = await this.activityRepository.find({
-      guild_id: BigInt(guild.id),
-      period,
-    });
+    const [start, end] = this.getPeriodRange(period);
+    const activities = await this.activityService.getActivityStatsInRange(
+      guild.id,
+      start,
+      end,
+    );
 
     if (activities.length === 0) {
       this.logger.log(
@@ -278,26 +312,20 @@ export class ActivityJobService {
     const channel = await guild.channels.fetch(channelId).catch(() => null);
     if (!channel?.isSendable()) return;
 
-    const embed = await this.buildEmbed(activities, period);
+    const embed = await this.buildEmbed(activities, period, BigInt(guild.id));
 
     await channel.send({ embeds: [embed] });
   }
 
   private async buildEmbed(
-    activities: ActivityEntity[],
+    activities: ActivityStats[],
     period: ActivityPeriod,
+    guildId: bigint,
   ) {
-    const date = new Date();
-    let days = 1;
-    if (period === ActivityPeriod.Week) days = 7;
-    if (period === ActivityPeriod.Month) days = 30;
-    date.setTime(date.getTime() - days * 1_000 * 60 * 60 * 24);
-
-    const guildId = activities[0]?.guild_id;
+    const [date] = this.getPeriodRange(period);
     const newRegs = await this.userService.getNewUsers(date, guildId);
-    const usersStreak = await this.userService.getTopUsersByField(
+    const usersStreak = await this.activityService.getTopMemberStreaks(
       guildId,
-      'activeStreak',
       15,
     );
 
@@ -312,8 +340,11 @@ export class ActivityJobService {
     embed.setTitle(title);
 
     const sort = (
-      data: ActivityEntity[],
-      key: keyof Pick<ActivityEntity, 'voice' | 'message' | 'reactions'>,
+      data: ActivityStats[],
+      key: keyof Pick<
+        ActivityStats,
+        'voice_seconds' | 'message_score' | 'reaction_count'
+      >,
     ) =>
       data
         .sort((a, b) => b[key] - a[key])
@@ -344,27 +375,31 @@ export class ActivityJobService {
     };
 
     const topVoice = buildTop(
-      sort(activities, 'voice'),
+      sort(activities, 'voice_seconds'),
       (item, rank) => buildLine(item.user, formatTime(item.value, 3), rank),
       'никто не заходил в войс :(',
     );
 
     const topMessages = buildTop(
-      sort(activities, 'message'),
+      sort(activities, 'message_score'),
       (item, rank) => buildLine(item.user, item.value, rank),
       'никто не писал :(',
     );
 
-    const reactionsRaw = activities.sort((a, b) => b.reactions - a.reactions);
+    const reactionsRaw = activities.sort(
+      (a, b) => b.reaction_count - a.reaction_count,
+    );
 
     const lastReactions = reactionsRaw.at(-1);
-    const reactions = reactionsRaw.filter((a) => a.reactions > 0).slice(0, 15);
+    const reactions = reactionsRaw
+      .filter((a) => a.reaction_count > 0)
+      .slice(0, 15);
 
     /// shit code to always show the last user in the list
     if (
-      Number(lastReactions?.reactions) < 0 ||
-      (Number(reactions.at(-1)?.reactions) < 0 &&
-        reactions.at(-1)?.reactions !== lastReactions?.reactions)
+      Number(lastReactions?.reaction_count) < 0 ||
+      (Number(reactions.at(-1)?.reaction_count) < 0 &&
+        reactions.at(-1)?.reaction_count !== lastReactions?.reaction_count)
     ) {
       reactions.push(lastReactions!);
     }
@@ -382,8 +417,8 @@ export class ActivityJobService {
       (item, rank) =>
         buildLine(
           item.user_id,
-          item.reactions,
-          item.reactions >= 0 ? rank : randomClownEmoji,
+          item.reaction_count,
+          item.reaction_count >= 0 ? rank : randomClownEmoji,
         ),
       'никто не реагировал :(',
     );
@@ -423,67 +458,18 @@ export class ActivityJobService {
     return embed;
   }
 
-  private async moveToNextPeriod(guild: Guild, period: ActivityPeriod) {
-    const nextPeriod = this.getNextPeriod(period);
+  private getPeriodRange(period: ActivityPeriod): [Date, Date] {
+    const end = new Date();
+    end.setHours(24, 0, 0, 0);
 
-    this.logger.log(`Moving activity from ${period} to ${nextPeriod}`);
+    const start = new Date(end);
+    const days = {
+      [ActivityPeriod.Day]: 1,
+      [ActivityPeriod.Week]: 7,
+      [ActivityPeriod.Month]: 30,
+    }[period];
+    start.setDate(start.getDate() - days);
 
-    const activities = await this.activityRepository.find({
-      period,
-      guild_id: BigInt(guild.id),
-    });
-
-    if (nextPeriod) {
-      for (const activity of activities) {
-        const nextActivity = await this.getOrCreateActivity(
-          activity.guild_id,
-          activity.user_id,
-          nextPeriod,
-        );
-        nextActivity.message += activity.message;
-        nextActivity.voice += activity.voice;
-        nextActivity.reactions += activity.reactions;
-
-        await this.em.persist(nextActivity).flush();
-      }
-    }
-
-    await this.activityRepository.nativeDelete({
-      period,
-      guild_id: BigInt(guild.id),
-    });
-  }
-
-  private async getOrCreateActivity(
-    guildId: bigint,
-    userId: bigint,
-    period: ActivityPeriod,
-  ) {
-    let activity = await this.activityRepository.findOne({
-      guild_id: guildId,
-      user_id: userId,
-      period,
-    });
-
-    if (!activity) {
-      activity = new ActivityEntity();
-      activity.guild_id = guildId;
-      activity.user_id = userId;
-      activity.period = period;
-      await this.em.persist(activity).flush();
-    }
-
-    return activity;
-  }
-
-  private getNextPeriod(period: ActivityPeriod) {
-    switch (period) {
-      case ActivityPeriod.Day:
-        return ActivityPeriod.Week;
-      case ActivityPeriod.Week:
-        return ActivityPeriod.Month;
-      default:
-        return null;
-    }
+    return [start, end];
   }
 }

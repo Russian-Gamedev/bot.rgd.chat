@@ -9,6 +9,7 @@ import { ScheduleLoggerService } from '#common/schedule-logger.service';
 import { ActivityModule } from '#core/activity/activity.module';
 import { AuthModule } from '#core/auth/auth.module';
 import { BarModule } from '#core/bar/bar.module';
+import { BirthdayModule } from '#core/birthday/birthday.module';
 import { BotsModule } from '#core/bots/bots.module';
 import { DiscordModule } from '#core/discord/discord.module';
 import { FunModule } from '#core/fun/fun.module';
@@ -33,6 +34,7 @@ import { AppController } from './app.controller';
     DiscordModule,
     UserModule,
     GuildModule,
+    BirthdayModule,
     ActivityModule,
     BotsModule,
     MiniGamesModule,

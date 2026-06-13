@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
 import { EnvironmentVariables } from '#config/env';
-import { UserEntity } from '#core/users/entities/user.entity';
+import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { UserService } from '#core/users/users.service';
 import { AuthProfile, JwtPayload } from './auth.type';
 import { AuthEntity } from './entities/auth.entity';
@@ -29,16 +29,18 @@ export class AuthService {
         guild_id: BigInt(profile.guild_id),
         user: {
           user_id: BigInt(profile.user_id),
-          guild_id: BigInt(profile.guild_id),
         },
       },
       { populate: ['user'] },
     );
 
     if (!auth) {
-      const user = await this.userService.findOrCreate(
+      const guildUser = await this.userService.findOrCreateMember(
         profile.guild_id,
         profile.user_id,
+      );
+      const user = await this.userService.findOrCreateProfile(
+        guildUser.user_id,
       );
       auth = new AuthEntity();
       auth.guild_id = BigInt(profile.guild_id);
@@ -50,13 +52,13 @@ export class AuthService {
         `Created new auth entry for user ${profile.username} in guild ${profile.guild_id}`,
       );
     }
-    return this.generateJwtToken(auth.user);
+    return this.generateJwtToken(auth.user, auth.guild_id);
   }
 
-  private generateJwtToken(user: UserEntity) {
+  private generateJwtToken(user: UserProfileEntity, guildId: bigint) {
     const payload: JwtPayload = {
       user_id: String(user.user_id),
-      guild_id: String(user.guild_id),
+      guild_id: String(guildId),
       username: user.username,
     };
 

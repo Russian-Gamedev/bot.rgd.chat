@@ -15,12 +15,12 @@ import { GuildEvents, GuildSettings } from '#config/guilds';
 import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 import { NicknameService } from '#core/nickname/nickname.service';
+import { UserService } from '#core/users/users.service';
 import { InsufficientFundsException } from '#core/wallet/wallet.exception';
 import { WalletService } from '#core/wallet/wallet.service';
 import { formatCoins, hideEmbedLink } from '#lib/utils';
 
 import { RenameUserDto } from '../dto/rename.dto';
-import { UserService } from '../users.service';
 
 const RENAME_BOT_COST = 10_000n;
 

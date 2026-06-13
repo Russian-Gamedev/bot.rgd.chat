@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { UserEntity } from '#core/users/entities/user.entity';
+import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { PatronEntity } from './entities/patron.entity';
 import { PatronHistoryEntity } from './entities/patron-history.entity';
 import { PatronsService } from './patrons.service';
@@ -9,7 +9,7 @@ describe('PatronsService', () => {
   let service: PatronsService;
   let mockEm: EntityManager;
   let mockPatronsRepo: EntityRepository<PatronEntity>;
-  let mockUsersRepo: EntityRepository<UserEntity>;
+  let mockUsersRepo: EntityRepository<UserProfileEntity>;
   let innerEm: EntityManager;
 
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe('PatronsService', () => {
     } as unknown as EntityRepository<PatronEntity>;
     mockUsersRepo = {
       find: mock(() => Promise.resolve([])),
-    } as unknown as EntityRepository<UserEntity>;
+    } as unknown as EntityRepository<UserProfileEntity>;
 
     innerEm = {
       findOne: mock(() => Promise.resolve(null)),
@@ -46,17 +46,17 @@ describe('PatronsService', () => {
       firstPatron,
       secondPatron,
     ]);
-    const firstUser = new UserEntity();
+    const firstUser = new UserProfileEntity();
     firstUser.user_id = 111n;
     firstUser.username = 'first';
-    firstUser.avatar = 'first-avatar.png';
+    firstUser.avatar_url = 'first-avatar.png';
     firstUser.banner = 'first-banner.png';
     firstUser.banner_alt = 'first banner';
     firstUser.banner_color = '#111';
-    const secondUser = new UserEntity();
+    const secondUser = new UserProfileEntity();
     secondUser.user_id = 222n;
     secondUser.username = 'second';
-    secondUser.avatar = 'second-avatar.png';
+    secondUser.avatar_url = 'second-avatar.png';
     secondUser.banner = 'second-banner.png';
     secondUser.banner_alt = null;
     secondUser.banner_color = '#222';

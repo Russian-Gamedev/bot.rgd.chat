@@ -1,26 +1,15 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { forwardRef, Module } from '@nestjs/common';
-
-import { GuildEventsModule } from '#core/guilds/events/guild-events.module';
-import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
-import { NicknameModule } from '#core/nickname/nickname.module';
-import { WalletModule } from '#core/wallet/wallet.module';
-import { BirthdayService } from './birthday.service';
-import { commands } from './commands';
-import { UserEntity } from './entities/user.entity';
-import { UserRoleEntity } from './entities/user-roles.entity';
+import { Module } from '@nestjs/common';
+import { MemberProfileEntity } from './entities/member-profile.entity';
+import { UserProfileEntity } from './entities/user-profile.entity';
 import { UserRefreshService } from './user-refresh.service';
 import { UserService } from './users.service';
 
 @Module({
   imports: [
-    MikroOrmModule.forFeature([UserEntity, UserRoleEntity]),
-    GuildSettingsModule,
-    GuildEventsModule,
-    forwardRef(() => WalletModule),
-    NicknameModule,
+    MikroOrmModule.forFeature([UserProfileEntity, MemberProfileEntity]),
   ],
-  providers: [UserService, UserRefreshService, BirthdayService, ...commands],
+  providers: [UserService, UserRefreshService],
   exports: [UserService],
 })
 export class UserModule {}

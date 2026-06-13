@@ -1,5 +1,3 @@
-import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import {
   type BeforeApplicationShutdown,
   Inject,
@@ -20,8 +18,7 @@ import { Redis } from 'ioredis';
 import { Context, type ContextOf, On, Once } from 'necord';
 
 import { UserService } from '#core/users/users.service';
-
-import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
+import { ActivityService } from './activity.service';
 
 export const VOICE_ACTIVITY_SAVE_INTERVAL_MS = 60_000;
 export const VOICE_ACTIVITY_STALE_MULTIPLIER = 5;
@@ -33,13 +30,11 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
   private readonly logger = new Logger(ActivityWatchService.name);
 
   constructor(
-    @InjectRepository(ActivityEntity)
-    private readonly activityRepository: EntityRepository<ActivityEntity>,
-    private readonly em: EntityManager,
     private readonly discord: Client,
     @Inject(Redis)
     private readonly redis: Redis,
     private readonly userService: UserService,
+    private readonly activityService: ActivityService,
   ) {}
 
   @Once('clientReady')
@@ -109,23 +104,19 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
 
     if (words.length === 0) return;
 
-    const activity = await this.getOrCreateActivity(
-      BigInt(message.guildId!),
-      BigInt(message.author.id),
-      ActivityPeriod.Day,
-    );
-
-    activity.message += words.length;
-
-    const user = await this.userService.findOrCreate(
+    const user = await this.userService.findOrCreateMember(
       BigInt(message.guildId!),
       BigInt(message.author.id),
     );
 
     await this.userService.addExperience(user, words.length);
-    await this.userService.updateLastActiveAt(user);
-
-    await this.em.persist(activity).flush();
+    await this.activityService.recordActivity(
+      message.guildId!,
+      message.author.id,
+      {
+        messageScore: words.length,
+      },
+    );
   }
 
   @On('voiceStateUpdate')
@@ -157,15 +148,11 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     const canProcess = await this.canProcessReaction(reaction, user);
     if (!canProcess) return;
 
-    const activity = await this.getOrCreateActivity(
-      BigInt(reaction.message.guildId!),
-      BigInt(reaction.message.author!.id),
-      ActivityPeriod.Day,
+    await this.activityService.recordActivity(
+      reaction.message.guildId!,
+      reaction.message.author!.id,
+      { reactionCount: 1 },
     );
-
-    activity.reactions += 1;
-
-    await this.em.persist(activity).flush();
   }
 
   @On('messageReactionRemove')
@@ -175,17 +162,11 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     const canProcess = await this.canProcessReaction(reaction, user);
     if (!canProcess) return;
 
-    const activity = await this.getOrCreateActivity(
-      BigInt(reaction.message.guildId!),
-      BigInt(reaction.message.author!.id),
-      ActivityPeriod.Day,
+    await this.activityService.recordActivity(
+      reaction.message.guildId!,
+      reaction.message.author!.id,
+      { reactionCount: -1 },
     );
-
-    if (activity.reactions > 0) {
-      activity.reactions -= 1;
-    }
-
-    await this.em.persist(activity).flush();
   }
 
   private async canProcessReaction(
@@ -206,31 +187,6 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     if (diffTime > 1000 * 60 * 60 * 24) return; // older than 24 hours
 
     return true;
-  }
-
-  private async getOrCreateActivity(
-    guildId: bigint,
-    userId: bigint,
-    period: ActivityPeriod,
-  ) {
-    let activity = await this.activityRepository.findOne({
-      guild_id: guildId,
-      user_id: userId,
-      period,
-    });
-
-    if (!activity) {
-      activity = new ActivityEntity();
-      activity.guild_id = guildId;
-      activity.user_id = userId;
-      activity.period = period;
-      activity.message = 0;
-      activity.voice = 0;
-      activity.reactions = 0;
-      await this.em.persist(activity).flush();
-    }
-
-    return activity;
   }
 
   private getVoiceActivityKey(guildId: string) {
@@ -309,23 +265,9 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     memberId: string,
     elapsed: number,
   ) {
-    const activity = await this.getOrCreateActivity(
-      BigInt(guildId),
-      BigInt(memberId),
-      ActivityPeriod.Day,
-    );
-
-    activity.voice += elapsed;
-
-    const user = await this.userService.findOrCreate(
-      BigInt(guildId),
-      BigInt(memberId),
-    );
-
-    await this.userService.addVoiceTime(user, elapsed);
-    await this.userService.updateLastActiveAt(user);
-
-    await this.em.persist(activity).flush();
+    await this.activityService.recordActivity(guildId, memberId, {
+      voiceSeconds: elapsed,
+    });
   }
 
   private async saveAllVoiceActivities(

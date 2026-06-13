@@ -2,7 +2,7 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 
-import { UserEntity } from '#core/users/entities/user.entity';
+import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { DiscordID } from '#root/lib/types';
 import { WalletEntity } from './entities/wallet.entity';
 import {
@@ -62,7 +62,7 @@ export class WalletService {
   }
 
   async credit(
-    user: UserEntity,
+    user: MemberProfileEntity,
     amount: bigint,
     reason: string,
     metadata?: Record<string, unknown>,
@@ -93,7 +93,7 @@ export class WalletService {
   }
 
   async debit(
-    user: UserEntity,
+    user: MemberProfileEntity,
     amount: bigint,
     reason: string,
     metadata?: Record<string, unknown>,
@@ -128,8 +128,8 @@ export class WalletService {
   }
 
   async transfer(
-    from: UserEntity,
-    to: UserEntity,
+    from: MemberProfileEntity,
+    to: MemberProfileEntity,
     amount: bigint,
     reason = 'transfer',
   ): Promise<[WalletTransactionEntity, WalletTransactionEntity]> {

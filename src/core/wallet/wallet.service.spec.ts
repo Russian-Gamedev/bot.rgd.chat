@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 
-import { UserEntity } from '#core/users/entities/user.entity';
+import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { WalletEntity } from './entities/wallet.entity';
 import {
   WalletTransactionEntity,
@@ -13,13 +13,13 @@ import {
 } from './wallet.exception';
 import { WalletService } from './wallet.service';
 
-function createMockUser(overrides: Partial<UserEntity> = {}): UserEntity {
-  const user = new UserEntity();
+function createMockUser(
+  overrides: Partial<MemberProfileEntity> = {},
+): MemberProfileEntity {
+  const user = new MemberProfileEntity();
   user.id = 1;
   user.user_id = 123456789n;
   user.guild_id = 987654321n;
-  user.username = 'testuser';
-  user.avatar = 'avatar.png';
   Object.assign(user, overrides);
   return user;
 }

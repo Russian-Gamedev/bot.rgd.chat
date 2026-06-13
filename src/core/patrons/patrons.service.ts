@@ -2,7 +2,7 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 
-import { UserEntity } from '#core/users/entities/user.entity';
+import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { type DiscordID } from '#root/lib/types';
 import { PatronEntity } from './entities/patron.entity';
 import { PatronHistoryEntity } from './entities/patron-history.entity';
@@ -22,8 +22,8 @@ export class PatronsService {
   constructor(
     @InjectRepository(PatronEntity)
     private readonly patronsRepository: EntityRepository<PatronEntity>,
-    @InjectRepository(UserEntity)
-    private readonly usersRepository: EntityRepository<UserEntity>,
+    @InjectRepository(UserProfileEntity)
+    private readonly usersRepository: EntityRepository<UserProfileEntity>,
     private readonly em: EntityManager,
   ) {}
 
@@ -47,7 +47,7 @@ export class PatronsService {
         user: {
           id,
           username: user?.username ?? '',
-          avatar_url: user?.avatar ?? '',
+          avatar_url: user?.avatar_url ?? '',
           banner: user?.banner_alt ?? user?.banner ?? user?.banner_color ?? '',
         },
         value: patron.value,

@@ -1,7 +1,7 @@
 import { Entity, PrimaryKey, Property } from '@mikro-orm/decorators/legacy';
 
 @Entity({ tableName: 'user_roles' })
-export class UserRoleEntity {
+export class GuildMemberRoleEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 

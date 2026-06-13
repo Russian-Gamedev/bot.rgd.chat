@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { AuditLogEvent, Client, Guild } from 'discord.js';
 
 import { GuildEvents } from '#config/guilds';
+import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { UserService } from '#core/users/users.service';
 
 import { GuildEventService } from './events/guild-events.service';
@@ -67,6 +68,7 @@ describe('GuildWatcherService', () => {
       {} as GuildSettingsService,
       {} as GuildEventService,
       {} as UserService,
+      {} as GuildMemberRolesService,
       {} as GuildInviteService,
     );
   });

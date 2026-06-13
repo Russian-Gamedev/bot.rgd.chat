@@ -8,10 +8,9 @@ import {
 } from 'necord';
 
 import { Colors } from '#config/constants';
+import { ActivityService } from '#core/activity/activity.service';
 import { WalletService } from '#core/wallet/wallet.service';
 import { formatCoins, formatTime } from '#lib/utils';
-
-import { UserService } from '../users.service';
 
 const TopCommandDecorator = createCommandGroupDecorator({
   name: 'top',
@@ -23,7 +22,7 @@ const TopCommandDecorator = createCommandGroupDecorator({
 @Injectable()
 export class TopCommand {
   constructor(
-    private readonly userService: UserService,
+    private readonly activityService: ActivityService,
     private readonly walletService: WalletService,
   ) {}
 
@@ -34,15 +33,15 @@ export class TopCommand {
   async topVoice(@Context() [interaction]: SlashCommandContext) {
     const guildId = BigInt(interaction.guildId!);
 
-    const users = await this.userService.getTopUsersByField(
+    const users = await this.activityService.getTopActivityTotals(
       guildId,
-      'voice_time',
+      'voice_seconds',
       10,
     );
 
     const formattedUsers = users.map((user) => ({
       user_id: user.user_id,
-      value: formatTime(user.voice_time),
+      value: formatTime(user.voice_seconds),
     }));
 
     const embed = this.buildEmbed('Топ по времени в войсе', formattedUsers);
@@ -56,15 +55,15 @@ export class TopCommand {
   async topChat(@Context() [interaction]: SlashCommandContext) {
     const guildId = BigInt(interaction.guildId!);
 
-    const users = await this.userService.getTopUsersByField(
+    const users = await this.activityService.getTopActivityTotals(
       guildId,
-      'experience',
+      'message_score',
       10,
     );
 
     const formattedUsers = users.map((user) => ({
       user_id: user.user_id,
-      value: user.experience.toLocaleString('ru-RU'),
+      value: user.message_score.toLocaleString('ru-RU'),
     }));
 
     const embed = this.buildEmbed('Топ по активности в чате', formattedUsers);

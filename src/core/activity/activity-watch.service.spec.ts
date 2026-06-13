@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import {
   type Client,
   Collection,
@@ -9,13 +8,12 @@ import {
 } from 'discord.js';
 import type Redis from 'ioredis';
 import type { ContextOf } from 'necord';
-
 import type { UserService } from '#core/users/users.service';
+import type { ActivityService } from './activity.service';
 import {
   ActivityWatchService,
   VOICE_ACTIVITY_STALE_TIMEOUT_MS,
 } from './activity-watch.service';
-import { ActivityEntity, ActivityPeriod } from './entities/activity.entity';
 
 const GUILD_ID = '100';
 const MEMBER_ID = '200';
@@ -46,6 +44,12 @@ interface TestMemberOptions {
 
 interface RedisMock extends Redis {
   storage: Map<string, Map<string, string>>;
+}
+
+interface TestActivity {
+  guild_id: bigint;
+  user_id: bigint;
+  voice: number;
 }
 
 interface SaveAllVoiceActivities {
@@ -105,8 +109,8 @@ function createRedisMock(
   return redis as unknown as RedisMock;
 }
 
-function activityKey(guildId: bigint, userId: bigint, period: ActivityPeriod) {
-  return `${guildId}:${userId}:${period}`;
+function activityKey(guildId: bigint, userId: bigint) {
+  return `${guildId}:${userId}`;
 }
 
 function createGuild({ afkChannelId }: { afkChannelId?: string } = {}) {
@@ -202,51 +206,40 @@ function createVoiceState(
 }
 
 function createService(redis = createRedisMock(), guildSetup = createGuild()) {
-  const activities = new Map<string, ActivityEntity>();
-  const users = new Map<string, { voice_time: number }>();
-
-  const activityRepository = {
-    findOne: mock(
-      async (where: {
-        guild_id: bigint;
-        period: ActivityPeriod;
-        user_id: bigint;
-      }) => {
-        return (
-          activities.get(
-            activityKey(where.guild_id, where.user_id, where.period),
-          ) ?? null
-        );
-      },
-    ),
-  } as unknown as EntityRepository<ActivityEntity>;
-
-  const em = {
-    persist: mock((entity: ActivityEntity) => {
-      if (entity instanceof ActivityEntity) {
-        activities.set(
-          activityKey(entity.guild_id, entity.user_id, entity.period),
-          entity,
-        );
-      }
-
-      return em;
-    }),
-    flush: mock(async () => undefined),
-  } as unknown as EntityManager;
+  const activities = new Map<string, TestActivity>();
 
   const userService = {
-    findOrCreate: mock(async (guildId: bigint, userId: bigint) => {
-      const key = `${guildId}:${userId}`;
-      const user = users.get(key) ?? { voice_time: 0 };
-      users.set(key, user);
-      return user;
-    }),
-    addVoiceTime: mock(async (user: { voice_time: number }, amount: number) => {
-      user.voice_time += amount;
-    }),
-    updateLastActiveAt: mock(async () => undefined),
+    findOrCreateMember: mock(
+      async (guildId: bigint | string, userId: bigint | string) => ({
+        guild_id: BigInt(guildId),
+        user_id: BigInt(userId),
+      }),
+    ),
+    addExperience: mock(async () => undefined),
   } as unknown as UserService;
+
+  const activityService = {
+    recordActivity: mock(
+      async (
+        guildId: bigint | string,
+        userId: bigint | string,
+        increment: { voiceSeconds?: number },
+      ) => {
+        const normalizedGuildId = BigInt(guildId);
+        const normalizedUserId = BigInt(userId);
+        const key = `${guildId}:${userId}`;
+        const activity =
+          activities.get(key) ??
+          ({
+            guild_id: normalizedGuildId,
+            user_id: normalizedUserId,
+            voice: 0,
+          } satisfies TestActivity);
+        activity.voice += increment.voiceSeconds ?? 0;
+        activities.set(key, activity);
+      },
+    ),
+  } as unknown as ActivityService;
 
   const discord = {
     guilds: {
@@ -255,11 +248,10 @@ function createService(redis = createRedisMock(), guildSetup = createGuild()) {
   } as unknown as Client;
 
   const service = new ActivityWatchService(
-    activityRepository,
-    em,
     discord,
     redis,
     userService,
+    activityService,
   );
 
   return {
@@ -269,17 +261,14 @@ function createService(redis = createRedisMock(), guildSetup = createGuild()) {
     redis,
     service,
     setVoiceChannelMembers: guildSetup.setVoiceChannelMembers,
-    users,
   };
 }
 
 function getActivity(
-  activities: Map<string, ActivityEntity>,
+  activities: Map<string, TestActivity>,
   memberId = MEMBER_ID,
 ) {
-  return activities.get(
-    activityKey(BigInt(GUILD_ID), BigInt(memberId), ActivityPeriod.Day),
-  );
+  return activities.get(activityKey(BigInt(GUILD_ID), BigInt(memberId)));
 }
 
 function voiceUpdateContext(oldState: VoiceState, newState: VoiceState) {
@@ -319,7 +308,6 @@ describe('ActivityWatchService voice tracking', () => {
       guild,
       redis: serviceRedis,
       service,
-      users,
     } = createService(redis);
     const member = createMember(guild);
 
@@ -332,7 +320,6 @@ describe('ActivityWatchService voice tracking', () => {
 
     expect(serviceRedis.storage.get(VOICE_KEY)?.get(MEMBER_ID)).toBeUndefined();
     expect(getActivity(activities)?.voice).toBe(60);
-    expect(users.get(`${GUILD_ID}:${MEMBER_ID}`)?.voice_time).toBe(60);
   });
 
   it('saves the previous segment and starts a new one when switching channels', async () => {

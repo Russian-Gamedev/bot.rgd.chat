@@ -1,79 +1,134 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
-import { Client, Collection, Role } from 'discord.js';
+import { Client } from 'discord.js';
 
 import { getDefaultAvatar, getDisplayAvatar, noop } from '#lib/utils';
 import { DiscordID } from '#root/lib/types';
 
-import { UserEntity } from './entities/user.entity';
-import { UserRoleEntity } from './entities/user-roles.entity';
+import { MemberProfileEntity } from './entities/member-profile.entity';
+import { UserProfileEntity } from './entities/user-profile.entity';
 
 @Injectable()
 export class UserService {
   constructor(
-    @InjectRepository(UserEntity)
-    private readonly userRepository: EntityRepository<UserEntity>,
-    @InjectRepository(UserRoleEntity)
-    private readonly userRoleRepository: EntityRepository<UserRoleEntity>,
+    @InjectRepository(UserProfileEntity)
+    private readonly userRepository: EntityRepository<UserProfileEntity>,
+    @InjectRepository(MemberProfileEntity)
+    private readonly memberProfileRepository: EntityRepository<MemberProfileEntity>,
     private readonly em: EntityManager,
     private readonly client: Client,
   ) {}
 
-  async findOrCreate(
+  async findOrCreateMember(
     guildId: DiscordID,
     userId: DiscordID,
-  ): Promise<UserEntity> {
+  ): Promise<MemberProfileEntity> {
     guildId = BigInt(guildId);
     userId = BigInt(userId);
 
-    let user = await this.userRepository.findOne({
+    await this.findOrCreateProfile(userId);
+
+    let guildUser = await this.memberProfileRepository.findOne({
       user_id: userId,
       guild_id: guildId,
     });
-    if (!user) {
-      user = new UserEntity();
-      user.user_id = userId;
-      user.guild_id = guildId;
-      user.avatar = getDefaultAvatar(userId.toString());
-      await this.updateUserData(user).catch(noop);
-    } else if (!user.avatar || isDefaultAvatar(user.avatar)) {
-      await this.updateUserData(user).catch(noop);
+
+    if (!guildUser) {
+      guildUser = new MemberProfileEntity();
+      guildUser.user_id = userId;
+      guildUser.guild_id = guildId;
+      guildUser.firstJoinedAt = new Date();
+      await this.save(guildUser);
+      await this.syncDiscordProfile(guildUser).catch(noop);
+    } else {
+      const profile = await this.getProfile(userId);
+      if (!profile?.avatar_url || isDefaultAvatar(profile.avatar_url)) {
+        await this.syncDiscordProfile(guildUser).catch(noop);
+      }
     }
+
+    return guildUser;
+  }
+
+  async findOrCreate(
+    guildId: DiscordID,
+    userId: DiscordID,
+  ): Promise<MemberProfileEntity> {
+    return this.findOrCreateMember(guildId, userId);
+  }
+
+  async findOrCreateProfile(userId: DiscordID): Promise<UserProfileEntity> {
+    const normalizedUserId = BigInt(userId);
+    let user = await this.userRepository.findOne({ user_id: normalizedUserId });
+    if (user) return user;
+
+    user = new UserProfileEntity();
+    user.user_id = normalizedUserId;
+    user.username = '';
+    user.nickname = null;
+    user.avatar_url = getDefaultAvatar(normalizedUserId.toString());
+    user.banner = null;
+    user.banner_alt = null;
+    user.banner_color = '#fff';
+    user.firstJoinedAt = new Date();
+    user.about = null;
+    user.birthDate = null;
+    user.lastActiveAt = new Date();
+
+    await this.save(user);
     return user;
   }
 
-  async save(user: UserEntity): Promise<void> {
-    await this.em.persist(user).flush();
+  async getProfile(userId: DiscordID): Promise<UserProfileEntity | null> {
+    return this.userRepository.findOne({ user_id: BigInt(userId) });
   }
 
-  async getUserFromGuilds(user_id: DiscordID) {
-    return this.userRepository.find({ user_id });
+  async save(entity: UserProfileEntity | MemberProfileEntity): Promise<void> {
+    await this.em.persist(entity).flush();
   }
 
-  async getNewUsers(since: Date, guildId: DiscordID): Promise<UserEntity[]> {
-    return this.userRepository.find({
-      first_joined_at: { $gte: since },
-      guild_id: guildId,
-      is_left_guild: false,
+  async getMemberProfiles(user_id: DiscordID): Promise<MemberProfileEntity[]> {
+    return this.memberProfileRepository.find({ user_id: BigInt(user_id) });
+  }
+
+  async getNewUsers(
+    since: Date,
+    guildId: DiscordID,
+  ): Promise<MemberProfileEntity[]> {
+    return this.memberProfileRepository.find({
+      firstJoinedAt: { $gte: since },
+      guild_id: BigInt(guildId),
+      isLeftGuild: false,
     });
   }
 
-  async updateUserData(user: UserEntity): Promise<void> {
-    const guild = await this.client.guilds.fetch(user.guild_id.toString());
+  async syncDiscordProfile(guildUser: MemberProfileEntity): Promise<void> {
+    const guild = await this.client.guilds.fetch(guildUser.guild_id.toString());
     if (!guild) return;
-    const userId = user.user_id.toString();
+
+    const userId = guildUser.user_id.toString();
     const discordUser = await guild.members
       .fetch({ user: userId, force: true })
-      .catch(() => guild.members.cache.get(user.user_id.toString()));
+      .catch(() => guild.members.cache.get(userId));
     if (!discordUser) return;
+
+    const user = await this.findOrCreateProfile(guildUser.user_id);
     user.username = discordUser.user.username;
     user.nickname = discordUser.nickname;
-    user.avatar = getDisplayAvatar(discordUser);
+    user.avatar_url = getDisplayAvatar(discordUser);
     user.banner = discordUser.bannerURL() ?? null;
     user.banner_color = discordUser.displayHexColor ?? '#fff';
-    user.first_joined_at ??= discordUser.joinedAt ?? new Date();
-    await this.save(user);
+    user.firstJoinedAt =
+      user.firstJoinedAt && discordUser.joinedAt
+        ? minDate(user.firstJoinedAt, discordUser.joinedAt)
+        : (user.firstJoinedAt ?? discordUser.joinedAt ?? new Date());
+
+    guildUser.firstJoinedAt ??= discordUser.joinedAt ?? new Date();
+
+    this.em.persist(user);
+    this.em.persist(guildUser);
+    await this.em.flush();
   }
 
   async refreshUsersData(batchSize = 50): Promise<{
@@ -85,10 +140,10 @@ export class UserService {
     let failed = 0;
 
     while (true) {
-      const users = await this.userRepository.find(
+      const users = await this.memberProfileRepository.find(
         {
           id: { $gt: lastId },
-          is_left_guild: false,
+          isLeftGuild: false,
         },
         {
           limit: batchSize,
@@ -102,7 +157,7 @@ export class UserService {
         lastId = user.id;
 
         try {
-          await this.updateUserData(user);
+          await this.syncDiscordProfile(user);
           refreshed++;
         } catch {
           failed++;
@@ -113,183 +168,85 @@ export class UserService {
     return { refreshed, failed };
   }
 
-  async addExperience(user: UserEntity, amount: number): Promise<void> {
-    user.experience += amount;
+  async addExperience(
+    user: MemberProfileEntity,
+    amount: number,
+  ): Promise<void> {
+    const profile = await this.findOrCreateProfile(user.user_id);
+    profile.experience += amount;
+    await this.save(profile);
+  }
+
+  async addReputation(
+    user: MemberProfileEntity,
+    amount: number,
+  ): Promise<void> {
+    const profile = await this.findOrCreateProfile(user.user_id);
+    profile.reputation += amount;
+    await this.save(profile);
+  }
+
+  async leaveGuild(user: MemberProfileEntity): Promise<void> {
+    user.leftAt = new Date();
+    user.isLeftGuild = true;
+    user.leftCount += 1;
     await this.save(user);
   }
 
-  async addReputation(user: UserEntity, amount: number): Promise<void> {
-    user.reputation += amount;
+  async rejoinGuild(user: MemberProfileEntity): Promise<void> {
+    user.leftAt = null;
+    user.isLeftGuild = false;
     await this.save(user);
   }
 
-  async addVoiceTime(user: UserEntity, amount: number): Promise<void> {
-    user.voice_time += amount;
-    await this.save(user);
-  }
-
-  async leaveGuild(user: UserEntity): Promise<void> {
-    user.left_at = new Date();
-    user.is_left_guild = true;
-    user.left_count += 1;
-    await this.save(user);
-  }
-
-  async rejoinGuild(user: UserEntity): Promise<void> {
-    user.left_at = null;
-    user.is_left_guild = false;
-    await this.save(user);
-    await this.loadRoles(user);
-  }
-
-  async saveRoles(user: UserEntity, discordRoles: Collection<string, Role>) {
-    const guild = await this.client.guilds.fetch(user.guild_id.toString());
-    if (!guild) return;
-
-    const savedRoles = await this.userRoleRepository.find({
-      user_id: user.user_id,
-      guild_id: user.guild_id,
-    });
-
-    for (const role of savedRoles) {
-      if (!discordRoles.has(role.role_id.toString())) {
-        this.em.remove(role);
-      }
-    }
-
-    for (const role of discordRoles.values()) {
-      if (role.name === '@everyone') continue;
-      if (role.tags) continue; /// Skip bot roles
-
-      const existing = savedRoles.find((r) => r.role_id === BigInt(role.id));
-      if (existing) continue;
-
-      const newRole = new UserRoleEntity();
-      newRole.user_id = user.user_id;
-      newRole.guild_id = user.guild_id;
-      newRole.role_id = BigInt(role.id);
-      this.em.persist(newRole);
-    }
-
-    await this.em.flush();
-  }
-
-  async loadRoles(user: UserEntity) {
-    const roles = await this.userRoleRepository.find({
-      user_id: user.user_id,
-      guild_id: user.guild_id,
-    });
-
-    const guild = await this.client.guilds.fetch(user.guild_id.toString());
-    if (!guild) return;
-
-    for (const role of roles) {
-      const discordRole = await guild.roles.fetch(role.role_id.toString());
-      if (!discordRole) continue;
-
-      const member = await guild.members
-        .fetch(user.user_id.toString())
-        .catch(() => null);
-      if (!member) continue;
-
-      if (!member.roles.cache.has(discordRole.id)) {
-        await member.roles.add(discordRole);
-      }
-    }
-  }
-
-  async updateLastActiveAt(user: UserEntity): Promise<void> {
-    user.lastActiveAt = new Date();
-    await this.save(user);
-  }
-
-  async increaseActiveStreak(user: UserEntity): Promise<void> {
-    user.activeStreak += 1;
-    await this.save(user);
-  }
-
-  async giveRoleToUser(user: UserEntity, roleId: DiscordID): Promise<void> {
-    const guild = await this.client.guilds.fetch(user.guild_id.toString());
-    if (!guild) return;
-    const discordUser = await guild.members
-      .fetch(user.user_id.toString())
-      .catch(() => null);
-    if (!discordUser) return;
-
-    const role = await guild.roles.fetch(roleId.toString());
-    if (!role) return;
-
-    if (!discordUser.roles.cache.has(role.id)) {
-      await discordUser.roles.add(role);
-    }
-  }
-
-  async removeRoleFromUser(user: UserEntity, roleId: DiscordID): Promise<void> {
-    const guild = await this.client.guilds.fetch(user.guild_id.toString());
-    if (!guild) return;
-    const discordUser = await guild.members
-      .fetch(user.user_id.toString())
-      .catch(() => null);
-    if (!discordUser) return;
-
-    const role = await guild.roles.fetch(roleId.toString());
-    if (!role) return;
-
-    if (discordUser.roles.cache.has(role.id)) {
-      await discordUser.roles.remove(role);
-    }
-  }
-
-  async getTopUsersByField(
-    guildId: DiscordID,
-    field: keyof UserEntity,
-    limit: number,
-  ): Promise<UserEntity[]> {
-    return this.userRepository.find(
-      { guild_id: BigInt(guildId), [field]: { $gt: 0 } },
-      {
-        orderBy: { [field]: 'DESC' },
-        limit,
-      },
-    );
-  }
-
-  async setBirthday(user: UserEntity, birthday: Date | null): Promise<void> {
-    user.birth_date = birthday;
-    await this.save(user);
+  async setBirthday(
+    user: UserProfileEntity | MemberProfileEntity,
+    birthday: Date | null,
+  ): Promise<void> {
+    const profile =
+      user instanceof UserProfileEntity
+        ? user
+        : await this.findOrCreateProfile(user.user_id);
+    profile.birthDate = birthday;
+    await this.save(profile);
   }
 
   async getBirthdayUsers(
     guild_id: DiscordID,
     month: number,
     day: number,
-  ): Promise<UserEntity[]> {
+  ): Promise<UserProfileEntity[]> {
+    const activeMemberships = await this.memberProfileRepository.find({
+      guild_id: BigInt(guild_id),
+      isLeftGuild: false,
+    });
+    const userIds = activeMemberships.map((user) => user.user_id);
+    if (userIds.length === 0) return [];
+
     const qb = this.userRepository.createQueryBuilder('u');
-    qb.where({ guild_id: BigInt(guild_id) });
+    qb.where({ user_id: { $in: userIds } });
     qb.andWhere('EXTRACT(MONTH FROM u.birth_date) = ?', [month]);
     qb.andWhere('EXTRACT(DAY FROM u.birth_date) = ?', [day]);
     return qb.getResult();
   }
 
   async getUsersWithBirthdaySet(guild_id: DiscordID) {
-    return this.userRepository.find({
+    const activeMemberships = await this.memberProfileRepository.find({
       guild_id: BigInt(guild_id),
-      birth_date: { $ne: null },
+      isLeftGuild: false,
     });
-  }
+    const userIds = activeMemberships.map((user) => user.user_id);
+    if (userIds.length === 0) return [];
 
-  async getInactiveUsers(
-    guildID: DiscordID,
-    since: Date,
-    excludeUserIds: DiscordID[],
-  ): Promise<UserEntity[]> {
     return this.userRepository.find({
-      guild_id: BigInt(guildID),
-      lastActiveAt: { $lte: since },
-      is_left_guild: false,
-      user_id: { $nin: excludeUserIds.map((id) => BigInt(id)) },
+      user_id: { $in: userIds },
+      birthDate: { $ne: null },
     });
   }
+}
+
+function minDate(a: Date, b: Date) {
+  return a.getTime() <= b.getTime() ? a : b;
 }
 
 function isDefaultAvatar(avatar: string): boolean {

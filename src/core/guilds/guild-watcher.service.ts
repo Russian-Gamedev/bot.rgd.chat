@@ -3,6 +3,7 @@ import { AuditLogEvent, Client, Guild, SnowflakeUtil } from 'discord.js';
 import { Context, type ContextOf, On } from 'necord';
 
 import { GuildEvents } from '#config/guilds';
+import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { UserService } from '#core/users/users.service';
 
 import { GuildEventService } from './events/guild-events.service';
@@ -18,6 +19,7 @@ export class GuildWatcherService {
     private readonly guildSettingsService: GuildSettingsService,
     private readonly guildEventsService: GuildEventService,
     private readonly userService: UserService,
+    private readonly guildMemberRolesService: GuildMemberRolesService,
     private readonly guildInviteService: GuildInviteService,
   ) {}
 
@@ -29,12 +31,13 @@ export class GuildWatcherService {
     const guild = await member.guild.fetch();
     if (!guild) return;
 
-    const user = await this.userService.findOrCreate(guild.id, member.id);
+    const user = await this.userService.findOrCreateMember(guild.id, member.id);
 
-    const isNewUser = user.is_left_guild === false;
+    const isNewUser = user.isLeftGuild === false;
 
     if (!isNewUser) {
       await this.userService.rejoinGuild(user);
+      await this.guildMemberRolesService.restoreSavedRoles(user);
     }
 
     const invite = await this.guildInviteService.findInviteWithUpdatedUses(
@@ -71,7 +74,7 @@ export class GuildWatcherService {
     message ??= 'Приветствуем <@' + member.id + '> на сервере!';
 
     if (!isNewUser) {
-      message += `|| ${user.left_count} раз||`;
+      message += `|| ${user.leftCount} раз||`;
     }
 
     await channel.send({
@@ -89,7 +92,7 @@ export class GuildWatcherService {
     const guild = await member.guild.fetch();
     if (!guild) return;
 
-    const user = await this.userService.findOrCreate(guild.id, member.id);
+    const user = await this.userService.findOrCreateMember(guild.id, member.id);
     await this.userService.leaveGuild(user);
     await this.guildInviteService.trackLeave(user);
 
@@ -100,7 +103,7 @@ export class GuildWatcherService {
     this.logger.log(
       `Saving roles for user ${member.displayName} in guild ${guild.name}`,
     );
-    await this.userService.saveRoles(user, roles);
+    await this.guildMemberRolesService.saveCurrentRoles(user, roles);
 
     /// Send leave message
 

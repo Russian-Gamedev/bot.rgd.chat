@@ -11,6 +11,7 @@ import { GuildService } from './guild.service';
 import { GuildWatcherService } from './guild-watcher.service';
 import { GuildInviteModule } from './invite/invite.module';
 import { MotdModule } from './motd/motd.module';
+import { GuildMemberRolesModule } from './roles/guild-member-roles.module';
 import { GuildSettingsModule } from './settings/guild-settings.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { GuildSettingsModule } from './settings/guild-settings.module';
     GuildEventsModule,
     GuildInviteModule,
     MotdModule,
+    GuildMemberRolesModule,
     UserModule,
   ],
   providers: [GuildService, GuildWatcherService],

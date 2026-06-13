@@ -8,7 +8,7 @@ import {
   type SlashCommandContext,
   Subcommand,
 } from 'necord';
-
+import { UserService } from '#core/users/users.service';
 import {
   WalletTransactionEntity,
   WalletTransactionType,
@@ -18,7 +18,6 @@ import { WalletService } from '#core/wallet/wallet.service';
 import { formatCoins } from '#lib/utils';
 
 import { CoinHistoryDto, CoinTransferDto } from '../dto/coins.dto';
-import { UserService } from '../users.service';
 
 const CoinsGroupDecorator = createCommandGroupDecorator({
   name: 'coins',

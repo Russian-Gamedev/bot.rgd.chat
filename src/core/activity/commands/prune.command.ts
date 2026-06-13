@@ -14,10 +14,9 @@ import {
   type SlashCommandContext,
   Subcommand,
 } from 'necord';
-
+import { ActivityService } from '#core/activity/activity.service';
 import { PruneGroupDecorator } from '#core/discord/commands/utils/prune.command';
-
-import { UserService } from '../users.service';
+import { UserService } from '#core/users/users.service';
 
 class PruneUsersDto {
   @NumberOption({
@@ -33,7 +32,10 @@ class PruneUsersDto {
 @Injectable()
 export class PruneCommand {
   private readonly logger = new Logger(PruneCommand.name);
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly activityService: ActivityService,
+    private readonly userService: UserService,
+  ) {}
 
   @Subcommand({
     name: 'users',
@@ -62,7 +64,7 @@ export class PruneCommand {
     const guildID = BigInt(interaction.guildId!);
     const cutoffDate = new Date(Date.now() - dto.days * 86_400_000);
 
-    const targetList = await this.userService.getInactiveUsers(
+    const targetList = await this.activityService.getInactiveMembers(
       guildID,
       cutoffDate,
       [botId],

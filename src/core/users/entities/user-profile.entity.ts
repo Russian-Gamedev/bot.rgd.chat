@@ -9,17 +9,14 @@ import {
 import { BaseEntity } from '#common/entities/base.entity';
 
 @Entity({ tableName: 'users' })
-@Unique({ properties: ['user_id', 'guild_id'] })
-@Index({ properties: ['user_id', 'guild_id'] })
-export class UserEntity extends BaseEntity {
+@Unique({ properties: ['user_id'] })
+@Index({ properties: ['user_id'] })
+export class UserProfileEntity extends BaseEntity {
   @PrimaryKey()
   id: number;
 
   @Property({ type: 'bigint' })
   user_id: bigint;
-
-  @Property({ type: 'bigint' })
-  guild_id: bigint;
 
   @Property({ type: 'text', defaultRaw: "''" })
   username: string;
@@ -27,8 +24,8 @@ export class UserEntity extends BaseEntity {
   @Property({ type: 'text', nullable: true })
   nickname: string | null;
 
-  @Property({ type: 'text' })
-  avatar: string;
+  @Property({ fieldName: 'avatar_url', type: 'text' })
+  avatar_url: string;
 
   @Property({ type: 'text', nullable: true })
   banner: string | null;
@@ -39,47 +36,44 @@ export class UserEntity extends BaseEntity {
   @Property({ type: 'text', defaultRaw: "'#fff'" })
   banner_color = '#fff';
 
-  @Property({ type: 'timestamptz', defaultRaw: 'now()' })
-  first_joined_at: Date;
+  @Property({
+    fieldName: 'first_joined_at',
+    type: 'timestamptz',
+    defaultRaw: 'now()',
+  })
+  firstJoinedAt: Date;
 
   @Property({ type: 'text', nullable: true })
   about: string | null;
 
-  @Property({ type: 'boolean', default: false })
-  is_left_guild = false;
-
-  @Property({ type: 'timestamptz', nullable: true })
-  left_at: Date | null = null;
+  @Property({ fieldName: 'birth_date', type: 'timestamptz', nullable: true })
+  birthDate: Date | null = null;
 
   @Property({ type: 'integer', default: 0 })
-  left_count = 0;
-
-  @Property({ type: 'timestamptz', nullable: true })
-  birth_date: Date | null = null;
+  reputation = 0;
 
   @Property({ type: 'integer', default: 0 })
-  reputation: number;
-
-  @Property({ type: 'integer', default: 0 })
-  experience: number;
-
-  @Property({ type: 'bigint', default: 0 })
-  voice_time: number;
-
-  @Property({ type: 'timestamptz', defaultRaw: 'now()' })
-  lastActiveAt: Date;
-
-  @Property({ type: 'integer', default: 0 })
-  activeStreak: number;
+  experience = 0;
 
   @Property({
+    fieldName: 'last_active_at',
+    type: 'timestamptz',
+    defaultRaw: 'now()',
+  })
+  lastActiveAt: Date;
+
+  @Property({ fieldName: 'active_streak', type: 'integer', default: 0 })
+  activeStreak = 0;
+
+  @Property({
+    fieldName: 'max_active_streak',
     type: 'integer',
     default: 0,
-    onUpdate(entity: UserEntity) {
+    onUpdate(entity: UserProfileEntity) {
       if (entity.activeStreak > entity.maxActiveStreak) {
         entity.maxActiveStreak = entity.activeStreak;
       }
     },
   })
-  maxActiveStreak: number;
+  maxActiveStreak = 0;
 }

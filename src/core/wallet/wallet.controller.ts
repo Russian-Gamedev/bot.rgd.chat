@@ -110,7 +110,10 @@ export class WalletController {
   @BotScopes(BotScope.ManageWallet)
   @ApiOperation({ summary: 'Credit coins to a user (system)' })
   async creditUser(@Body() dto: CreditDebitDto) {
-    const user = await this.userService.findOrCreate(dto.guild_id, dto.user_id);
+    const user = await this.userService.findOrCreateMember(
+      dto.guild_id,
+      dto.user_id,
+    );
     const tx = await this.walletService.credit(
       user,
       BigInt(dto.amount),
@@ -127,7 +130,10 @@ export class WalletController {
   @BotScopes(BotScope.ManageWallet)
   @ApiOperation({ summary: 'Debit coins from a user (system)' })
   async debitUser(@Body() dto: CreditDebitDto) {
-    const user = await this.userService.findOrCreate(dto.guild_id, dto.user_id);
+    const user = await this.userService.findOrCreateMember(
+      dto.guild_id,
+      dto.user_id,
+    );
     const tx = await this.walletService.debit(
       user,
       BigInt(dto.amount),

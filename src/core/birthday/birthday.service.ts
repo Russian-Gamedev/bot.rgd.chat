@@ -3,10 +3,10 @@ import { Cron } from '@nestjs/schedule';
 import { Client, EmbedBuilder } from 'discord.js';
 
 import { GuildSettings } from '#config/guilds';
+import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
+import { UserService } from '#core/users/users.service';
 import { DiscordID } from '#root/lib/types';
-
-import { UserService } from './users.service';
 
 interface UpcomingBirthday {
   userId: DiscordID;
@@ -24,6 +24,7 @@ export class BirthdayService {
     private readonly userService: UserService,
     private readonly discord: Client,
     private readonly guildSettings: GuildSettingsService,
+    private readonly guildMemberRolesService: GuildMemberRolesService,
   ) {}
 
   @Cron('0 8 * * *', { name: 'birthday-greeting' })
@@ -54,17 +55,15 @@ export class BirthdayService {
         continue;
       }
 
-      birthdayRole.members.forEach(async (member) => {
-        try {
-          await member.roles.remove(birthdayRoleId, 'Removing birthday role');
-        } catch (err) {
+      await this.guildMemberRolesService
+        .removeRoleFromCurrentMembers(birthdayRole, 'Removing birthday role')
+        .catch((err) => {
           if (err instanceof Error) {
             this.logger.error(
-              `Failed to remove birthday role from user ${member.id} in guild ${guildId}: ${err.message}`,
+              `Failed to remove birthday role in guild ${guildId}: ${err.message}`,
             );
           }
-        }
-      });
+        });
 
       const today = new Date();
 
@@ -97,20 +96,24 @@ export class BirthdayService {
           .fetch(user.user_id.toString())
           .catch(() => null);
         if (!member) continue;
-        const birthDate = new Date(user.birth_date!);
+        const birthDate = new Date(user.birthDate!);
         const age = today.getFullYear() - birthDate.getFullYear();
         field += `🎂 <@${member.id}> празнует своё ${age} летие\n`;
 
-        // Assign birthday role
-        try {
-          await member.roles.add(birthdayRoleId, 'Birthday role assignment');
-        } catch (err) {
-          if (err instanceof Error) {
-            this.logger.error(
-              `Failed to assign birthday role to user ${member.id} in guild ${guildId}: ${err.message}`,
-            );
-          }
-        }
+        await this.guildMemberRolesService
+          .addGuildRole(
+            guildId,
+            member.id,
+            birthdayRoleId,
+            'Birthday role assignment',
+          )
+          .catch((err) => {
+            if (err instanceof Error) {
+              this.logger.error(
+                `Failed to assign birthday role to user ${member.id} in guild ${guildId}: ${err.message}`,
+              );
+            }
+          });
       }
       embed.setFields([{ name: 'и вот их список', value: field }]);
       await eventChannel.send({ embeds: [embed] });
@@ -130,9 +133,9 @@ export class BirthdayService {
     const guild = await this.discord.guilds.fetch(guildId.toString());
 
     for (const user of users) {
-      if (!user.birth_date) continue;
+      if (!user.birthDate) continue;
 
-      const birthDate = new Date(user.birth_date);
+      const birthDate = new Date(user.birthDate);
       const nextBirthday = new Date(today);
       nextBirthday.setMonth(birthDate.getMonth());
       nextBirthday.setDate(birthDate.getDate());

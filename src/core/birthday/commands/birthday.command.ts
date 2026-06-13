@@ -7,12 +7,11 @@ import {
   SlashCommand,
   type SlashCommandContext,
 } from 'necord';
-
+import { UserService } from '#core/users/users.service';
 import { pluralize } from '#lib/utils';
 
 import { BirthdayService } from '../birthday.service';
-import { SetBirthdayDto } from '../dto/user.dto';
-import { UserService } from '../users.service';
+import { SetBirthdayDto } from '../dto/birthday.dto';
 
 @Injectable()
 export class BirthdayCommands {
@@ -96,7 +95,7 @@ export class BirthdayCommands {
 
     const guildId = BigInt(guild.id);
     const userId = BigInt(interaction.user.id);
-    const user = await this.userService.findOrCreate(guildId, userId);
+    const user = await this.userService.findOrCreateMember(guildId, userId);
 
     await this.userService.setBirthday(user, date);
 
