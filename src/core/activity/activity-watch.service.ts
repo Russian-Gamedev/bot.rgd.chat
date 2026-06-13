@@ -60,7 +60,6 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
         if (members.size === 0) continue;
         const key = this.getVoiceActivityKey(guild.id);
         for (const member of members.values()) {
-          if (member.user.bot) continue;
           if (!this.isTrackableMember(member)) continue;
 
           const enteredAt = await this.redis.hget(key, member.id);
@@ -92,7 +91,6 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
 
   @On('messageCreate')
   public async onMessage(@Context() [message]: ContextOf<'messageCreate'>) {
-    if (message.author.bot) return;
     if (message.webhookId) return;
     if (!message.guild) return;
 
@@ -125,7 +123,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
   ) {
     if (!newState.guild) return;
     const member = newState.member ?? oldState.member;
-    if (!member || member.user.bot) return;
+    if (!member) return;
 
     const now = Date.now();
     const wasTracking = this.isTrackableVoiceSessionState(oldState);
@@ -173,8 +171,6 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     reaction: MessageReaction | PartialMessageReaction,
     user: User | PartialUser,
   ) {
-    if (user.bot) return;
-
     const message = await reaction.message.fetch();
     if (!message.guild) return;
 

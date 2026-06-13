@@ -496,7 +496,7 @@ describe('ActivityWatchService voice tracking', () => {
     expect(getActivity(activities)).toBeUndefined();
   });
 
-  it('ignores bot members, missing guilds, and missing members', async () => {
+  it('tracks Discord bot members with the same voice activity flow', async () => {
     const { guild, redis, service } = createService();
     const botMember = createMember(guild, { bot: true });
 
@@ -506,6 +506,13 @@ describe('ActivityWatchService voice tracking', () => {
         createVoiceState(botMember),
       ),
     );
+
+    expect(redis.storage.get(VOICE_KEY)?.get(MEMBER_ID)).toBe('70000');
+  });
+
+  it('ignores missing guilds and missing members', async () => {
+    const { guild, redis, service } = createService();
+
     await service.onVoiceStateUpdate(
       voiceUpdateContext(
         createVoiceState(null, { channelId: null, guild: null, member: null }),
