@@ -206,6 +206,31 @@ describe('ActivityService', () => {
     expect(userProfiles[0]?.lastActiveAt).toBe(at);
   });
 
+  it('increments existing bigint voice counters returned by postgres', async () => {
+    const at = new Date('2026-06-13T12:34:00.000Z');
+    const date = new Date('2026-06-13T00:00:00.000Z');
+    const daily = new UserActivityDailyEntity();
+    daily.date = date;
+    daily.user_id = 20n;
+    daily.guild_id = 10n;
+    daily.voice_seconds = 40n as unknown as number;
+    dailyRows.push(daily);
+
+    const total = new UserActivityTotalEntity();
+    total.user_id = 20n;
+    total.guild_id = 10n;
+    total.voice_seconds = 40n as unknown as number;
+    totalRows.push(total);
+
+    await service.recordActivity(10n, 20n, {
+      at,
+      voiceSeconds: 20,
+    });
+
+    expect(daily.voice_seconds).toBe(60);
+    expect(total.voice_seconds).toBe(60);
+  });
+
   it('aggregates activity rows over a date range', async () => {
     await service.recordActivity(10n, 20n, {
       at: new Date('2026-06-13T01:00:00.000Z'),
@@ -227,6 +252,31 @@ describe('ActivityService', () => {
       {
         guild_id: 10n,
         message_score: 7,
+        reaction_count: 0,
+        user_id: 20n,
+        voice_seconds: 30,
+      },
+    ]);
+  });
+
+  it('aggregates bigint voice counters returned by postgres', async () => {
+    const row = new UserActivityDailyEntity();
+    row.date = new Date('2026-06-13T00:00:00.000Z');
+    row.guild_id = 10n;
+    row.user_id = 20n;
+    row.voice_seconds = 30n as unknown as number;
+    dailyRows.push(row);
+
+    await expect(
+      service.getActivityStatsInRange(
+        10n,
+        new Date('2026-06-13T00:00:00.000Z'),
+        new Date('2026-06-14T00:00:00.000Z'),
+      ),
+    ).resolves.toEqual([
+      {
+        guild_id: 10n,
+        message_score: 0,
         reaction_count: 0,
         user_id: 20n,
         voice_seconds: 30,

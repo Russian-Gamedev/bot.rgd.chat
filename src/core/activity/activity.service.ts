@@ -268,9 +268,18 @@ function applyActivityIncrement(
   voiceSeconds: number,
   reactionCount: number,
 ) {
-  target.message_score = Math.max(0, target.message_score + messageScore);
-  target.voice_seconds = Math.max(0, target.voice_seconds + voiceSeconds);
-  target.reaction_count = Math.max(0, target.reaction_count + reactionCount);
+  target.message_score = Math.max(
+    0,
+    toNumber(target.message_score) + messageScore,
+  );
+  target.voice_seconds = Math.max(
+    0,
+    toNumber(target.voice_seconds) + voiceSeconds,
+  );
+  target.reaction_count = Math.max(
+    0,
+    toNumber(target.reaction_count) + reactionCount,
+  );
 }
 
 function aggregateActivityRows(
@@ -290,11 +299,15 @@ function aggregateActivityRows(
         reaction_count: 0,
       } satisfies ActivityStats);
 
-    current.message_score += row.message_score;
-    current.voice_seconds += row.voice_seconds;
-    current.reaction_count += row.reaction_count;
+    current.message_score += toNumber(row.message_score);
+    current.voice_seconds += toNumber(row.voice_seconds);
+    current.reaction_count += toNumber(row.reaction_count);
     stats.set(key, current);
   }
 
   return [...stats.values()];
+}
+
+function toNumber(value: number | bigint): number {
+  return Number(value);
 }
