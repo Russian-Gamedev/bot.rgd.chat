@@ -3,7 +3,7 @@ import { MikroORM } from '@mikro-orm/postgresql';
 import { Logger, MiddlewareConsumer, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { Environment, EnvironmentVariables } from '#config/env';
+import { EnvironmentVariables } from '#config/env';
 import config from '#root/mikro-orm.config';
 
 @Module({
@@ -18,18 +18,14 @@ export class DatabaseModule {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const nodeEnv = this.config.getOrThrow<Environment>('NODE_ENV');
+    const nodeEnv = this.config.getOrThrow<string>('NODE_ENV');
     this.logger.log('Environment: ' + nodeEnv);
-    if (nodeEnv === Environment.Development) {
-      await this.orm.schema.update();
-      this.logger.log('Running migrations in development environment');
+
+    const pendingMigrations = await this.orm.migrator.getPending();
+    if (pendingMigrations.length === 0) {
+      this.logger.log('No pending migrations');
     } else {
-      const pendingMigrations = await this.orm.migrator.getPending();
-      if (pendingMigrations.length === 0) {
-        this.logger.log('No pending migrations');
-        return;
-      }
-      this.logger.log(`Pending migrations: `);
+      this.logger.log('Pending migrations:');
       this.logger.log(
         pendingMigrations.map((migration) => migration.name).join('\n'),
       );

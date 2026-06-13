@@ -1,4 +1,10 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  InternalServerErrorException,
+  Param,
+  Res,
+} from '@nestjs/common';
 import { ApiResponse } from '@nestjs/swagger';
 import { type Response } from 'express';
 
@@ -22,7 +28,11 @@ export class DiscordController {
   @Get('/members')
   @ApiResponse({ description: 'Get statistics about members', status: 200 })
   public async getMembersStats() {
-    return this.discordService.getMembersStats();
+    try {
+      return await this.discordService.getMembersStats();
+    } catch {
+      throw new InternalServerErrorException('Failed to fetch member stats');
+    }
   }
 
   @Get('/invite/:code')

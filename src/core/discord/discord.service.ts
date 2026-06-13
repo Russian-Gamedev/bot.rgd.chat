@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Client, SnowflakeUtil } from 'discord.js';
+import { Client } from 'discord.js';
 import Redis from 'ioredis';
 
 @Injectable()
@@ -18,6 +18,11 @@ export class DiscordService {
   }
 
   public async getMembersStats() {
+    if (!this.client.isReady()) {
+      this.logger.warn('Discord client is not ready');
+      return { total: 0, online: 0 };
+    }
+
     const key = 'discord:member_stats';
     const cached = await this.redis.get(key);
     if (cached) {
@@ -73,89 +78,5 @@ export class DiscordService {
       icon_url: invite.guild.iconURL({ extension: 'webp', size: 128 }),
       banner_url: invite.guild.bannerURL({ extension: 'webp', size: 512 }),
     };
-  }
-
-  // TODO: call from API route in future instead of on every bot start, to avoid hitting rate limits
-  private async cleanUnusedCommands() {
-    const token = process.env.DISCORD_BOT_TOKEN;
-    const clientId = process.env.DISCORD_CLIENT_ID;
-    const deleteAfter = 1000 * 60 * 60 * 24; // 1 day
-
-    const baseUrl = `https://discord.com/api/v10/applications/${clientId}`;
-    const headers = {
-      Authorization: `Bot ${token}`,
-      'Content-Type': 'application/json',
-    };
-
-    const isOldOrLaunch = (cmd: {
-      id: string;
-      name: string;
-      version: string;
-    }) => {
-      if (cmd.name === 'launch' || cmd.name === 'launch-bar') return true;
-      const diff =
-        Date.now() - Number(SnowflakeUtil.decode(cmd.version).timestamp);
-      return diff > deleteAfter;
-    };
-
-    interface Command {
-      id: string;
-      name: string;
-      version: string;
-    }
-
-    // Global commands
-    const globalCommands: Command[] = await fetch(`${baseUrl}/commands`, {
-      method: 'GET',
-      headers,
-    }).then((res) => res.json());
-
-    const oldGlobal = globalCommands.filter(isOldOrLaunch);
-    this.logger.warn(`Found ${oldGlobal.length} old global commands to delete`);
-
-    for (const cmd of oldGlobal) {
-      await fetch(`${baseUrl}/commands/${cmd.id}`, {
-        method: 'DELETE',
-        headers,
-      });
-      this.logger.warn(`Deleted global command "${cmd.name}" (${cmd.id})`);
-    }
-
-    // Guild commands — fetch via REST since guilds.cache is not available before clientReady
-    const botGuilds: { id: string }[] = await fetch(
-      'https://discord.com/api/v10/users/@me/guilds',
-      { method: 'GET', headers },
-    ).then((res) => res.json());
-
-    if (!Array.isArray(botGuilds)) return;
-
-    for (const { id: guildId } of botGuilds) {
-      const guildCommands: Command[] = await fetch(
-        `${baseUrl}/guilds/${guildId}/commands`,
-        {
-          method: 'GET',
-          headers,
-        },
-      ).then((res) => res.json());
-
-      if (!Array.isArray(guildCommands)) continue;
-
-      const oldGuild = guildCommands.filter(isOldOrLaunch);
-      if (oldGuild.length === 0) continue;
-
-      this.logger.warn(
-        `Found ${oldGuild.length} old guild commands to delete in guild ${guildId}`,
-      );
-
-      for (const cmd of oldGuild) {
-        await fetch(`${baseUrl}/guilds/${guildId}/commands/${cmd.id}`, {
-          method: 'DELETE',
-          headers,
-        });
-        this.logger.warn(
-          `Deleted guild command "${cmd.name}" (${cmd.id}) from guild ${guildId}`,
-        );
-      }
-    }
   }
 }

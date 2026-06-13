@@ -1,6 +1,6 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
@@ -24,41 +24,33 @@ export class AuthService {
   ) {}
 
   async logIn(profile: AuthProfile) {
-    let auth = await this.authRepository.findOne(
-      {
-        guild_id: BigInt(profile.guild_id),
-        user: {
-          user_id: BigInt(profile.user_id),
-        },
-      },
-      { populate: ['user'] },
-    );
+    const user = await this.userService.findOrCreateProfile(profile.user_id);
+    user.username = profile.username;
+    user.nickname = profile.nickname || user.nickname;
+    user.avatar_url = profile.avatarUrl || user.avatar_url;
+
+    let auth = await this.authRepository.findOne({
+      user_id: user.user_id,
+    });
 
     if (!auth) {
-      const guildUser = await this.userService.findOrCreateMember(
-        profile.guild_id,
-        profile.user_id,
-      );
-      const user = await this.userService.findOrCreateProfile(
-        guildUser.user_id,
-      );
       auth = new AuthEntity();
-      auth.guild_id = BigInt(profile.guild_id);
-      auth.user = user;
+      auth.user_id = user.user_id;
 
-      await this.entityManager.persist(auth).flush();
+      this.entityManager.persist(user);
+      this.entityManager.persist(auth);
+      await this.entityManager.flush();
 
-      this.logger.log(
-        `Created new auth entry for user ${profile.username} in guild ${profile.guild_id}`,
-      );
+      this.logger.log(`Created new auth entry for user ${profile.username}`);
+    } else {
+      await this.entityManager.persist(user).flush();
     }
-    return this.generateJwtToken(auth.user, auth.guild_id);
+    return this.generateJwtToken(user);
   }
 
-  private generateJwtToken(user: UserProfileEntity, guildId: bigint) {
+  private generateJwtToken(user: UserProfileEntity) {
     const payload: JwtPayload = {
       user_id: String(user.user_id),
-      guild_id: String(guildId),
       username: user.username,
     };
 
@@ -78,15 +70,54 @@ export class AuthService {
         client_secret: this.configService.getOrThrow<string>(
           'DISCORD_CLIENT_SECRET',
         ),
+        redirect_uri: this.configService.getOrThrow<string>(
+          'DISCORD_REDIRECT_URI',
+        ),
         grant_type: 'authorization_code',
         code,
       }),
-    }).then((res) => res.json());
+    });
 
-    const { access_token } = response as {
-      access_token: string;
-    };
+    const body = (await response.json()) as DiscordTokenResponse;
 
-    return { access_token };
+    if (!response.ok || !('access_token' in body)) {
+      throw new BadRequestException({
+        error: mapDiscordTokenError(body.error),
+        message: getDiscordTokenErrorMessage(body.error),
+        discordError: body.error,
+        discordErrorDescription: body.error_description,
+      });
+    }
+
+    return { access_token: body.access_token };
   }
+}
+
+type DiscordTokenResponse = {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+};
+
+function mapDiscordTokenError(error?: string) {
+  if (error === 'invalid_grant') return 'discord_invalid_grant';
+  if (error === 'invalid_client') return 'discord_invalid_client';
+  if (error === 'access_denied') return 'discord_access_denied';
+  return 'discord_token_exchange_failed';
+}
+
+function getDiscordTokenErrorMessage(error?: string) {
+  if (error === 'invalid_grant') {
+    return 'Discord rejected the authorization code. Start login again and make sure the redirect URL matches the Discord application settings.';
+  }
+
+  if (error === 'invalid_client') {
+    return 'Discord rejected the OAuth client credentials. Check DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET.';
+  }
+
+  if (error === 'access_denied') {
+    return 'Discord authorization was cancelled or denied.';
+  }
+
+  return 'Discord token exchange failed.';
 }

@@ -53,11 +53,16 @@ export class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
-  TELEGRAM_BOT_TOKEN: string;
+  AUTH_COOKIE_DOMAIN?: string;
 
   @IsOptional()
   @IsString()
-  TELEGRAM_API_ROOT: string;
+  AUTH_COOKIE_NAME?: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  @Transform(({ value }) => value.split(',').map((s) => s.trim()))
+  CORS_ORIGINS: string;
 
   @IsOptional()
   @IsString({ each: true })

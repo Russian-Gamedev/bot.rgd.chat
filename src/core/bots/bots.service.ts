@@ -2,7 +2,10 @@ import crypto from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
-import { BotScope } from './bots.types';
+import { Permission } from '#core/permissions/permissions.types';
+import { UserService } from '#core/users/users.service';
+import { WalletService } from '#core/wallet/wallet.service';
+import { DiscordID } from '#root/lib/types';
 import { BotEntity } from './entities/bot.entity';
 
 @Injectable()
@@ -13,18 +16,32 @@ export class BotsService {
     @InjectRepository(BotEntity)
     private readonly botsRepository: EntityRepository<BotEntity>,
     private readonly entityManager: EntityManager,
+    private readonly userService: UserService,
+    private readonly walletService: WalletService,
   ) {}
 
-  async createBot(name: string, ownerId: bigint, scopes: BotScope[]) {
+  async createBot(
+    name: string,
+    ownerId: bigint,
+    botUserId: bigint,
+    permissions: Permission[],
+    guildId?: DiscordID,
+  ) {
     const rawToken = 'bot_' + crypto.randomBytes(32).toString('hex');
     const hashedToken = await Bun.password.hash(rawToken, {
       algorithm: 'bcrypt',
     });
+    await this.userService.findOrCreateProfile(botUserId);
+    await this.walletService.getOrCreateWallet(botUserId);
+    if (guildId) {
+      await this.userService.findOrCreateMember(guildId, botUserId);
+    }
 
     const bot = new BotEntity();
     bot.name = name;
     bot.ownerId = ownerId;
-    bot.scopes = scopes;
+    bot.botUserId = botUserId;
+    bot.permissions = permissions;
     bot.tokenHash = hashedToken;
 
     await this.entityManager.persist(bot).flush();
@@ -48,7 +65,10 @@ export class BotsService {
       bot.tokenHash,
       'bcrypt',
     );
-    return isValid ? bot : null;
+    if (!isValid) return null;
+
+    bot.lastUsedAt = new Date();
+    return bot;
   }
 
   async findByName(name: string): Promise<BotEntity | null> {

@@ -1,10 +1,11 @@
-import { ExecutionContext, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import {
+  BadRequestException,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import type { Request } from 'express';
-
-import { EnvironmentVariables } from '#config/env';
 
 import { IS_PUBLIC_KEY } from './auth.decorator';
 
@@ -28,27 +29,60 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
 @Injectable()
 export class DiscordAuthGuard extends AuthGuard('discord') {
-  constructor(
-    private readonly configService: ConfigService<EnvironmentVariables>,
-  ) {
-    super();
-  }
-
-  getAuthenticateOptions(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest<Request>();
-    const guildId = request.query.guild_id;
-
-    if (typeof guildId !== 'string' || guildId.length === 0) {
-      return undefined;
+  handleRequest<TUser = unknown>(
+    err: unknown,
+    user: TUser,
+    info: unknown,
+  ): TUser {
+    if (err) {
+      throw mapDiscordAuthError(err);
     }
 
-    const callbackUrl = new URL(
-      this.configService.getOrThrow<string>('DISCORD_REDIRECT_URI'),
-    );
-    callbackUrl.searchParams.set('guild_id', guildId);
+    if (!user) {
+      throw mapDiscordAuthError(info);
+    }
 
-    return {
-      callbackURL: callbackUrl.toString(),
-    };
+    return user;
   }
+}
+
+function mapDiscordAuthError(error: unknown) {
+  const authError = toAuthError(error);
+
+  if (authError.code === 'invalid_grant') {
+    return new BadRequestException({
+      error: 'discord_invalid_grant',
+      message:
+        'Discord rejected the authorization code. Start login again and make sure the redirect URL matches the Discord application settings.',
+    });
+  }
+
+  if (authError.code === 'invalid_client') {
+    return new UnauthorizedException({
+      error: 'discord_invalid_client',
+      message:
+        'Discord rejected the OAuth client credentials. Check DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET.',
+    });
+  }
+
+  if (authError.code === 'access_denied') {
+    return new BadRequestException({
+      error: 'discord_access_denied',
+      message: 'Discord authorization was cancelled or denied.',
+    });
+  }
+
+  return new BadRequestException({
+    error: 'discord_auth_failed',
+    message: authError.message || 'Discord authorization failed.',
+  });
+}
+
+function toAuthError(error: unknown): { code?: string; message?: string } {
+  if (!error || typeof error !== 'object') return {};
+
+  return {
+    code: 'code' in error ? String(error.code) : undefined,
+    message: 'message' in error ? String(error.message) : undefined,
+  };
 }

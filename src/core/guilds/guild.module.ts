@@ -1,6 +1,7 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Module } from '@nestjs/common';
 
+import { PermissionsModule } from '#core/permissions/permissions.module';
 import { UserModule } from '#core/users/users.module';
 
 import { GuildEntity } from './entities/guild.entity';
@@ -22,6 +23,7 @@ import { GuildSettingsModule } from './settings/guild-settings.module';
     GuildInviteModule,
     MotdModule,
     GuildMemberRolesModule,
+    PermissionsModule,
     UserModule,
   ],
   providers: [GuildService, GuildWatcherService],

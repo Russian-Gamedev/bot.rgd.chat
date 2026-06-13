@@ -1,10 +1,10 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Module } from '@nestjs/common';
 
-import { BotsModule } from '#core/bots/bots.module';
 import { GuildEventsModule } from '#core/guilds/events/guild-events.module';
 import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
 import { NicknameModule } from '#core/nickname/nickname.module';
+import { PermissionsModule } from '#core/permissions/permissions.module';
 import { UserModule } from '#core/users/users.module';
 import { CoinsCommand } from './commands/coins.command';
 import { RenameCommands } from './commands/rename.command';
@@ -20,7 +20,7 @@ import { WalletService } from './wallet.service';
     GuildEventsModule,
     GuildSettingsModule,
     NicknameModule,
-    BotsModule,
+    PermissionsModule,
   ],
   controllers: [WalletController],
   providers: [WalletService, CoinsCommand, RenameCommands],

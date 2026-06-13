@@ -5,19 +5,24 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { BotTarget } from './bots.decorator';
-import { BotApiGuard } from './bots.guard';
+import {
+  Actor,
+  RequireActorTypes,
+} from '#core/permissions/permissions.decorator';
+import { PermissionGuard } from '#core/permissions/permissions.guard';
+import type { AuthenticatedActor } from '#core/permissions/permissions.types';
+import { ActorType } from '#core/permissions/permissions.types';
 import { BotsService } from './bots.service';
-import { BotEntity } from './entities/bot.entity';
 
 @Controller('bots')
-@UseGuards(BotApiGuard)
+@UseGuards(PermissionGuard)
+@RequireActorTypes(ActorType.Bot)
 @UseInterceptors(ClassSerializerInterceptor)
 export class BotsController {
   constructor(readonly _botsService: BotsService) {}
 
   @Get('me')
-  getMe(@BotTarget() bot: BotEntity) {
-    return bot;
+  getMe(@Actor() actor: AuthenticatedActor) {
+    return actor.type === ActorType.Bot ? actor.bot : actor;
   }
 }

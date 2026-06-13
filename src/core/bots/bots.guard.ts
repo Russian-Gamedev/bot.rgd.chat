@@ -3,24 +3,13 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
-  SetMetadata,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 
 import { BotsService } from './bots.service';
-import { BotScope } from './bots.types';
-
-const METADATA_KEY = 'bot_scopes';
-
-export const BotScopes = (...scopes: BotScope[]) =>
-  SetMetadata(METADATA_KEY, scopes);
 
 @Injectable()
 export class BotApiGuard implements CanActivate {
-  constructor(
-    private readonly botsService: BotsService,
-    private readonly reflector: Reflector,
-  ) {}
+  constructor(private readonly botsService: BotsService) {}
 
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest();
@@ -36,14 +25,6 @@ export class BotApiGuard implements CanActivate {
 
     if (!bot) throw new ForbiddenException('Invalid bot token');
     request.bot = bot;
-
-    const requiredScopes = this.reflector.get<BotScope[]>(
-      METADATA_KEY,
-      context.getHandler(),
-    );
-
-    if (!requiredScopes) return true;
-
-    return requiredScopes.every((scope) => bot.scopes.includes(scope));
+    return true;
   }
 }

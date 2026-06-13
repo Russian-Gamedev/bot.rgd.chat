@@ -9,11 +9,17 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
-import { JwtUser } from '#core/auth/auth.decorator';
-import { JwtAuthGuard } from '#core/auth/auth.guard';
-import type { JwtPayload } from '#core/auth/auth.type';
-import { BotApiGuard, BotScopes } from '#core/bots/bots.guard';
-import { BotScope } from '#core/bots/bots.types';
+import {
+  Actor,
+  RequireActorTypes,
+  RequirePermissions,
+} from '#core/permissions/permissions.decorator';
+import { PermissionGuard } from '#core/permissions/permissions.guard';
+import {
+  ActorType,
+  type AuthenticatedActor,
+  Permission,
+} from '#core/permissions/permissions.types';
 import { UserService } from '#core/users/users.service';
 
 import {
@@ -32,30 +38,29 @@ export class WalletController {
     private readonly userService: UserService,
   ) {}
 
-  // ─── User-facing (JWT auth) ───────────────────────────────
-
   @Get('balance')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(PermissionGuard)
+  @RequireActorTypes(ActorType.User)
+  @RequirePermissions(Permission.WalletReadOwn)
   @ApiOperation({ summary: 'Get own balance' })
-  async getOwnBalance(@JwtUser() user: JwtPayload) {
-    const balance = await this.walletService.getBalance(user.user_id);
+  async getOwnBalance(@Actor() actor: AuthenticatedActor) {
+    const balance = await this.walletService.getBalance(actor.id);
     return { balance: balance.toString() };
   }
 
   @Get('history')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(PermissionGuard)
+  @RequireActorTypes(ActorType.User)
+  @RequirePermissions(Permission.WalletReadOwn)
   @ApiOperation({ summary: 'Get own transaction history' })
   async getOwnHistory(
-    @JwtUser() user: JwtPayload,
+    @Actor() actor: AuthenticatedActor,
     @Query() query: WalletHistoryQueryDto,
   ) {
-    const history = await this.walletService.getHistory(
-      user.user_id,
-      user.guild_id,
-      query,
-    );
+    const history = await this.walletService.getHistory(actor.id, null, query);
     return history.map((tx) => ({
       id: tx.id,
+      guild_id: tx.guild_id.toString(),
       amount: tx.amount.toString(),
       balance_after: tx.balance_after.toString(),
       type: tx.type,
@@ -66,11 +71,9 @@ export class WalletController {
     }));
   }
 
-  // ─── System/Admin (Bot API auth) ─────────────────────────
-
   @Get('/balance/:userId')
-  @UseGuards(BotApiGuard)
-  @BotScopes(BotScope.ManageWallet)
+  @UseGuards(PermissionGuard)
+  @RequirePermissions(Permission.WalletManage)
   @ApiOperation({ summary: 'Get user balance (system)' })
   async getUserBalance(@Param('userId') userId: string) {
     const balance = await this.walletService.getBalance(userId);
@@ -81,8 +84,8 @@ export class WalletController {
   }
 
   @Get('history/:userId')
-  @UseGuards(BotApiGuard)
-  @BotScopes(BotScope.ManageWallet)
+  @UseGuards(PermissionGuard)
+  @RequirePermissions(Permission.WalletManage)
   @ApiOperation({ summary: 'Get user transaction history (system)' })
   async getUserHistory(
     @Param('userId') userId: string,
@@ -95,6 +98,7 @@ export class WalletController {
     );
     return history.map((tx) => ({
       id: tx.id,
+      guild_id: tx.guild_id.toString(),
       amount: tx.amount.toString(),
       balance_after: tx.balance_after.toString(),
       type: tx.type,
@@ -106,8 +110,8 @@ export class WalletController {
   }
 
   @Post('credit')
-  @UseGuards(BotApiGuard)
-  @BotScopes(BotScope.ManageWallet)
+  @UseGuards(PermissionGuard)
+  @RequirePermissions(Permission.WalletManage)
   @ApiOperation({ summary: 'Credit coins to a user (system)' })
   async creditUser(@Body() dto: CreditDebitDto) {
     const user = await this.userService.findOrCreateMember(
@@ -126,8 +130,8 @@ export class WalletController {
   }
 
   @Post('debit')
-  @UseGuards(BotApiGuard)
-  @BotScopes(BotScope.ManageWallet)
+  @UseGuards(PermissionGuard)
+  @RequirePermissions(Permission.WalletManage)
   @ApiOperation({ summary: 'Debit coins from a user (system)' })
   async debitUser(@Body() dto: CreditDebitDto) {
     const user = await this.userService.findOrCreateMember(
@@ -146,8 +150,8 @@ export class WalletController {
   }
 
   @Post('transfer')
-  @UseGuards(BotApiGuard)
-  @BotScopes(BotScope.ManageWallet)
+  @UseGuards(PermissionGuard)
+  @RequirePermissions(Permission.WalletManage)
   @ApiOperation({ summary: 'Transfer coins between users (system)' })
   async transferBetweenUsers(@Body() dto: TransferDto) {
     const fromUser = await this.userService.findOrCreate(

@@ -7,7 +7,6 @@ import {
 export const JwtUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();
-    request.user.id = Number(request.user.id);
     return request.user;
   },
 );

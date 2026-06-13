@@ -4,8 +4,8 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
 import { EnvironmentVariables } from '#config/env';
-
 import type { JwtPayload } from './auth.type';
+import { getAuthCookieToken } from './auth-cookie';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -15,6 +15,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey: config.get('JWT_SECRET'),
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
+        (request) => getAuthCookieToken(request, config),
       ]),
     });
   }
@@ -22,7 +23,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     return {
       user_id: payload.user_id,
-      guild_id: payload.guild_id,
       username: payload.username,
     };
   }

@@ -25,13 +25,21 @@ export class BotsManagerService {
     @Arguments() args: string[],
   ) {
     if (message.author.bot) return;
+    if (!message.guildId) {
+      await message.reply('This command can only be used in a Discord server.');
+      return;
+    }
+
     const author = await message.author.fetch();
     if (!this.inWhitelist(author.id)) return;
 
-    const name = args.join(' ');
-    if (!name) {
+    const [botUserIdRaw, ...nameParts] = args;
+    const name = nameParts.join(' ');
+    const botUserId = parseDiscordId(botUserIdRaw);
+
+    if (!botUserId || !name) {
       await message.reply(
-        'Please provide a name for the bot. Usage: `!createbot <name>`',
+        'Please provide a Discord bot user id and name. Usage: `!createbot <bot_user_id> <name>`',
       );
       return;
     }
@@ -45,7 +53,9 @@ export class BotsManagerService {
     const { access_token } = await this.botsService.createBot(
       name,
       BigInt(author.id),
+      botUserId,
       [],
+      BigInt(message.guildId),
     );
     await message.author.send(
       `Bot created successfully! Here is the access token (store it securely, it won't be shown again):\n||\`${access_token}\`||`,
@@ -88,4 +98,9 @@ export class BotsManagerService {
     const whitelist = this.config.get<string[]>('API_ACCESS_WHITELIST', []);
     return whitelist.includes(userId);
   }
+}
+
+function parseDiscordId(value: string | undefined): bigint | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  return BigInt(value);
 }
