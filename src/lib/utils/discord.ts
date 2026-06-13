@@ -7,6 +7,17 @@ export function isDiscordId(value: string): boolean {
   return /^\d{17,21}$/.test(value);
 }
 
+/** Builds a Discord CDN avatar URL from a user ID and avatar hash. Falls back to default avatar. */
+export function getAvatarUrl(
+  userId: string,
+  avatarHash: string | null | undefined,
+): string {
+  if (!avatarHash) return getDefaultAvatar(userId);
+
+  const ext = avatarHash.startsWith('a_') ? 'gif' : 'png';
+  return `${DISCORD_CDN}/avatars/${userId}/${avatarHash}.${ext}`;
+}
+
 /** Builds the default Discord avatar URL for a user ID. */
 export function getDefaultAvatar(userId: string) {
   const id = (BigInt(userId) >> 2n) % 6n;
