@@ -7,6 +7,23 @@ import { AuthController } from './auth.controller';
 import type { AuthService } from './auth.service';
 
 describe('AuthController', () => {
+  it('exchanges Discord code through existing auth token handler', async () => {
+    const authService = {
+      exchangeCodeForToken: mock(async () => ({
+        access_token: 'discord-token',
+      })),
+    } as unknown as AuthService;
+    const configService = {} as ConfigService<EnvironmentVariables>;
+    const controller = new AuthController(authService, configService);
+
+    await expect(controller.token({ code: 'discord-code' })).resolves.toEqual({
+      access_token: 'discord-token',
+    });
+    expect(authService.exchangeCodeForToken).toHaveBeenCalledWith(
+      'discord-code',
+    );
+  });
+
   it('sets auth cookie and redirects successful Discord login to BASE_URL without token query', async () => {
     const authService = {
       logIn: mock(async () => ({ access_token: 'jwt-token' })),

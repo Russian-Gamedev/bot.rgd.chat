@@ -116,6 +116,36 @@ describe('AuthService', () => {
       globalThis.fetch = previousFetch;
     }
   });
+
+  it('exchanges Discord code with configured redirect uri', async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () =>
+        new Response(JSON.stringify({ access_token: 'discord-token' }), {
+          status: 200,
+        }),
+    ) as unknown as typeof fetch;
+
+    try {
+      await expect(
+        service.exchangeCodeForToken('discord-code'),
+      ).resolves.toEqual({ access_token: 'discord-token' });
+
+      const fetchMock = globalThis.fetch as unknown as ReturnType<typeof mock>;
+      const request = fetchMock.mock.calls[0][1] as RequestInit;
+      const body = request.body as URLSearchParams;
+
+      expect(body.get('client_id')).toBe('discord-client-id');
+      expect(body.get('client_secret')).toBe('discord-client-secret');
+      expect(body.get('grant_type')).toBe('authorization_code');
+      expect(body.get('code')).toBe('discord-code');
+      expect(body.get('redirect_uri')).toBe(
+        'https://bot.rgd.chat/auth/discord/callback',
+      );
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
 });
 
 function createProfile(
