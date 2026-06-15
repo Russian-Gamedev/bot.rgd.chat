@@ -1,24 +1,25 @@
 import { raw } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable } from '@nestjs/common';
-import { Client } from 'discord.js';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
-import { getDefaultAvatar, getDisplayAvatar, noop } from '#lib/utils';
 import { DiscordID } from '#root/lib/types';
 
+import { DiscordProfileSyncService } from './discord-profile-sync.service';
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import { UserProfileEntity } from './entities/user-profile.entity';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     @InjectRepository(UserProfileEntity)
     private readonly userRepository: EntityRepository<UserProfileEntity>,
     @InjectRepository(MemberProfileEntity)
     private readonly memberProfileRepository: EntityRepository<MemberProfileEntity>,
     private readonly em: EntityManager,
-    private readonly client: Client,
+    private readonly discordProfileSync: DiscordProfileSyncService,
   ) {}
 
   async findOrCreateMember(
@@ -28,28 +29,19 @@ export class UserService {
     guildId = BigInt(guildId);
     userId = BigInt(userId);
 
-    await this.findOrCreateProfile(userId);
+    const { member, created } =
+      await this.discordProfileSync.ensureMemberProfile(guildId, userId);
 
-    let guildUser = await this.memberProfileRepository.findOne({
-      user_id: userId,
-      guild_id: guildId,
-    });
-
-    if (!guildUser) {
-      guildUser = new MemberProfileEntity();
-      guildUser.user_id = userId;
-      guildUser.guild_id = guildId;
-      guildUser.firstJoinedAt = new Date();
-      await this.save(guildUser);
-      await this.syncDiscordProfile(guildUser).catch(noop);
+    if (created) {
+      await this.syncGuildMemberWithWarning(guildId, userId);
     } else {
       const profile = await this.getProfile(userId);
       if (!profile?.avatar_url || isDefaultAvatar(profile.avatar_url)) {
-        await this.syncDiscordProfile(guildUser).catch(noop);
+        await this.syncGuildMemberWithWarning(guildId, userId);
       }
     }
 
-    return guildUser;
+    return member;
   }
 
   async findOrCreate(
@@ -60,25 +52,7 @@ export class UserService {
   }
 
   async findOrCreateProfile(userId: DiscordID): Promise<UserProfileEntity> {
-    const normalizedUserId = BigInt(userId);
-    let user = await this.userRepository.findOne({ user_id: normalizedUserId });
-    if (user) return user;
-
-    user = new UserProfileEntity();
-    user.user_id = normalizedUserId;
-    user.username = '';
-    user.nickname = null;
-    user.avatar_url = getDefaultAvatar(normalizedUserId.toString());
-    user.banner = null;
-    user.banner_alt = null;
-    user.banner_color = '#fff';
-    user.firstJoinedAt = new Date();
-    user.about = null;
-    user.birthDate = null;
-    user.lastActiveAt = new Date();
-
-    await this.save(user);
-    return user;
+    return this.discordProfileSync.ensureUserProfile(userId);
   }
 
   async getProfile(userId: DiscordID): Promise<UserProfileEntity | null> {
@@ -104,75 +78,11 @@ export class UserService {
     });
   }
 
-  async syncDiscordProfile(guildUser: MemberProfileEntity): Promise<void> {
-    const guild = await this.client.guilds.fetch(guildUser.guild_id.toString());
-    if (!guild) return;
-
-    const userId = guildUser.user_id.toString();
-    const discordUser = await guild.members
-      .fetch({ user: userId, force: true })
-      .catch(() => guild.members.cache.get(userId));
-    if (!discordUser) return;
-
-    const user = await this.findOrCreateProfile(guildUser.user_id);
-    user.username = discordUser.user.username;
-    user.nickname = discordUser.nickname;
-    user.avatar_url = getDisplayAvatar(discordUser);
-    user.banner = discordUser.bannerURL() ?? null;
-    user.banner_color = discordUser.displayHexColor ?? '#fff';
-    user.firstJoinedAt =
-      user.firstJoinedAt && discordUser.joinedAt
-        ? minDate(user.firstJoinedAt, discordUser.joinedAt)
-        : (user.firstJoinedAt ?? discordUser.joinedAt ?? new Date());
-
-    guildUser.firstJoinedAt ??= discordUser.joinedAt ?? new Date();
-
-    this.em.persist(user);
-    this.em.persist(guildUser);
-    await this.em.flush();
-  }
-
-  async refreshUsersData(batchSize = 50): Promise<{
-    refreshed: number;
-    failed: number;
-  }> {
-    let lastId = 0n;
-    let refreshed = 0;
-    let failed = 0;
-
-    while (true) {
-      const users = await this.memberProfileRepository.find(
-        {
-          id: { $gt: lastId },
-          isLeftGuild: false,
-        },
-        {
-          limit: batchSize,
-          orderBy: { id: 'asc' },
-        },
-      );
-
-      if (users.length === 0) break;
-
-      for (const user of users) {
-        lastId = user.id;
-
-        try {
-          await this.syncDiscordProfile(user);
-          refreshed++;
-        } catch {
-          failed++;
-        }
-      }
-    }
-
-    return { refreshed, failed };
-  }
-
   async addExperience(
     user: MemberProfileEntity,
     amount: number,
   ): Promise<void> {
+    assertPositiveInteger(amount, 'experience');
     await this.findOrCreateProfile(user.user_id);
     await this.userRepository.nativeUpdate(
       { user_id: BigInt(user.user_id) },
@@ -184,6 +94,7 @@ export class UserService {
     user: MemberProfileEntity,
     amount: number,
   ): Promise<void> {
+    assertPositiveInteger(amount, 'reputation');
     await this.findOrCreateProfile(user.user_id);
     await this.userRepository.nativeUpdate(
       { user_id: BigInt(user.user_id) },
@@ -246,12 +157,33 @@ export class UserService {
       .andWhere({ birthDate: { $ne: null } })
       .getResult();
   }
-}
 
-function minDate(a: Date, b: Date) {
-  return a.getTime() <= b.getTime() ? a : b;
+  private async syncGuildMemberWithWarning(
+    guildId: DiscordID,
+    userId: DiscordID,
+  ): Promise<void> {
+    try {
+      await this.discordProfileSync.syncGuildMemberById(guildId, userId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to sync Discord guild member ${guildId.toString()}/${userId.toString()}: ${formatError(error)}`,
+      );
+    }
+  }
 }
 
 function isDefaultAvatar(avatar: string): boolean {
   return avatar.includes('/embed/avatars/');
+}
+
+function assertPositiveInteger(amount: number, field: string): void {
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new BadRequestException(`Invalid ${field} amount.`);
+  }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error
+    ? (error.stack ?? error.message)
+    : String(error);
 }

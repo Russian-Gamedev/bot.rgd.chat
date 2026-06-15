@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Client, Guild, GuildMember } from 'discord.js';
+import { BadRequestException } from '@nestjs/common';
 
+import type { DiscordProfileSyncService } from './discord-profile-sync.service';
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import { UserProfileEntity } from './entities/user-profile.entity';
 import { UserService } from './users.service';
@@ -11,12 +12,13 @@ describe('UserService', () => {
   let userRepository: EntityRepository<UserProfileEntity>;
   let memberProfileRepository: EntityRepository<MemberProfileEntity>;
   let em: EntityManager;
-  let client: Client;
+  let discordProfileSync: DiscordProfileSyncService;
 
   beforeEach(() => {
     userRepository = {
       find: mock(() => Promise.resolve([])),
       findOne: mock(() => Promise.resolve(null)),
+      nativeUpdate: mock(() => Promise.resolve(1)),
     } as unknown as EntityRepository<UserProfileEntity>;
     memberProfileRepository = {
       find: mock(() => Promise.resolve([])),
@@ -26,112 +28,83 @@ describe('UserService', () => {
       persist: mock(() => em),
       flush: mock(() => Promise.resolve()),
     } as unknown as EntityManager;
-    client = {
-      guilds: {
-        fetch: mock(() => Promise.resolve(null)),
-      },
-    } as unknown as Client;
+    discordProfileSync = {
+      ensureUserProfile: mock(async (userId: bigint) => {
+        const user = new UserProfileEntity();
+        user.user_id = BigInt(userId);
+        return user;
+      }),
+      ensureMemberProfile: mock(async (guildId: bigint, userId: bigint) => {
+        const member = new MemberProfileEntity();
+        member.guild_id = BigInt(guildId);
+        member.user_id = BigInt(userId);
+        return { member, created: true };
+      }),
+      syncGuildMemberById: mock(() => Promise.resolve(null)),
+    } as unknown as DiscordProfileSyncService;
 
     service = new UserService(
       userRepository,
       memberProfileRepository,
       em,
-      client,
+      discordProfileSync,
     );
   });
 
-  it('creates both global user and guild membership', async () => {
+  it('creates both global user and guild membership via atomic ensure helpers', async () => {
     const user = await service.findOrCreateMember(456n, 123n);
 
     expect(user.user_id).toBe(123n);
     expect(user.guild_id).toBe(456n);
-    expect(em.persist).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: 123n }) as UserProfileEntity,
+    expect(discordProfileSync.ensureMemberProfile).toHaveBeenCalledWith(
+      456n,
+      123n,
     );
-    expect(em.persist).toHaveBeenCalledWith(
-      expect.objectContaining({
-        guild_id: 456n,
-        user_id: 123n,
-      }) as MemberProfileEntity,
+    expect(discordProfileSync.syncGuildMemberById).toHaveBeenCalledWith(
+      456n,
+      123n,
     );
   });
 
-  it('updates avatar URL and nickname from Discord member data', async () => {
+  it('syncs existing member when the global avatar is still the default avatar', async () => {
+    const existingMember = new MemberProfileEntity();
+    existingMember.user_id = 123n;
+    existingMember.guild_id = 456n;
+    (
+      discordProfileSync.ensureMemberProfile as ReturnType<typeof mock>
+    ).mockResolvedValueOnce({ member: existingMember, created: false });
     const profile = new UserProfileEntity();
     profile.user_id = 123n;
-    profile.firstJoinedAt = new Date('2026-06-13T00:00:00.000Z');
-    profile.avatar_url = 'old-avatar.png';
-
-    const guildUser = new MemberProfileEntity();
-    guildUser.user_id = 123n;
-    guildUser.guild_id = 456n;
-
+    profile.avatar_url = 'https://cdn.discordapp.com/embed/avatars/1.png';
     (userRepository.findOne as ReturnType<typeof mock>).mockResolvedValue(
       profile,
     );
 
-    const member = {
-      user: { username: 'discord-user' },
-      nickname: 'server-nick',
-      displayAvatarURL: mock(() => 'https://cdn.discordapp.com/avatar.webp'),
-      bannerURL: mock(() => null),
-      displayHexColor: '#abc',
-      joinedAt: new Date('2026-06-12T00:00:00.000Z'),
-    } as unknown as GuildMember;
-    const guild = {
-      members: {
-        fetch: mock(() => Promise.resolve(member)),
-        cache: {
-          get: mock(() => undefined),
-        },
-      },
-    } as unknown as Guild;
-    (client.guilds.fetch as ReturnType<typeof mock>).mockResolvedValueOnce(
-      guild,
+    await service.findOrCreateMember(456n, 123n);
+
+    expect(discordProfileSync.syncGuildMemberById).toHaveBeenCalledWith(
+      456n,
+      123n,
     );
-
-    await service.syncDiscordProfile(guildUser);
-
-    expect(guild.members.fetch).toHaveBeenCalledWith({
-      user: '123',
-      force: true,
-    });
-    expect(profile.username).toBe('discord-user');
-    expect(profile.nickname).toBe('server-nick');
-    expect(profile.avatar_url).toBe('https://cdn.discordapp.com/avatar.webp');
-    expect(profile.firstJoinedAt).toEqual(new Date('2026-06-12T00:00:00.000Z'));
-    expect(em.persist).toHaveBeenCalledWith(profile);
-    expect(em.persist).toHaveBeenCalledWith(guildUser);
-    expect(em.flush).toHaveBeenCalled();
   });
 
-  it('refreshes active guild users in batches and counts failed updates', async () => {
-    const first = new MemberProfileEntity();
-    first.id = 1n;
-    const second = new MemberProfileEntity();
-    second.id = 2n;
-    const third = new MemberProfileEntity();
-    third.id = 3n;
+  it('does not hide invalid experience amounts', async () => {
+    const member = new MemberProfileEntity();
+    member.user_id = 123n;
 
-    (memberProfileRepository.find as ReturnType<typeof mock>)
-      .mockResolvedValueOnce([first, second])
-      .mockResolvedValueOnce([third])
-      .mockResolvedValueOnce([]);
-    service.syncDiscordProfile = mock(async (user: MemberProfileEntity) => {
-      if (user === second) throw new Error('Discord fetch failed');
-    }) as unknown as UserService['syncDiscordProfile'];
+    await expect(service.addExperience(member, Number.NaN)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(userRepository.nativeUpdate).not.toHaveBeenCalled();
+  });
 
-    await expect(service.refreshUsersData(2)).resolves.toEqual({
-      refreshed: 2,
-      failed: 1,
-    });
-    expect(memberProfileRepository.find).toHaveBeenCalledWith(
-      { id: { $gt: 0n }, isLeftGuild: false },
-      { limit: 2, orderBy: { id: 'asc' } },
+  it('does not hide invalid reputation amounts', async () => {
+    const member = new MemberProfileEntity();
+    member.user_id = 123n;
+
+    await expect(service.addReputation(member, 1.5)).rejects.toThrow(
+      BadRequestException,
     );
-    expect(memberProfileRepository.find).toHaveBeenCalledWith(
-      { id: { $gt: 2n }, isLeftGuild: false },
-      { limit: 2, orderBy: { id: 'asc' } },
-    );
+    expect(userRepository.nativeUpdate).not.toHaveBeenCalled();
   });
 });
