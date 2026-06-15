@@ -60,22 +60,35 @@ export class AuthService {
   }
 
   async exchangeCodeForToken(code: string) {
+    return this.exchangeDiscordCode(code, { includeRedirectUri: true });
+  }
+
+  private async exchangeDiscordCode(
+    code: string,
+    options: { includeRedirectUri: boolean },
+  ) {
+    const params = new URLSearchParams({
+      client_id: this.configService.getOrThrow<string>('DISCORD_CLIENT_ID'),
+      client_secret: this.configService.getOrThrow<string>(
+        'DISCORD_CLIENT_SECRET',
+      ),
+      grant_type: 'authorization_code',
+      code,
+    });
+
+    if (options.includeRedirectUri) {
+      params.set(
+        'redirect_uri',
+        this.configService.getOrThrow<string>('DISCORD_REDIRECT_URI'),
+      );
+    }
+
     const response = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        client_id: this.configService.getOrThrow<string>('DISCORD_CLIENT_ID'),
-        client_secret: this.configService.getOrThrow<string>(
-          'DISCORD_CLIENT_SECRET',
-        ),
-        redirect_uri: this.configService.getOrThrow<string>(
-          'DISCORD_REDIRECT_URI',
-        ),
-        grant_type: 'authorization_code',
-        code,
-      }),
+      body: params,
     });
 
     const body = (await response.json()) as DiscordTokenResponse;
