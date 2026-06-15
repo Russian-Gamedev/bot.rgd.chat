@@ -136,7 +136,7 @@ export class UserService {
       .createQueryBuilder('u')
       .where(
         raw(
-          'EXISTS (SELECT 1 FROM member_profiles m WHERE m.user_id = u.user_id AND m.guild_id = ? AND m.is_left_guild = false)',
+          'EXISTS (SELECT 1 FROM guild_users m WHERE m.user_id = u.user_id AND m.guild_id = ? AND m.is_left_guild = false)',
           [BigInt(guild_id)],
         ),
       )
@@ -150,7 +150,7 @@ export class UserService {
       .createQueryBuilder('u')
       .where(
         raw(
-          'EXISTS (SELECT 1 FROM member_profiles m WHERE m.user_id = u.user_id AND m.guild_id = ? AND m.is_left_guild = false)',
+          'EXISTS (SELECT 1 FROM guild_users m WHERE m.user_id = u.user_id AND m.guild_id = ? AND m.is_left_guild = false)',
           [BigInt(guild_id)],
         ),
       )

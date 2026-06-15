@@ -18,6 +18,7 @@ describe('UserService', () => {
     userRepository = {
       find: mock(() => Promise.resolve([])),
       findOne: mock(() => Promise.resolve(null)),
+      createQueryBuilder: mock(() => createQueryBuilderMock()),
       nativeUpdate: mock(() => Promise.resolve(1)),
     } as unknown as EntityRepository<UserProfileEntity>;
     memberProfileRepository = {
@@ -107,4 +108,50 @@ describe('UserService', () => {
     );
     expect(userRepository.nativeUpdate).not.toHaveBeenCalled();
   });
+
+  it('filters birthday users by the current guild members table', async () => {
+    const qb = createQueryBuilderMock<UserProfileEntity>();
+    (
+      userRepository.createQueryBuilder as ReturnType<typeof mock>
+    ).mockReturnValueOnce(qb);
+
+    await service.getBirthdayUsers(456n, 6, 15);
+
+    expect(userRepository.createQueryBuilder).toHaveBeenCalledWith('u');
+    assertUsesGuildUsersTable(qb.where.mock.calls[0][0]);
+  });
+
+  it('filters users with birthdays by the current guild members table', async () => {
+    const qb = createQueryBuilderMock<UserProfileEntity>();
+    (
+      userRepository.createQueryBuilder as ReturnType<typeof mock>
+    ).mockReturnValueOnce(qb);
+
+    await service.getUsersWithBirthdaySet(456n);
+
+    expect(userRepository.createQueryBuilder).toHaveBeenCalledWith('u');
+    assertUsesGuildUsersTable(qb.where.mock.calls[0][0]);
+  });
 });
+
+function createQueryBuilderMock<T>(result: T[] = []) {
+  let qb: {
+    where: ReturnType<typeof mock>;
+    andWhere: ReturnType<typeof mock>;
+    getResult: ReturnType<typeof mock>;
+  };
+  qb = {
+    where: mock(() => qb),
+    andWhere: mock(() => qb),
+    getResult: mock(() => Promise.resolve(result)),
+  };
+  return qb;
+}
+
+function assertUsesGuildUsersTable(condition: unknown): void {
+  const { sql, params } = condition as { sql: string; params: unknown[] };
+
+  expect(sql).toContain('FROM guild_users m');
+  expect(sql).not.toContain('member_profiles');
+  expect(params).toEqual([456n]);
+}
