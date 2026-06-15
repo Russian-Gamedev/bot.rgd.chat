@@ -21,6 +21,18 @@ export class MemberProfileEntity extends BaseEntity {
   @Property({ type: 'bigint' })
   guild_id: bigint;
 
+  @Property({ type: 'text', nullable: true })
+  nickname: string | null = null;
+
+  @Property({ fieldName: 'avatar_url', type: 'text', nullable: true })
+  avatar_url: string | null = null;
+
+  @Property({ type: 'text', nullable: true })
+  banner: string | null = null;
+
+  @Property({ type: 'text', nullable: true })
+  display_color: string | null = null;
+
   @Property({
     fieldName: 'first_joined_at',
     type: 'timestamptz',
