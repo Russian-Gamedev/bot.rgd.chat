@@ -15,6 +15,7 @@ import { DiscordAuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { AuthProfile } from './auth.type';
 import { getAuthCookieName, getAuthCookieOptions } from './auth-cookie';
+import { DiscordTokenDto } from './dto/discord-token.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -24,7 +25,7 @@ export class AuthController {
   ) {}
 
   @Post('/discord/token')
-  async token(@Body() body: { code: string }) {
+  async token(@Body() body: DiscordTokenDto) {
     const { code } = body;
     return this.authService.exchangeCodeForToken(code);
   }
