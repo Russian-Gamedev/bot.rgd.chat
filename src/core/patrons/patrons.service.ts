@@ -1,7 +1,9 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
+import Redis from 'ioredis';
 
+import { DiscordProfileSyncService } from '#core/users/discord-profile-sync.service';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { type DiscordID } from '#root/lib/types';
 import { PatronEntity } from './entities/patron.entity';
@@ -17,6 +19,9 @@ export interface PatronDto {
   value: number;
 }
 
+const PATRONS_CACHE_KEY = 'patrons:list:v1';
+const PATRONS_CACHE_TTL_SECONDS = 60 * 60;
+
 @Injectable()
 export class PatronsService {
   constructor(
@@ -25,13 +30,24 @@ export class PatronsService {
     @InjectRepository(UserProfileEntity)
     private readonly usersRepository: EntityRepository<UserProfileEntity>,
     private readonly em: EntityManager,
+    private readonly redis: Redis,
+    private readonly discordProfileSync: DiscordProfileSyncService,
   ) {}
 
   async getPatrons(): Promise<PatronDto[]> {
+    const cached = await this.redis.get(PATRONS_CACHE_KEY);
+    if (cached) {
+      const parsed = await this.parseCachedPatrons(cached);
+      if (parsed) return parsed;
+    }
+
     const patrons = await this.patronsRepository.findAll({
       orderBy: { value: 'DESC' },
     });
     const userIds = patrons.map((patron) => BigInt(patron.user_id));
+
+    await this.discordProfileSync.syncUsersById(userIds);
+
     const users = await this.usersRepository.find({
       user_id: { $in: userIds },
     });
@@ -39,7 +55,7 @@ export class PatronsService {
       users.map((user) => [user.user_id.toString(), user]),
     );
 
-    return patrons.map((patron) => {
+    const response = patrons.map((patron) => {
       const id = patron.user_id.toString();
       const user = usersById.get(id);
 
@@ -53,13 +69,22 @@ export class PatronsService {
         value: patron.value,
       };
     });
+
+    await this.redis.set(
+      PATRONS_CACHE_KEY,
+      JSON.stringify(response),
+      'EX',
+      PATRONS_CACHE_TTL_SECONDS,
+    );
+
+    return response;
   }
 
   async addPatronValue(
     userId: DiscordID,
     value: number,
   ): Promise<PatronEntity> {
-    return this.em.transactional(async (em) => {
+    const patron = await this.em.transactional(async (em) => {
       const user_id = BigInt(userId);
       let patron = await em.findOne(PatronEntity, { user_id });
 
@@ -81,5 +106,24 @@ export class PatronsService {
 
       return patron;
     });
+
+    await this.invalidatePatronsCache();
+
+    return patron;
+  }
+
+  async invalidatePatronsCache(): Promise<void> {
+    await this.redis.del(PATRONS_CACHE_KEY);
+  }
+
+  private async parseCachedPatrons(
+    cached: string,
+  ): Promise<PatronDto[] | null> {
+    try {
+      return JSON.parse(cached) as PatronDto[];
+    } catch {
+      await this.invalidatePatronsCache();
+      return null;
+    }
   }
 }

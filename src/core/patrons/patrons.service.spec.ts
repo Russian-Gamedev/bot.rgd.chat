@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
+import type Redis from 'ioredis';
+import type { DiscordProfileSyncService } from '#core/users/discord-profile-sync.service';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { PatronEntity } from './entities/patron.entity';
 import { PatronHistoryEntity } from './entities/patron-history.entity';
@@ -11,6 +13,8 @@ describe('PatronsService', () => {
   let mockPatronsRepo: EntityRepository<PatronEntity>;
   let mockUsersRepo: EntityRepository<UserProfileEntity>;
   let innerEm: EntityManager;
+  let redis: Redis;
+  let discordProfileSync: DiscordProfileSyncService;
 
   beforeEach(() => {
     mockPatronsRepo = {
@@ -32,7 +36,76 @@ describe('PatronsService', () => {
       ),
     } as unknown as EntityManager;
 
-    service = new PatronsService(mockPatronsRepo, mockUsersRepo, mockEm);
+    redis = {
+      get: mock(() => Promise.resolve(null)),
+      set: mock(() => Promise.resolve('OK')),
+      del: mock(() => Promise.resolve(1)),
+    } as unknown as Redis;
+    discordProfileSync = {
+      syncUsersById: mock(() => Promise.resolve()),
+    } as unknown as DiscordProfileSyncService;
+
+    service = new PatronsService(
+      mockPatronsRepo,
+      mockUsersRepo,
+      mockEm,
+      redis,
+      discordProfileSync,
+    );
+  });
+
+  it('returns patrons from Redis cache without touching database or Discord', async () => {
+    const cached = [
+      {
+        user: {
+          id: '111',
+          username: 'cached',
+          avatar_url: 'cached-avatar.png',
+          banner: 'cached-banner.png',
+        },
+        value: 1500,
+      },
+    ];
+    (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce(
+      JSON.stringify(cached),
+    );
+
+    await expect(service.getPatrons()).resolves.toEqual(cached);
+    expect(mockPatronsRepo.findAll).not.toHaveBeenCalled();
+    expect(discordProfileSync.syncUsersById).not.toHaveBeenCalled();
+  });
+
+  it('deletes corrupt Redis cache and rebuilds patrons response', async () => {
+    (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce('{broken');
+    const patron = new PatronEntity();
+    patron.user_id = 111n;
+    patron.value = 1500;
+    (mockPatronsRepo.findAll as ReturnType<typeof mock>).mockResolvedValueOnce([
+      patron,
+    ]);
+    const user = new UserProfileEntity();
+    user.user_id = 111n;
+    user.username = 'fresh';
+    user.avatar_url = 'fresh-avatar.png';
+    user.banner = null;
+    user.banner_alt = null;
+    user.banner_color = '#111';
+    (mockUsersRepo.find as ReturnType<typeof mock>).mockResolvedValueOnce([
+      user,
+    ]);
+
+    await expect(service.getPatrons()).resolves.toEqual([
+      {
+        user: {
+          id: '111',
+          username: 'fresh',
+          avatar_url: 'fresh-avatar.png',
+          banner: '#111',
+        },
+        value: 1500,
+      },
+    ]);
+    expect(redis.del).toHaveBeenCalledWith('patrons:list:v1');
   });
 
   it('returns patrons sorted by value with user data', async () => {
@@ -88,6 +161,32 @@ describe('PatronsService', () => {
     expect(mockPatronsRepo.findAll).toHaveBeenCalledWith({
       orderBy: { value: 'DESC' },
     });
+    expect(discordProfileSync.syncUsersById).toHaveBeenCalledWith([111n, 222n]);
+    expect(redis.set).toHaveBeenCalledWith(
+      'patrons:list:v1',
+      JSON.stringify([
+        {
+          user: {
+            id: '111',
+            username: 'first',
+            avatar_url: 'first-avatar.png',
+            banner: 'first banner',
+          },
+          value: 1500,
+        },
+        {
+          user: {
+            id: '222',
+            username: 'second',
+            avatar_url: 'second-avatar.png',
+            banner: 'second-banner.png',
+          },
+          value: 500,
+        },
+      ]),
+      'EX',
+      3600,
+    );
   });
 
   it('creates patron and history on first value add', async () => {
@@ -102,6 +201,7 @@ describe('PatronsService', () => {
     const persisted = (innerEm.persist as ReturnType<typeof mock>).mock.calls;
     expect(persisted[0]?.[0]).toBeInstanceOf(PatronEntity);
     expect(persisted[1]?.[0]).toBeInstanceOf(PatronHistoryEntity);
+    expect(redis.del).toHaveBeenCalledWith('patrons:list:v1');
   });
 
   it('increments existing patron and creates history on repeated value add', async () => {
