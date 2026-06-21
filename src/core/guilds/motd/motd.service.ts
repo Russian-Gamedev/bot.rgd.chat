@@ -14,6 +14,7 @@ export class MotdService {
   private readonly logger = new Logger(MotdService.name);
   private readonly INTERVAL = 60 * 1000; // 1 minute
   private readonly MOTD_CACHE_KEY = 'motd:queue';
+  private currentMotd: string | null = null;
 
   constructor(
     @InjectRepository(MotdEntity)
@@ -91,6 +92,10 @@ export class MotdService {
     return this.motdRepository.findAll();
   }
 
+  getCurrentMotd() {
+    return this.currentMotd;
+  }
+
   async setBotMotd() {
     const motd = await this.getMotd();
     if (!motd) {
@@ -99,6 +104,7 @@ export class MotdService {
     }
     try {
       this.client.user?.setActivity(motd, { type: ActivityType.Playing });
+      this.currentMotd = motd;
     } catch (error) {
       this.logger.error('Failed to set bot status:', error);
     }
