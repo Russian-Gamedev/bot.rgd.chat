@@ -4,7 +4,7 @@ import { Module } from '@nestjs/common';
 import { PermissionsModule } from '#core/permissions/permissions.module';
 import { UserModule } from '#core/users/users.module';
 import { WalletModule } from '#core/wallet/wallet.module';
-
+import { GuildSettingsModule } from '../settings/guild-settings.module';
 import { MotdCommands } from './commands/motd.command';
 import { MotdEntity } from './entities/motd.entity';
 import { MotdController } from './motd.controller';
@@ -16,6 +16,7 @@ import { MotdService } from './motd.service';
     PermissionsModule,
     UserModule,
     WalletModule,
+    GuildSettingsModule,
   ],
   controllers: [MotdController],
   providers: [MotdService, MotdCommands],

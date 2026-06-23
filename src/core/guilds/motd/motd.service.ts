@@ -6,7 +6,7 @@ import Redis from 'ioredis';
 import { On } from 'necord';
 
 import { formatTime, pluralize } from '#lib/utils';
-
+import { GuildSettingsService } from '../settings/guild-settings.service';
 import { MotdEntity } from './entities/motd.entity';
 
 @Injectable()
@@ -22,6 +22,7 @@ export class MotdService {
     private readonly entityManager: EntityManager,
     private readonly client: Client,
     @Inject(Redis) private readonly redis: Redis,
+    private readonly guildSettingsService: GuildSettingsService,
   ) {}
 
   @On('clientReady')
@@ -29,6 +30,9 @@ export class MotdService {
     /// fires immediately on startup to set the bot's MOTD status, then every minute via the Interval
     await this.setBotMotd();
     setInterval(() => this.setBotMotd(), this.INTERVAL);
+
+    const last = await this.runtimeMotdFunctions?.at(-1)?.();
+    console.log(last);
   }
 
   private async loadMotd() {
@@ -173,6 +177,57 @@ export class MotdService {
         .toString()
         .padStart(2, '0');
       return `▶︎ •${voice}• 00:${seconds}`;
+    },
+    async () => {
+      const emojis = [
+        '😎',
+        '🤬',
+        '🤡',
+        '💩',
+        '☠️',
+        '😼',
+        '🧠',
+        '🦊',
+        '🙈',
+        '🌈',
+        '💨',
+        '🏆',
+        '🎰',
+        '🎮',
+        '💸',
+        '💰',
+        '🔫',
+        '❤️',
+        '💯',
+        '⚠️',
+      ];
+
+      const guilds = [...this.client.guilds.cache.values()];
+
+      const activeRoles = await Promise.all(
+        guilds.map((guild) =>
+          this.guildSettingsService.getActiveRole(guild.id),
+        ),
+      );
+
+      const eligibleMembers = guilds.flatMap((guild) =>
+        guild.members.cache
+          .filter((member) =>
+            member.roles.cache.some((role) => activeRoles.includes(role)),
+          )
+          .map((member) => member.user.displayName),
+      );
+
+      if (eligibleMembers.length === 0) {
+        return '🤷 Nobody found';
+      }
+
+      const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+      const randomMember =
+        eligibleMembers[Math.floor(Math.random() * eligibleMembers.length)];
+
+      return `${randomEmoji} ${randomMember}`;
     },
   ];
 }
