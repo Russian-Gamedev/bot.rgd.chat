@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityRepository } from '@mikro-orm/postgresql';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-
+import { EnvironmentVariables } from '#config/env';
 import { BotEntity } from '#core/bots/entities/bot.entity';
 import { PermissionGrantEntity } from './entities/permission-grant.entity';
 import { PermissionService } from './permissions.service';
@@ -36,10 +37,18 @@ describe('PermissionService', () => {
       verifyAsync: mock(() => Promise.resolve(null)),
     } as unknown as JwtService;
 
+    const configService = {
+      get: mock(
+        (_key: keyof EnvironmentVariables, defaultValue: string[]) =>
+          defaultValue,
+      ),
+    } as unknown as ConfigService<EnvironmentVariables>;
+
     service = new PermissionService(
       grantsRepository,
       botsRepository,
       jwtService,
+      configService,
     );
   });
 
