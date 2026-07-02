@@ -4,7 +4,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ActivityType, Client } from 'discord.js';
 import Redis from 'ioredis';
 import { On } from 'necord';
-
+import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { formatTime, pluralize } from '#lib/utils';
 import { GuildSettingsService } from '../settings/guild-settings.service';
 import { MotdEntity } from './entities/motd.entity';
@@ -14,6 +14,8 @@ export class MotdService {
   private readonly logger = new Logger(MotdService.name);
   private readonly INTERVAL = 60 * 1000; // 1 minute
   private readonly MOTD_CACHE_KEY = 'motd:queue';
+  private readonly LIST_CACHE_KEY = 'motd:list:v1';
+  private readonly LIST_CACHE_TTL_SECONDS = 60 * 60;
   private currentMotd: string | null = null;
 
   constructor(
@@ -85,15 +87,59 @@ export class MotdService {
     motd.content = content;
     await this.entityManager.persist(motd).flush();
     await this.loadMotd();
+    await this.redis.del(this.LIST_CACHE_KEY);
   }
 
   async removeMotd(id: number) {
     await this.entityManager.nativeDelete(MotdEntity, { id });
     await this.loadMotd();
+    await this.redis.del(this.LIST_CACHE_KEY);
   }
 
   async listMotds() {
-    return this.motdRepository.findAll();
+    const cached = await this.redis.get(this.LIST_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    const motds = await this.motdRepository.findAll({
+      orderBy: { id: 'DESC' },
+    });
+    const userIds = motds
+      .filter((m) => m.author_id)
+      .map((m) => BigInt(m.author_id!));
+
+    const users =
+      userIds.length > 0
+        ? await this.entityManager.find(UserProfileEntity, {
+            user_id: { $in: userIds },
+          })
+        : [];
+    const usersById = new Map(users.map((u) => [u.user_id.toString(), u]));
+
+    const response = motds.map((motd) => {
+      const userId = motd.author_id?.toString();
+      const user = userId ? usersById.get(userId) : undefined;
+
+      return {
+        id: motd.id,
+        content: motd.content,
+        user: {
+          username: user?.username ?? 'Unknown',
+          avatar_url: user?.avatar_url ?? '',
+          id: userId ?? '',
+        },
+      };
+    });
+
+    await this.redis.set(
+      this.LIST_CACHE_KEY,
+      JSON.stringify(response),
+      'EX',
+      this.LIST_CACHE_TTL_SECONDS,
+    );
+
+    return response;
   }
 
   getCurrentMotd() {

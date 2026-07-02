@@ -15,7 +15,7 @@ export class MotdController {
 
   @Get('list')
   @UseGuards(ActorAuthGuard)
-  listMotds() {
+  async listMotds() {
     return this.motdService.listMotds();
   }
 }
