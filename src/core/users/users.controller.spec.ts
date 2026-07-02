@@ -2,18 +2,28 @@ import { describe, expect, it, mock } from 'bun:test';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { BotEntity } from '#core/bots/entities/bot.entity';
-import { ActorType } from '#core/permissions/permissions.types';
+import { PermissionService } from '#core/permissions/permissions.service';
+import { ActorType, Permission } from '#core/permissions/permissions.types';
 import { UserProfileEntity } from './entities/user-profile.entity';
 import { UsersController } from './users.controller';
 import type { UserService } from './users.service';
 
 describe('UsersController', () => {
+  function createPermissionService() {
+    return {
+      getActorPermissions: mock(async () => ({ global: [], guilds: {} })),
+    } as unknown as PermissionService;
+  }
+
   it('returns public profile by id without internal fields', async () => {
     const profile = createProfile();
     const userService = {
       getProfile: mock(async () => profile),
     } as unknown as UserService;
-    const controller = new UsersController(userService);
+    const controller = new UsersController(
+      userService,
+      createPermissionService(),
+    );
 
     await expect(controller.getById('123')).resolves.toEqual({
       id: '123',
@@ -37,7 +47,10 @@ describe('UsersController', () => {
     const userService = {
       getProfile: mock(async () => null),
     } as unknown as UserService;
-    const controller = new UsersController(userService);
+    const controller = new UsersController(
+      userService,
+      createPermissionService(),
+    );
 
     await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
   });
@@ -47,15 +60,26 @@ describe('UsersController', () => {
     const userService = {
       getProfile: mock(async () => profile),
     } as unknown as UserService;
-    const controller = new UsersController(userService);
+    const permissionService = {
+      getActorPermissions: mock(async () => ({
+        global: [Permission.WalletReadOwn],
+        guilds: {},
+      })),
+    } as unknown as PermissionService;
+    const controller = new UsersController(userService, permissionService);
 
-    await controller.getMe({
+    const result = await controller.getMe({
       type: ActorType.User,
       id: '123',
       username: 'alice',
     });
 
     expect(userService.getProfile).toHaveBeenCalledWith('123');
+    expect(permissionService.getActorPermissions).toHaveBeenCalled();
+    expect(result.permissions).toEqual({
+      global: [Permission.WalletReadOwn],
+      guilds: {},
+    });
   });
 
   it('returns linked Discord bot profile for bot actor', async () => {
@@ -66,7 +90,13 @@ describe('UsersController', () => {
     const userService = {
       getProfile: mock(async () => profile),
     } as unknown as UserService;
-    const controller = new UsersController(userService);
+    const permissionService = {
+      getActorPermissions: mock(async () => ({
+        global: [Permission.GuildRead],
+        guilds: {},
+      })),
+    } as unknown as PermissionService;
+    const controller = new UsersController(userService, permissionService);
 
     const result = await controller.getMe({
       type: ActorType.Bot,
@@ -77,6 +107,10 @@ describe('UsersController', () => {
     expect(userService.getProfile).toHaveBeenCalledWith(999n);
     expect(result.id).toBe('999');
     expect(result.username).toBe('bot-user');
+    expect(result.permissions).toEqual({
+      global: [Permission.GuildRead],
+      guilds: {},
+    });
   });
 
   it('returns readable 4xx for bot actor without linked Discord profile id', async () => {
@@ -86,7 +120,10 @@ describe('UsersController', () => {
     const userService = {
       getProfile: mock(async () => null),
     } as unknown as UserService;
-    const controller = new UsersController(userService);
+    const controller = new UsersController(
+      userService,
+      createPermissionService(),
+    );
 
     await expect(
       controller.getMe({
