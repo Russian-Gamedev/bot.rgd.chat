@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { RequestContext } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/postgresql';
 import {
   type Client,
   Collection,
@@ -247,7 +249,13 @@ function createService(redis = createRedisMock(), guildSetup = createGuild()) {
     },
   } as unknown as Client;
 
+  const mockedEm = Object.assign(Object.create(EntityManager.prototype), {
+    fork: () => mockedEm,
+    name: 'default',
+  });
+
   const service = new ActivityWatchService(
+    mockedEm,
     discord,
     redis,
     userService,

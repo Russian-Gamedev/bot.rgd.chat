@@ -1,3 +1,5 @@
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
 import { AuditLogEvent, Client, Guild, SnowflakeUtil } from 'discord.js';
 import { Context, type ContextOf, On } from 'necord';
@@ -15,6 +17,7 @@ export class GuildWatcherService {
   private readonly logger = new Logger(GuildWatcherService.name);
 
   constructor(
+    private readonly em: EntityManager,
     readonly _discord: Client,
     private readonly guildSettingsService: GuildSettingsService,
     private readonly guildEventsService: GuildEventService,
@@ -23,6 +26,7 @@ export class GuildWatcherService {
     private readonly guildInviteService: GuildInviteService,
   ) {}
 
+  @EnsureRequestContext()
   @On('guildMemberAdd')
   async onMemberJoin(@Context() [member]: ContextOf<'guildMemberAdd'>) {
     this.logger.log(
@@ -56,8 +60,6 @@ export class GuildWatcherService {
       await this.guildInviteService.trackJoin(user, invite.id);
     }
 
-    /// Send welcome message
-
     const channel = await this.guildSettingsService.getEventMessageChannel(
       guild.id,
     );
@@ -84,6 +86,7 @@ export class GuildWatcherService {
     });
   }
 
+  @EnsureRequestContext()
   @On('guildMemberRemove')
   async onMemberLeave(@Context() [member]: ContextOf<'guildMemberRemove'>) {
     this.logger.log(
@@ -101,11 +104,9 @@ export class GuildWatcherService {
     if (roles.size === 0) return;
 
     this.logger.log(
-      `Saving roles for user ${member.displayName} in guild ${guild.name}`,
+      `Saving roles for user ${member.displayName} in guild ${member.guild.name}`,
     );
     await this.guildMemberRolesService.saveCurrentRoles(user, roles);
-
-    /// Send leave message
 
     const channel = await this.guildSettingsService.getEventMessageChannel(
       guild.id,
@@ -131,7 +132,6 @@ export class GuildWatcherService {
       params,
     );
 
-    /// Fallback messages if no template is found
     if (!message) {
       switch (event) {
         case GuildEvents.MEMBER_BAN:

@@ -1,3 +1,5 @@
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Client } from 'discord.js';
@@ -10,6 +12,7 @@ export class GuildInviteWatcher {
   private readonly logger = new Logger(GuildInviteWatcher.name);
 
   constructor(
+    private readonly em: EntityManager,
     private readonly guildInviteService: GuildInviteService,
     private discord: Client,
   ) {}
@@ -20,6 +23,7 @@ export class GuildInviteWatcher {
     await this.syncInvitesForAllGuilds();
   }
 
+  @EnsureRequestContext()
   @On('inviteCreate')
   async onInviteCreate(@Context() [invite]: ContextOf<'inviteCreate'>) {
     this.logger.log(
@@ -28,6 +32,7 @@ export class GuildInviteWatcher {
     await this.guildInviteService.create(invite);
   }
 
+  @EnsureRequestContext()
   @On('inviteDelete')
   async onInviteDelete(@Context() [invite]: ContextOf<'inviteDelete'>) {
     this.logger.log(

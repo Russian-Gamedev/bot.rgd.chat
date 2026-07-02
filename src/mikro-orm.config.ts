@@ -15,6 +15,7 @@ export default defineConfig({
   extensions: [Migrator],
   driver: PostgreSqlDriver,
   debug: process.env.DATABASE_QUERY_LOG == 'true',
+  // TODO: set to false once all external handlers have RequestContext
   allowGlobalContext: true,
   migrations: {
     tableName: 'mikro_orm_migrations',

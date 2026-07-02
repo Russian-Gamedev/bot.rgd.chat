@@ -1,3 +1,5 @@
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Client, EmbedBuilder } from 'discord.js';
@@ -21,12 +23,14 @@ export class BirthdayService {
   private readonly logger = new Logger(BirthdayService.name);
 
   constructor(
+    private readonly em: EntityManager,
     private readonly userService: UserService,
     private readonly discord: Client,
     private readonly guildSettings: GuildSettingsService,
     private readonly guildMemberRolesService: GuildMemberRolesService,
   ) {}
 
+  @EnsureRequestContext()
   @Cron('0 8 * * *', { name: 'birthday-greeting' })
   async postBirthdayGreeting() {
     const guilds = this.discord.guilds.cache;

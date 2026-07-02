@@ -1,3 +1,5 @@
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 import { Client } from 'discord.js';
 import { Context, type ContextOf, On } from 'necord';
@@ -7,10 +9,12 @@ import { NicknameService } from './nickname.service';
 @Injectable()
 export class NicknameWatcher {
   constructor(
+    private readonly em: EntityManager,
     private readonly nicknameService: NicknameService,
     readonly _client: Client,
   ) {}
 
+  @EnsureRequestContext()
   @On('guildMemberUpdate')
   async onGuildMemberUpdate(
     @Context() [oldMember, newMember]: ContextOf<'guildMemberUpdate'>,

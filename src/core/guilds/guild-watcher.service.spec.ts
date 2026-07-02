@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { AuditLogEvent, Client, Guild } from 'discord.js';
 
 import { GuildEvents } from '#config/guilds';
@@ -64,6 +65,7 @@ describe('GuildWatcherService', () => {
 
   beforeEach(() => {
     service = new GuildWatcherService(
+      Object.create(EntityManager.prototype),
       {} as Client,
       {} as GuildSettingsService,
       {} as GuildEventService,

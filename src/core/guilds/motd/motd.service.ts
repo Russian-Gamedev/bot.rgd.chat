@@ -1,3 +1,4 @@
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -21,7 +22,7 @@ export class MotdService {
   constructor(
     @InjectRepository(MotdEntity)
     private readonly motdRepository: EntityRepository<MotdEntity>,
-    private readonly entityManager: EntityManager,
+    private readonly em: EntityManager,
     private readonly client: Client,
     @Inject(Redis) private readonly redis: Redis,
     private readonly guildSettingsService: GuildSettingsService,
@@ -33,6 +34,7 @@ export class MotdService {
     });
   }
 
+  @EnsureRequestContext()
   @On('clientReady')
   async onBotReady() {
     /// fires immediately on startup to set the bot's MOTD status, then every minute via the Interval
@@ -91,13 +93,13 @@ export class MotdService {
     const motd = new MotdEntity();
     motd.author_id = authorId;
     motd.content = content;
-    await this.entityManager.persist(motd).flush();
+    await this.em.persist(motd).flush();
     await this.loadMotd();
     await this.redis.del(this.LIST_CACHE_KEY);
   }
 
   async removeMotd(id: number) {
-    await this.entityManager.nativeDelete(MotdEntity, { id });
+    await this.em.nativeDelete(MotdEntity, { id });
     await this.loadMotd();
     await this.redis.del(this.LIST_CACHE_KEY);
   }
@@ -117,7 +119,7 @@ export class MotdService {
 
     const users =
       userIds.length > 0
-        ? await this.entityManager.find(UserProfileEntity, {
+        ? await this.em.find(UserProfileEntity, {
             user_id: { $in: userIds },
           })
         : [];

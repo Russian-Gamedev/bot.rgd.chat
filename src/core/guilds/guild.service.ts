@@ -1,3 +1,4 @@
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
@@ -18,10 +19,11 @@ export class GuildService {
     private readonly guildRepository: EntityRepository<GuildEntity>,
     @InjectRepository(RoleEntity)
     private readonly roleRepository: EntityRepository<RoleEntity>,
-    private readonly entityManager: EntityManager,
+    private readonly em: EntityManager,
     private readonly client: Client,
   ) {}
 
+  @EnsureRequestContext()
   @Once('clientReady')
   async onReady() {
     await this.fetchGuilds();
@@ -89,6 +91,6 @@ export class GuildService {
       void this.roleRepository.upsert(roleEntity);
     }
 
-    await this.entityManager.flush();
+    await this.em.flush();
   }
 }

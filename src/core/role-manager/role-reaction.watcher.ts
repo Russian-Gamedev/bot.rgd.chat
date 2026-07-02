@@ -1,5 +1,7 @@
 import { EntityRepository } from '@mikro-orm/core';
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { InjectRepository } from '@mikro-orm/nestjs';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 import { Context, type ContextOf, On } from 'necord';
 
@@ -8,10 +10,12 @@ import { RoleReactionEntity } from './entities/role-reaction.entity';
 @Injectable()
 export class RoleReactionWatcher {
   constructor(
+    private readonly em: EntityManager,
     @InjectRepository(RoleReactionEntity)
     private readonly roleReactionRepository: EntityRepository<RoleReactionEntity>,
   ) {}
 
+  @EnsureRequestContext()
   @On('messageReactionAdd')
   async handleReactionAdded(
     @Context() [reaction, user]: ContextOf<'messageReactionAdd'>,
@@ -36,6 +40,7 @@ export class RoleReactionWatcher {
     }
   }
 
+  @EnsureRequestContext()
   @On('messageReactionRemove')
   async handleReactionRemoved(
     @Context() [reaction, user]: ContextOf<'messageReactionRemove'>,

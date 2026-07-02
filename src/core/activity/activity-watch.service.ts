@@ -1,3 +1,5 @@
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
+import { EntityManager } from '@mikro-orm/postgresql';
 import {
   type BeforeApplicationShutdown,
   Inject,
@@ -30,6 +32,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
   private readonly logger = new Logger(ActivityWatchService.name);
 
   constructor(
+    private readonly em: EntityManager,
     private readonly discord: Client,
     @Inject(Redis)
     private readonly redis: Redis,
@@ -89,6 +92,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     });
   }
 
+  @EnsureRequestContext()
   @On('messageCreate')
   public async onMessage(@Context() [message]: ContextOf<'messageCreate'>) {
     if (message.webhookId) return;
@@ -117,6 +121,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     );
   }
 
+  @EnsureRequestContext()
   @On('voiceStateUpdate')
   public async onVoiceStateUpdate(
     @Context() [oldState, newState]: ContextOf<'voiceStateUpdate'>,
@@ -139,6 +144,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     }
   }
 
+  @EnsureRequestContext()
   @On('messageReactionAdd')
   public async onReactionAdd(
     @Context() [reaction, user]: ContextOf<'messageReactionAdd'>,
@@ -153,6 +159,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     );
   }
 
+  @EnsureRequestContext()
   @On('messageReactionRemove')
   public async onReactionRemove(
     @Context() [reaction, user]: ContextOf<'messageReactionRemove'>,

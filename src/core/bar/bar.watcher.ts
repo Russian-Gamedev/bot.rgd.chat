@@ -1,4 +1,6 @@
 import { generateDependencyReport, joinVoiceChannel } from '@discordjs/voice';
+import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   Client,
@@ -33,6 +35,7 @@ export class BarWatcher {
   barGateway: BarGateway;
 
   constructor(
+    private readonly em: EntityManager,
     private readonly guildSettings: GuildSettingsService,
     private readonly discord: Client,
   ) {}
@@ -86,6 +89,7 @@ export class BarWatcher {
     });
   }
 
+  @EnsureRequestContext()
   @Once('clientReady')
   async onInit() {
     this.logger.log(generateDependencyReport());
