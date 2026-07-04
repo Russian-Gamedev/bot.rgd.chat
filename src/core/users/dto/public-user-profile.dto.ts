@@ -1,37 +1,75 @@
-import { UserProfileEntity } from '../entities/user-profile.entity';
+import { Expose, Transform, Type } from 'class-transformer';
 
-export interface PublicUserProfileDto {
+export class PublicUserProfileDto {
+  @Expose({ name: 'user_id' })
+  @Transform(({ obj, value }) => (value ?? obj.id).toString(), {
+    toClassOnly: true,
+  })
   id: string;
-  username: string;
-  nickname: string | null;
-  avatar_url: string;
-  banner: string | null;
-  banner_alt: string | null;
-  banner_color: string;
-  about: string | null;
-  birth_date: Date | null;
-  first_joined_at: Date;
-  last_active_at: Date;
-  active_streak: number;
-  max_active_streak: number;
-}
 
-export function toPublicUserProfileDto(
-  profile: UserProfileEntity,
-): PublicUserProfileDto {
-  return {
-    id: profile.user_id.toString(),
-    username: profile.username,
-    nickname: profile.nickname,
-    avatar_url: profile.avatar_url,
-    banner: profile.banner,
-    banner_alt: profile.banner_alt,
-    banner_color: profile.banner_color,
-    about: profile.about,
-    birth_date: profile.birthDate,
-    first_joined_at: profile.firstJoinedAt,
-    last_active_at: profile.lastActiveAt,
-    active_streak: profile.activeStreak,
-    max_active_streak: profile.maxActiveStreak,
-  };
+  @Expose()
+  username: string;
+
+  @Expose()
+  nickname: string | null;
+
+  @Expose()
+  avatar_url: string;
+
+  @Expose()
+  banner: string | null;
+
+  @Expose()
+  banner_alt: string | null;
+
+  @Expose()
+  banner_color: string;
+
+  @Expose()
+  about: string | null;
+
+  @Expose({ name: 'birthDate' })
+  @Type(() => Date)
+  @Transform(
+    ({ obj, value }) => {
+      const date = value ?? obj.birth_date;
+      return date == null ? null : date instanceof Date ? date : new Date(date);
+    },
+    { toClassOnly: true },
+  )
+  birth_date: Date | null;
+
+  @Expose({ name: 'firstJoinedAt' })
+  @Type(() => Date)
+  @Transform(
+    ({ obj, value }) => {
+      const date = value ?? obj.first_joined_at;
+      return date instanceof Date ? date : new Date(date);
+    },
+    { toClassOnly: true },
+  )
+  first_joined_at: Date;
+
+  @Expose({ name: 'lastActiveAt' })
+  @Type(() => Date)
+  @Transform(
+    ({ obj, value }) => {
+      const date = value ?? obj.last_active_at;
+      return date instanceof Date ? date : new Date(date);
+    },
+    { toClassOnly: true },
+  )
+  last_active_at: Date;
+
+  @Expose({ name: 'activeStreak' })
+  @Transform(({ obj, value }) => value ?? obj.active_streak, {
+    toClassOnly: true,
+  })
+  active_streak: number;
+
+  @Expose({ name: 'maxActiveStreak' })
+  @Transform(({ obj, value }) => value ?? obj.max_active_streak, {
+    toClassOnly: true,
+  })
+  max_active_streak: number;
 }

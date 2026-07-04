@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type Redis from 'ioredis';
 
 import { BotEntity } from '#core/bots/entities/bot.entity';
 import { PermissionService } from '#core/permissions/permissions.service';
@@ -15,17 +16,27 @@ describe('UsersController', () => {
     } as unknown as PermissionService;
   }
 
+  function createRedis() {
+    return {
+      get: mock(async () => null),
+      set: mock(async () => 'OK'),
+      del: mock(async () => 1),
+    } as unknown as Redis;
+  }
+
   it('returns public profile by id without internal fields', async () => {
     const profile = createProfile();
     const userService = {
-      getProfile: mock(async () => profile),
+      lookupProfile: mock(async () => profile),
     } as unknown as UserService;
+    const redis = createRedis();
     const controller = new UsersController(
       userService,
       createPermissionService(),
+      redis,
     );
 
-    await expect(controller.getById('123')).resolves.toEqual({
+    const expected = {
       id: '123',
       username: 'alice',
       nickname: 'Ali',
@@ -39,20 +50,116 @@ describe('UsersController', () => {
       last_active_at: new Date('2026-06-13T00:00:00.000Z'),
       active_streak: 3,
       max_active_streak: 5,
-    });
-    expect(userService.getProfile).toHaveBeenCalledWith('123');
+    };
+
+    await expect(controller.getById('123')).resolves.toEqual(expected);
+    expect(userService.lookupProfile).toHaveBeenCalledWith('123');
+    expect(redis.set).toHaveBeenCalledWith(
+      'users:lookup-profile-response:v1:123',
+      JSON.stringify(expected),
+      'EX',
+      60,
+    );
+  });
+
+  it('returns public profile by username lookup', async () => {
+    const profile = createProfile({ username: 'damirlut' });
+    const userService = {
+      lookupProfile: mock(async () => profile),
+    } as unknown as UserService;
+    const redis = createRedis();
+    const controller = new UsersController(
+      userService,
+      createPermissionService(),
+      redis,
+    );
+
+    const result = await controller.getById('DamirLut');
+
+    expect(userService.lookupProfile).toHaveBeenCalledWith('DamirLut');
+    expect(result.username).toBe('damirlut');
+    expect(redis.set).toHaveBeenCalledWith(
+      'users:lookup-profile-response:v1:damirlut',
+      JSON.stringify(result),
+      'EX',
+      60,
+    );
   });
 
   it('returns 404 for unknown public user id', async () => {
     const userService = {
-      getProfile: mock(async () => null),
+      lookupProfile: mock(async () => null),
     } as unknown as UserService;
+    const redis = createRedis();
     const controller = new UsersController(
       userService,
       createPermissionService(),
+      redis,
     );
 
     await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
+    expect(redis.set).toHaveBeenCalledWith(
+      'users:lookup-profile-response:v1:404',
+      '-',
+      'EX',
+      60,
+    );
+  });
+
+  it('returns cached public profile response without service lookup', async () => {
+    const cached = {
+      id: '123',
+      username: 'alice',
+      nickname: 'Ali',
+      avatar_url: 'https://cdn.discordapp.com/avatar.webp',
+      banner: null,
+      banner_alt: null,
+      banner_color: '#abc',
+      about: 'hello',
+      birth_date: '2000-01-02T00:00:00.000Z',
+      first_joined_at: '2026-06-01T00:00:00.000Z',
+      last_active_at: '2026-06-13T00:00:00.000Z',
+      active_streak: 3,
+      max_active_streak: 5,
+    };
+    const userService = {
+      lookupProfile: mock(async () => null),
+    } as unknown as UserService;
+    const redis = createRedis();
+    (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce(
+      JSON.stringify(cached),
+    );
+    const controller = new UsersController(
+      userService,
+      createPermissionService(),
+      redis,
+    );
+
+    await expect(controller.getById('DamirLut')).resolves.toEqual({
+      ...cached,
+      birth_date: new Date(cached.birth_date),
+      first_joined_at: new Date(cached.first_joined_at),
+      last_active_at: new Date(cached.last_active_at),
+    });
+    expect(userService.lookupProfile).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('returns cached public 404 without service lookup', async () => {
+    const userService = {
+      lookupProfile: mock(async () => createProfile()),
+    } as unknown as UserService;
+    const redis = createRedis();
+    (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce('-');
+    const controller = new UsersController(
+      userService,
+      createPermissionService(),
+      redis,
+    );
+
+    await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
+    expect(userService.lookupProfile).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
   });
 
   it('returns current user profile for user actor', async () => {
@@ -66,7 +173,11 @@ describe('UsersController', () => {
         guilds: {},
       })),
     } as unknown as PermissionService;
-    const controller = new UsersController(userService, permissionService);
+    const controller = new UsersController(
+      userService,
+      permissionService,
+      createRedis(),
+    );
 
     const result = await controller.getMe({
       type: ActorType.User,
@@ -96,7 +207,11 @@ describe('UsersController', () => {
         guilds: {},
       })),
     } as unknown as PermissionService;
-    const controller = new UsersController(userService, permissionService);
+    const controller = new UsersController(
+      userService,
+      permissionService,
+      createRedis(),
+    );
 
     const result = await controller.getMe({
       type: ActorType.Bot,
@@ -123,6 +238,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       userService,
       createPermissionService(),
+      createRedis(),
     );
 
     await expect(
