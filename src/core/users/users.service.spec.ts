@@ -109,6 +109,36 @@ describe('UserService', () => {
     expect(userRepository.nativeUpdate).not.toHaveBeenCalled();
   });
 
+  it('finds public profiles by numeric user id lookup', async () => {
+    await service.lookupProfile('123');
+
+    expect(userRepository.findOne).toHaveBeenCalledWith({ user_id: 123n });
+    expect(userRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('finds public profiles by username or nickname without case sensitivity', async () => {
+    const profile = new UserProfileEntity();
+    profile.user_id = 123n;
+    const qb = createQueryBuilderMock([profile]);
+    (
+      userRepository.createQueryBuilder as ReturnType<typeof mock>
+    ).mockReturnValueOnce(qb);
+
+    await service.lookupProfile('DamirLut');
+
+    expect(userRepository.createQueryBuilder).toHaveBeenCalledWith('u');
+    expect(qb.where.mock.calls[0][0]).toMatchObject({
+      sql: 'lower(u.username) = ?',
+      params: ['damirlut'],
+    });
+    expect(qb.orWhere.mock.calls[0][0]).toMatchObject({
+      sql: 'lower(u.nickname) = ?',
+      params: ['damirlut'],
+    });
+    expect(qb.limit).toHaveBeenCalledWith(1);
+    expect(qb.getSingleResult).toHaveBeenCalled();
+  });
+
   it('filters birthday users by the current guild members table', async () => {
     const qb = createQueryBuilderMock<UserProfileEntity>();
     (
@@ -137,13 +167,19 @@ describe('UserService', () => {
 function createQueryBuilderMock<T>(result: T[] = []) {
   let qb: {
     where: ReturnType<typeof mock>;
+    orWhere: ReturnType<typeof mock>;
     andWhere: ReturnType<typeof mock>;
+    limit: ReturnType<typeof mock>;
     getResult: ReturnType<typeof mock>;
+    getSingleResult: ReturnType<typeof mock>;
   };
   qb = {
     where: mock(() => qb),
+    orWhere: mock(() => qb),
     andWhere: mock(() => qb),
+    limit: mock(() => qb),
     getResult: mock(() => Promise.resolve(result)),
+    getSingleResult: mock(() => Promise.resolve(result[0] ?? null)),
   };
   return qb;
 }
