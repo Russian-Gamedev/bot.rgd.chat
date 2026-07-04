@@ -59,6 +59,25 @@ export class UserService {
     return this.userRepository.findOne({ user_id: BigInt(userId) });
   }
 
+  async lookupProfile(lookup: string): Promise<UserProfileEntity | null> {
+    const normalizedLookup = lookup.trim();
+    if (!normalizedLookup) {
+      return null;
+    }
+
+    if (isUnsignedInteger(normalizedLookup)) {
+      return this.getProfile(normalizedLookup);
+    }
+
+    const normalizedName = normalizedLookup.toLowerCase();
+    return this.userRepository
+      .createQueryBuilder('u')
+      .where(raw('lower(u.username) = ?', [normalizedName]))
+      .orWhere(raw('lower(u.nickname) = ?', [normalizedName]))
+      .limit(1)
+      .getSingleResult();
+  }
+
   async save(entity: UserProfileEntity | MemberProfileEntity): Promise<void> {
     await this.em.persist(entity).flush();
   }
@@ -174,6 +193,10 @@ export class UserService {
 
 function isDefaultAvatar(avatar: string): boolean {
   return avatar.includes('/embed/avatars/');
+}
+
+function isUnsignedInteger(value: string): boolean {
+  return /^\d+$/.test(value);
 }
 
 function assertPositiveInteger(amount: number, field: string): void {
