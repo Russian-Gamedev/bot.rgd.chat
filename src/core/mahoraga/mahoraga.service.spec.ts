@@ -83,11 +83,13 @@ describe('MahoragaService', () => {
   let roleRemove: ReturnType<typeof mock>;
   let logSend: ReturnType<typeof mock>;
   let redisStorage: Map<string, number>;
+  let redisSetStorage: Map<string, Set<string>>;
   let hasSoftbanRole: boolean;
 
   beforeEach(() => {
     storedCase = null;
     redisStorage = new Map();
+    redisSetStorage = new Map();
     roleAdd = mock(async () => undefined);
     roleRemove = mock(async () => undefined);
     logSend = mock(async () => undefined);
@@ -123,6 +125,20 @@ describe('MahoragaService', () => {
         return next;
       }),
       expire: mock(async () => undefined),
+      sadd: mock(async (key: string, value: string) => {
+        if (!redisSetStorage.has(key)) redisSetStorage.set(key, new Set());
+        redisSetStorage.get(key)!.add(value);
+        return 1;
+      }),
+      smembers: mock(async (key: string) => {
+        const set = redisSetStorage.get(key);
+        return set ? [...set] : [];
+      }),
+      del: mock(async (key: string) => {
+        const existed = redisSetStorage.has(key);
+        redisSetStorage.delete(key);
+        return existed ? 1 : 0;
+      }),
     } as unknown as Redis;
     const guildSettings = {
       getSetting: mock(async (_guildId, key, defaultValue) => {
@@ -200,9 +216,7 @@ describe('MahoragaService', () => {
     expect(roleAdd).not.toHaveBeenCalled();
     expect(
       logSend.mock.calls.some(([payload]) =>
-        String((payload as { content?: string }).content).includes(
-          'would softban',
-        ),
+        JSON.stringify(payload).includes('Softban would be applied'),
       ),
     ).toBe(true);
   });
@@ -272,7 +286,7 @@ describe('MahoragaService', () => {
     expect(roleAdd).toHaveBeenCalledTimes(2);
     expect(
       logSend.mock.calls.some(([payload]) =>
-        String((payload as { content?: string }).content).includes('attention'),
+        JSON.stringify(payload).includes('Young Account Warning'),
       ),
     ).toBe(true);
   });
