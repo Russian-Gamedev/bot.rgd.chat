@@ -220,5 +220,4 @@ POST /mahoraga/spammers/:user_id/sync-softban
 3. Включить `mahoraga_enabled`.
 4. Опционально задать `mahoraga_log_channel_id`.
 5. Опционально создать honeypot-канал и записать его ID в `mahoraga_honeypot_channel_id`.
-6. Для тестового запуска поставить `mahoraga_enforcement_mode = monitor`.
-7. После проверки логов переключить `mahoraga_honeypot_mode` и `mahoraga_repeat_mode` на `on`.
+6. После проверки логов переключить `mahoraga_honeypot_mode` и `mahoraga_repeat_mode` на `on`.
