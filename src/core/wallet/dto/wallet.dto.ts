@@ -75,3 +75,64 @@ export class GuildQueryDto {
   @IsString()
   guild_id: string;
 }
+
+export class WalletBalanceResponseDto {
+  @ApiProperty({ description: 'Amount as string for bigint safety.' })
+  balance: string;
+}
+
+export class UserWalletBalanceResponseDto extends WalletBalanceResponseDto {
+  @ApiProperty({ description: 'Discord User ID.' })
+  user_id: string;
+}
+
+export class WalletTransactionDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty({ description: 'Discord Guild ID.' })
+  guild_id: string;
+
+  @ApiProperty({ description: 'Transaction amount as string.' })
+  amount: string;
+
+  @ApiProperty({ description: 'Balance after transaction as string.' })
+  balance_after: string;
+
+  @ApiProperty({ enum: WalletTransactionType })
+  type: WalletTransactionType;
+
+  @ApiProperty()
+  reason: string;
+
+  @ApiProperty({ nullable: true })
+  related_user_id: string | null;
+
+  @ApiProperty({ additionalProperties: true, type: 'object' })
+  metadata: Record<string, unknown>;
+
+  @ApiProperty()
+  created_at: Date;
+}
+
+export class WalletOperationResponseDto {
+  @ApiProperty()
+  transaction_id: number;
+
+  @ApiProperty({ description: 'Balance after operation as string.' })
+  balance_after: string;
+}
+
+export class WalletTransferResponseDto {
+  @ApiProperty()
+  debit_transaction_id: number;
+
+  @ApiProperty()
+  credit_transaction_id: number;
+
+  @ApiProperty({ description: 'Source user balance after transfer as string.' })
+  from_balance_after: string;
+
+  @ApiProperty({ description: 'Target user balance after transfer as string.' })
+  to_balance_after: string;
+}
