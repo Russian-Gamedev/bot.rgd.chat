@@ -28,6 +28,7 @@ describe('UsersController', () => {
     const profile = createProfile();
     const userService = {
       lookupProfile: mock(async () => profile),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const redis = createRedis();
     const controller = new UsersController(
@@ -50,13 +51,15 @@ describe('UsersController', () => {
       last_active_at: new Date('2026-06-13T00:00:00.000Z'),
       active_streak: 3,
       max_active_streak: 5,
+      tags: [],
     };
 
     await expect(controller.getById('123')).resolves.toEqual(expected);
     expect(userService.lookupProfile).toHaveBeenCalledWith('123');
+    expect(userService.getPublicProfileTags).toHaveBeenCalledWith(123n);
     expect(redis.set).toHaveBeenCalledWith(
-      'users:lookup-profile-response:v1:123',
-      JSON.stringify(expected),
+      'users:lookup-profile-response:v3:123',
+      JSON.stringify(Object.assign({ tags: [] }, expected)),
       'EX',
       60,
     );
@@ -66,6 +69,7 @@ describe('UsersController', () => {
     const profile = createProfile({ username: 'damirlut' });
     const userService = {
       lookupProfile: mock(async () => profile),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const redis = createRedis();
     const controller = new UsersController(
@@ -79,7 +83,7 @@ describe('UsersController', () => {
     expect(userService.lookupProfile).toHaveBeenCalledWith('DamirLut');
     expect(result.username).toBe('damirlut');
     expect(redis.set).toHaveBeenCalledWith(
-      'users:lookup-profile-response:v1:damirlut',
+      'users:lookup-profile-response:v3:damirlut',
       JSON.stringify(result),
       'EX',
       60,
@@ -89,6 +93,7 @@ describe('UsersController', () => {
   it('returns 404 for unknown public user id', async () => {
     const userService = {
       lookupProfile: mock(async () => null),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const redis = createRedis();
     const controller = new UsersController(
@@ -99,7 +104,7 @@ describe('UsersController', () => {
 
     await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
     expect(redis.set).toHaveBeenCalledWith(
-      'users:lookup-profile-response:v1:404',
+      'users:lookup-profile-response:v3:404',
       '-',
       'EX',
       60,
@@ -121,9 +126,11 @@ describe('UsersController', () => {
       last_active_at: '2026-06-13T00:00:00.000Z',
       active_streak: 3,
       max_active_streak: 5,
+      tags: [],
     };
     const userService = {
       lookupProfile: mock(async () => null),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const redis = createRedis();
     (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce(
@@ -142,12 +149,14 @@ describe('UsersController', () => {
       last_active_at: new Date(cached.last_active_at),
     });
     expect(userService.lookupProfile).not.toHaveBeenCalled();
+    expect(userService.getPublicProfileTags).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
   });
 
   it('returns cached public 404 without service lookup', async () => {
     const userService = {
       lookupProfile: mock(async () => createProfile()),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const redis = createRedis();
     (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce('-');
@@ -159,6 +168,7 @@ describe('UsersController', () => {
 
     await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
     expect(userService.lookupProfile).not.toHaveBeenCalled();
+    expect(userService.getPublicProfileTags).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
   });
 
@@ -166,6 +176,7 @@ describe('UsersController', () => {
     const profile = createProfile();
     const userService = {
       getProfile: mock(async () => profile),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const permissionService = {
       getActorPermissions: mock(async () => ({
@@ -186,7 +197,9 @@ describe('UsersController', () => {
     });
 
     expect(userService.getProfile).toHaveBeenCalledWith('123');
+    expect(userService.getPublicProfileTags).toHaveBeenCalledWith(123n);
     expect(permissionService.getActorPermissions).toHaveBeenCalled();
+    expect(result.tags).toEqual([]);
     expect(result.permissions).toEqual({
       global: [Permission.WalletReadOwn],
       guilds: {},
@@ -200,6 +213,7 @@ describe('UsersController', () => {
     const profile = createProfile({ user_id: 999n, username: 'bot-user' });
     const userService = {
       getProfile: mock(async () => profile),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const permissionService = {
       getActorPermissions: mock(async () => ({
@@ -220,8 +234,10 @@ describe('UsersController', () => {
     });
 
     expect(userService.getProfile).toHaveBeenCalledWith('999');
+    expect(userService.getPublicProfileTags).toHaveBeenCalledWith(999n);
     expect(result.id).toBe('999');
     expect(result.username).toBe('bot-user');
+    expect(result.tags).toEqual([]);
     expect(result.permissions).toEqual({
       global: [Permission.GuildRead],
       guilds: {},
@@ -234,6 +250,7 @@ describe('UsersController', () => {
     bot.botUserId = null;
     const userService = {
       getProfile: mock(async () => null),
+      getPublicProfileTags: mock(async () => []),
     } as unknown as UserService;
     const controller = new UsersController(
       userService,
