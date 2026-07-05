@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  ChannelType,
-  GuildChannel,
-  MessageFlags,
-} from 'discord.js';
+import { ChannelType, GuildChannel, MessageFlags } from 'discord.js';
 import {
   ChannelOption,
   Context,
@@ -14,7 +10,10 @@ import {
 
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
-import { createHoneypotEmbed, MahoragaReason } from '#core/mahoraga/mahoraga.types';
+import {
+  createHoneypotEmbed,
+  MahoragaReason,
+} from '#core/mahoraga/mahoraga.types';
 import { MahoragaCaseService } from '#core/mahoraga/mahoraga-case.service';
 
 import { MahoragaCommandDecorator } from './mahoraga.command';

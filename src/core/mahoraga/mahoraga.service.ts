@@ -122,11 +122,10 @@ export class MahoragaService {
     }
 
     try {
-      const entries =
-        await this.detectionService.getTrackedMessages(
-          guildId,
-          message.author.id,
-        );
+      const entries = await this.detectionService.getTrackedMessages(
+        guildId,
+        message.author.id,
+      );
       if (entries.length > 0) {
         await this.discordService.deleteUserMessages(guildId, entries);
         await this.detectionService.clearTrackedMessages(

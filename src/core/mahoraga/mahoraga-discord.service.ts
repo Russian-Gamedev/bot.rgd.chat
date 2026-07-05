@@ -142,9 +142,7 @@ export class MahoragaDiscordService {
     for (const { channelId, messageId } of entries) {
       try {
         const guild = await this.discord.guilds.fetch(guildId);
-        const channel = await guild.channels
-          .fetch(channelId)
-          .catch(() => null);
+        const channel = await guild.channels.fetch(channelId).catch(() => null);
         if (!channel?.isTextBased()) continue;
 
         const message = await channel.messages
