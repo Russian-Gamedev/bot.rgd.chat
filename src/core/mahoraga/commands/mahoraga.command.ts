@@ -28,7 +28,7 @@ class MahoragaUnbanCommandDto {
   reason?: string;
 }
 
-const MahoragaCommandDecorator = createCommandGroupDecorator({
+export const MahoragaCommandDecorator = createCommandGroupDecorator({
   name: 'mahoraga',
   description: 'Mahoraga anti-spam commands',
   contexts: [InteractionContextType.Guild],

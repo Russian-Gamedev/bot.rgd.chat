@@ -16,6 +16,7 @@ export enum GuildSettings {
   MahoragaRepeatMode = 'mahoraga_repeat_mode',
   MahoragaYoungAccountMode = 'mahoraga_young_account_mode',
   MahoragaHoneypotChannelId = 'mahoraga_honeypot_channel_id',
+  MahoragaHoneypotMessageId = 'mahoraga_honeypot_message_id',
   MahoragaSoftbanRoleId = 'mahoraga_softban_role_id',
   MahoragaLogChannelId = 'mahoraga_log_channel_id',
   MahoragaTextRepeatLimit = 'mahoraga_text_repeat_limit',

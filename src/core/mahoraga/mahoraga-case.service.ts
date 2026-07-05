@@ -29,6 +29,16 @@ export class MahoragaCaseService {
     private readonly em: EntityManager,
   ) {}
 
+  async countByReasonAndGuild(
+    reason: MahoragaReason,
+    guildId: string,
+  ): Promise<number> {
+    return this.casesRepository.count({
+      reason,
+      source_guild_id: this.parseDiscordId(guildId),
+    });
+  }
+
   async listCases(query: MahoragaListQueryDto): Promise<MahoragaCaseEntity[]> {
     const where: FilterQuery<MahoragaCaseEntity> = {};
     if (query.status) where.status = query.status;

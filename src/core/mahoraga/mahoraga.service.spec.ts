@@ -176,6 +176,7 @@ describe('MahoragaService', () => {
       new MahoragaDetectionService(redis, guildSettings),
       caseService,
       discordService,
+      guildSettings,
     );
   });
 

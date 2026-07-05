@@ -1,5 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { GuildMember, Message } from 'discord.js';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { EmbedBuilder, GuildMember, Message } from 'discord.js';
+
+import { GuildSettings } from '#config/guilds';
+import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 
 import {
   MahoragaListQueryDto,
@@ -19,10 +22,13 @@ import { MahoragaDiscordService } from './mahoraga-discord.service';
 
 @Injectable()
 export class MahoragaService {
+  private readonly logger = new Logger(MahoragaService.name);
+
   constructor(
     private readonly detectionService: MahoragaDetectionService,
     private readonly caseService: MahoragaCaseService,
     private readonly discordService: MahoragaDiscordService,
+    private readonly guildSettings: GuildSettingsService,
   ) {}
 
   async inspectMessage(message: Message): Promise<MahoragaCaseEntity | null> {
@@ -35,6 +41,10 @@ export class MahoragaService {
       reason: detection.reason,
       evidence: detection.evidence,
     });
+
+    if (detection.reason === MahoragaReason.Honeypot && result.case) {
+      await this.handleHoneypotDetection(message, detection.guildId);
+    }
 
     const detectorMode = this.getDetectorMode(
       detection.settings,
@@ -71,6 +81,59 @@ export class MahoragaService {
     }
 
     return result.case;
+  }
+
+  private async handleHoneypotDetection(
+    message: Message,
+    guildId: string,
+  ): Promise<void> {
+    try {
+      await message.delete().catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    try {
+      const messageId = await this.guildSettings.getSetting<string>(
+        guildId,
+        GuildSettings.MahoragaHoneypotMessageId,
+        null,
+      );
+      if (!messageId) return;
+
+      const channel = message.channel;
+      if (!channel.isTextBased() || !channel.isSendable()) return;
+
+      const count = await this.caseService.countByReasonAndGuild(
+        MahoragaReason.Honeypot,
+        guildId,
+      );
+      const embed = new EmbedBuilder()
+        .setColor(0xff0000)
+        .setTitle('НЕ ПИШИТЕ СЮДА СООБЩЕНИЯ')
+        .setDescription(
+          'Этот канал для рыбалки спам ботов. За любое сообщение вы получите softban. (если вы глупенький и нажали разбана не будет)',
+        )
+        .setFooter({ text: `Поймано спаммеров: ${count}` });
+
+      const embedMessage = await channel.messages
+        .fetch(messageId)
+        .catch(() => null);
+      if (embedMessage) {
+        await embedMessage.edit({ embeds: [embed] });
+      } else {
+        const newMessage = await channel.send({ embeds: [embed] });
+        await this.guildSettings.setSetting(
+          guildId,
+          GuildSettings.MahoragaHoneypotMessageId,
+          newMessage.id,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to update honeypot embed in guild ${guildId}: ${error}`,
+      );
+    }
   }
 
   private getDetectorMode(
