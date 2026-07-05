@@ -30,7 +30,7 @@ export class ActivityJobService {
   private readonly logger = new Logger(ActivityJobService.name);
 
   constructor(
-    readonly _em: EntityManager,
+    readonly em: EntityManager,
     private readonly discord: Client,
     private readonly activityService: ActivityService,
     private readonly userService: UserService,

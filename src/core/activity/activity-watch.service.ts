@@ -32,7 +32,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
   private readonly logger = new Logger(ActivityWatchService.name);
 
   constructor(
-    readonly _em: EntityManager,
+    readonly em: EntityManager,
     private readonly discord: Client,
     @Inject(Redis)
     private readonly redis: Redis,

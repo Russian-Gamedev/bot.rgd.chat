@@ -12,7 +12,7 @@ export class GuildInviteWatcher {
   private readonly logger = new Logger(GuildInviteWatcher.name);
 
   constructor(
-    readonly _em: EntityManager,
+    readonly em: EntityManager,
     private readonly guildInviteService: GuildInviteService,
     private discord: Client,
   ) {}

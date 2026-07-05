@@ -9,7 +9,7 @@ import { NicknameService } from './nickname.service';
 @Injectable()
 export class NicknameWatcher {
   constructor(
-    readonly _em: EntityManager,
+    readonly em: EntityManager,
     private readonly nicknameService: NicknameService,
     readonly _client: Client,
   ) {}

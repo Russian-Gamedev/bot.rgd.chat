@@ -23,7 +23,7 @@ export class BirthdayService {
   private readonly logger = new Logger(BirthdayService.name);
 
   constructor(
-    readonly _em: EntityManager,
+    readonly em: EntityManager,
     private readonly userService: UserService,
     private readonly discord: Client,
     private readonly guildSettings: GuildSettingsService,
