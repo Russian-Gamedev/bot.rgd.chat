@@ -16,21 +16,25 @@ Mahoraga реагирует на четыре типа событий:
 
 ## Режимы работы
 
-Режим задаётся настройкой `mahoraga_enforcement_mode`.
+У каждого типа детектов есть индивидуальный режим работы (`off`, `monitor`, `on`).
 
-- `enforce` - Mahoraga применяет softban и запускает verification-flow для молодых аккаунтов.
-- `monitor` - Mahoraga только создаёт observed-кейсы и пишет в лог, что softban был бы применён.
+- `off` - детекты этого типа полностью отключены.
+- `monitor` - Mahoraga только создаёт observed-кейсы и пишет в лог, что было бы сделано.
+- `on` - Mahoraga применяет softban.
 
-Если настройка отсутствует или имеет неизвестное значение, используется `enforce`.
+Для `mahoraga_young_account_mode` доступны только `off` и `on`. В режиме `on` Mahoraga логирует предупреждение о молодом аккаунте.
+
+Режимы задаются настройками `mahoraga_honeypot_mode`, `mahoraga_repeat_mode` и `mahoraga_young_account_mode`.
+
+Если настройка отсутствует или имеет неизвестное значение, используется `on`.
 
 ## Статусы кейса
 
 | Статус | Значение |
 | --- | --- |
 | `observed` | Детект сработал в monitor-режиме. Softban не применяется. |
-| `pending_verification` | Молодой аккаунт получил шанс пройти DM-проверку. |
 | `active` | Активный spammer-кейс. Softban должен быть применён. |
-| `pardoned` | Пользователь разбанен через API, slash-команду или verification. |
+| `pardoned` | Пользователь разбанен через API или slash-команду. |
 
 На пользователя хранится один кейс в таблице `mahoraga_cases`. Повторные срабатывания обновляют кейс, увеличивают `detection_count` и добавляют evidence.
 
@@ -41,8 +45,10 @@ Mahoraga реагирует на четыре типа событий:
 | Key | Тип | Default | Назначение |
 | --- | --- | --- | --- |
 | `mahoraga_enabled` | boolean | `false` | Включает Mahoraga на сервере. |
-| `mahoraga_enforcement_mode` | string | `enforce` | `enforce` или `monitor`. |
 | `mahoraga_honeypot_channel_id` | string | `null` | Канал-ловушка. Любое сообщение там создаёт детект. |
+| `mahoraga_honeypot_mode` | string | `on` | Режим honeypot: `off`, `monitor`, `on`. |
+| `mahoraga_repeat_mode` | string | `on` | Режим повторов (text/link/image): `off`, `monitor`, `on`. |
+| `mahoraga_young_account_mode` | string | `on` | Режим молодых аккаунтов: `off` (не проверять возраст), `on` (лог предупреждения + softban). |
 | `mahoraga_softban_role_id` | string | `null` | Роль, которая выдаётся при softban. |
 | `mahoraga_log_channel_id` | string | `null` | Канал для логов Mahoraga. |
 | `mahoraga_text_repeat_limit` | number | `3` | Сколько одинаковых текстов нужно для срабатывания. |
@@ -51,8 +57,7 @@ Mahoraga реагирует на четыре типа событий:
 | `mahoraga_link_window_seconds` | number | `60` | Окно повторов ссылок. |
 | `mahoraga_image_repeat_limit` | number | `2` | Сколько одинаковых изображений нужно для срабатывания. |
 | `mahoraga_image_window_seconds` | number | `600` | Окно повторов изображений. |
-| `mahoraga_young_account_months` | number | `3` | Аккаунты моложе этого значения получают verification-flow. |
-| `mahoraga_verification_timeout_minutes` | number | `30` | Сколько действует кнопка проверки в DM. |
+| `mahoraga_young_account_months` | number | `3` | Аккаунты моложе этого значения получают лог-предупреждение. |
 
 Числовые настройки меньше `1` считаются невалидными и заменяются default-значением.
 
@@ -105,13 +110,9 @@ Softban - это выдача роли `mahoraga_softban_role_id`.
 
 Если пользователь с активным кейсом заходит на сервер позже, Mahoraga повторно пытается применить softban для этого сервера.
 
-## Verification для молодых аккаунтов
+## Молодые аккаунты
 
-В `enforce`-режиме аккаунт моложе `mahoraga_young_account_months` сначала получает статус `pending_verification`.
-
-Mahoraga отправляет пользователю DM с кнопкой `Пройти проверку`. Если пользователь нажимает кнопку до `verification_expires_at`, кейс становится `pardoned`, а softban снимается на всех включённых серверах.
-
-Если DM не удалось отправить или срок проверки истёк, кейс переводится в `active`. Истёкшие проверки обрабатываются cron-задачей каждые 5 минут.
+При `mahoraga_young_account_mode = on` Mahoraga логирует предупреждение, если аккаунт пользователя младше `mahoraga_young_account_months`. Softban применяется в любом случае. Верификация не предусмотрена.
 
 ## REST API
 
@@ -131,7 +132,7 @@ GET /mahoraga/spammers
 
 Query params:
 
-- `status` - `observed`, `pending_verification`, `active`, `pardoned`.
+- `status` - `observed`, `active`, `pardoned`.
 - `guild_id` - Discord guild ID.
 - `reason` - `honeypot`, `text_repeat`, `link_repeat`, `image_repeat`, `manual`.
 - `limit` - от `1` до `100`, default `50`.
@@ -204,10 +205,10 @@ POST /mahoraga/spammers/:user_id/sync-softban
 
 Если задан `mahoraga_log_channel_id`, Mahoraga пишет туда события:
 
-- detection в `monitor` и `enforce` режимах;
+- detection в `monitor` и `on` режимах;
 - успешный или пропущенный softban;
 - ошибки применения softban;
-- отправку, прохождение и истечение verification;
+- предупреждение о молодом аккаунте;
 - manual softban и unban.
 
 Сообщения логов обрезаются до 1900 символов, `allowedMentions` отключён.
@@ -220,4 +221,4 @@ POST /mahoraga/spammers/:user_id/sync-softban
 4. Опционально задать `mahoraga_log_channel_id`.
 5. Опционально создать honeypot-канал и записать его ID в `mahoraga_honeypot_channel_id`.
 6. Для тестового запуска поставить `mahoraga_enforcement_mode = monitor`.
-7. После проверки логов переключить `mahoraga_enforcement_mode = enforce`.
+7. После проверки логов переключить `mahoraga_honeypot_mode` и `mahoraga_repeat_mode` на `on`.
