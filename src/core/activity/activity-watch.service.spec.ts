@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { RequestContext } from '@mikro-orm/core';
 import { EntityManager } from '@mikro-orm/postgresql';
 import {
   type Client,
