@@ -23,6 +23,7 @@ export enum GuildSettings {
   MahoragaImageRepeatLimit = 'mahoraga_image_repeat_limit',
   MahoragaImageWindowSeconds = 'mahoraga_image_window_seconds',
   MahoragaYoungAccountMonths = 'mahoraga_young_account_months',
+  MahoragaMessageTrackingWindowSeconds = 'mahoraga_message_tracking_window_seconds',
 }
 
 export enum GuildEvents {
