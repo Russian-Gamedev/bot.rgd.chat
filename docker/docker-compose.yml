@@ -17,9 +17,9 @@ services:
       timeout: 5s
       retries: 3
     env_file:
-      - .env.production
+      - ../.env.production
     volumes:
-      - $PWD/bin/:/app/bin
+      - ../bin:/app/bin
     ports:
       - "1984:3000"
     depends_on:
@@ -41,11 +41,11 @@ services:
         max-size: 10m
         max-file: "3"
     env_file:
-      - .env.production
+      - ../.env.production
     ports:
       - ":5432"
     volumes:
-      - $PWD/docker/postgresql:/var/lib/postgresql/18/docker
+      - ./postgresql:/var/lib/postgresql/18/docker
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U root" ]
       interval: 10s
