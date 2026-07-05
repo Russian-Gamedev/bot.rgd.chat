@@ -10,7 +10,7 @@ import { RoleReactionEntity } from './entities/role-reaction.entity';
 @Injectable()
 export class RoleReactionWatcher {
   constructor(
-    private readonly em: EntityManager,
+    readonly _em: EntityManager,
     @InjectRepository(RoleReactionEntity)
     private readonly roleReactionRepository: EntityRepository<RoleReactionEntity>,
   ) {}

@@ -35,7 +35,7 @@ export class BarWatcher {
   barGateway: BarGateway;
 
   constructor(
-    private readonly em: EntityManager,
+    readonly _em: EntityManager,
     private readonly guildSettings: GuildSettingsService,
     private readonly discord: Client,
   ) {}

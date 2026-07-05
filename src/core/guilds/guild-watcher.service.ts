@@ -17,7 +17,7 @@ export class GuildWatcherService {
   private readonly logger = new Logger(GuildWatcherService.name);
 
   constructor(
-    private readonly em: EntityManager,
+    readonly _em: EntityManager,
     readonly _discord: Client,
     private readonly guildSettingsService: GuildSettingsService,
     private readonly guildEventsService: GuildEventService,
