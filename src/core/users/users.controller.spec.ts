@@ -219,7 +219,7 @@ describe('UsersController', () => {
       bot,
     });
 
-    expect(userService.getProfile).toHaveBeenCalledWith(999n);
+    expect(userService.getProfile).toHaveBeenCalledWith('999');
     expect(result.id).toBe('999');
     expect(result.username).toBe('bot-user');
     expect(result.permissions).toEqual({
