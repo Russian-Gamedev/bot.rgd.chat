@@ -135,6 +135,28 @@ export class MahoragaDiscordService {
     return results;
   }
 
+  async deleteUserMessages(
+    guildId: string,
+    entries: Array<{ channelId: string; messageId: string }>,
+  ): Promise<void> {
+    for (const { channelId, messageId } of entries) {
+      try {
+        const guild = await this.discord.guilds.fetch(guildId);
+        const channel = await guild.channels
+          .fetch(channelId)
+          .catch(() => null);
+        if (!channel?.isTextBased()) continue;
+
+        const message = await channel.messages
+          .fetch(messageId)
+          .catch(() => null);
+        if (message) await message.delete().catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   async handleMemberJoin(member: GuildMember): Promise<void> {
     if (member.user.bot) return;
     const mahoragaCase = await this.caseService.getActiveCaseByUserId(
