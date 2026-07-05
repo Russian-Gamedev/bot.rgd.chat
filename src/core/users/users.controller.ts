@@ -30,6 +30,7 @@ import { UserService } from './users.service';
 
 const USER_RESPONSE_CACHE_TTL_SECONDS = 60;
 const USER_RESPONSE_CACHE_MISS = '-';
+const USER_RESPONSE_CACHE_VERSION = 'v3';
 const PUBLIC_USER_PROFILE_DTO_OPTIONS = { excludeExtraneousValues: true };
 
 @ApiTags('Users')
@@ -62,11 +63,12 @@ export class UsersController {
     }
 
     const permissions = await this.permissionService.getActorPermissions(actor);
+    const tags = await this.userService.getPublicProfileTags(profile.user_id);
 
     return {
       ...plainToInstance(
         PublicUserProfileDto,
-        profile,
+        { ...profile, tags },
         PUBLIC_USER_PROFILE_DTO_OPTIONS,
       ),
       permissions,
@@ -88,7 +90,7 @@ export class UsersController {
   async getById(@Param('id') id: string): Promise<PublicUserProfileDto> {
     const normalizedLookup = id.trim();
     const isNumericLookup = /^\d+$/.test(normalizedLookup);
-    const cacheKey = `users:lookup-profile-response:v1:${
+    const cacheKey = `users:lookup-profile-response:${USER_RESPONSE_CACHE_VERSION}:${
       isNumericLookup
         ? BigInt(normalizedLookup).toString()
         : normalizedLookup.toLowerCase()
@@ -122,7 +124,10 @@ export class UsersController {
 
     const response = plainToInstance(
       PublicUserProfileDto,
-      profile,
+      {
+        ...profile,
+        tags: await this.userService.getPublicProfileTags(profile.user_id),
+      },
       PUBLIC_USER_PROFILE_DTO_OPTIONS,
     );
     await this.redis.set(
