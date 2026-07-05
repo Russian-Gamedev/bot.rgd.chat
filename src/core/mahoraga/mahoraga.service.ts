@@ -10,6 +10,7 @@ import {
 } from './dto/mahoraga.dto';
 import { MahoragaCaseEntity } from './entities/mahoraga-case.entity';
 import {
+  createHoneypotEmbed,
   MahoragaCaseStatus,
   MahoragaDetectionMode,
   MahoragaDetectionSettings,
@@ -54,14 +55,35 @@ export class MahoragaService {
     if (detectorMode === MahoragaDetectionMode.Monitor) {
       await this.discordService.logEvent(
         detection.guildId,
-        `Mahoraga would softban <@${detection.userId}> for ${detection.reason} in <#${detection.channelId}>.`,
+        new EmbedBuilder()
+          .setColor(0x3498db)
+          .setTitle('Mahoraga Monitor')
+          .setDescription('Softban would be applied')
+          .addFields(
+            { name: 'User', value: `<@${detection.userId}>`, inline: true },
+            { name: 'Reason', value: detection.reason, inline: true },
+            {
+              name: 'Channel',
+              value: `<#${detection.channelId}>`,
+              inline: true,
+            },
+          )
+          .setTimestamp(),
       );
       return result.case;
     }
 
     await this.discordService.logEvent(
       detection.guildId,
-      `Mahoraga detected ${detection.reason} from <@${detection.userId}> in <#${detection.channelId}>.`,
+      new EmbedBuilder()
+        .setColor(0xff8800)
+        .setTitle('Mahoraga Detection')
+        .addFields(
+          { name: 'User', value: `<@${detection.userId}>`, inline: true },
+          { name: 'Reason', value: detection.reason, inline: true },
+          { name: 'Channel', value: `<#${detection.channelId}>`, inline: true },
+        )
+        .setTimestamp(),
     );
 
     if (result.shouldApplySoftban) {
@@ -76,7 +98,13 @@ export class MahoragaService {
     ) {
       await this.discordService.logEvent(
         detection.guildId,
-        `Mahoraga attention: account <@${detection.userId}> is less than ${detection.settings.youngAccountMonths} months old.`,
+        new EmbedBuilder()
+          .setColor(0xf39c12)
+          .setTitle('Young Account Warning')
+          .setDescription(
+            `Account <@${detection.userId}> is less than ${detection.settings.youngAccountMonths} months old.`,
+          )
+          .setTimestamp(),
       );
     }
 
@@ -89,6 +117,23 @@ export class MahoragaService {
   ): Promise<void> {
     try {
       await message.delete().catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    try {
+      const entries =
+        await this.detectionService.getTrackedMessages(
+          guildId,
+          message.author.id,
+        );
+      if (entries.length > 0) {
+        await this.discordService.deleteUserMessages(guildId, entries);
+        await this.detectionService.clearTrackedMessages(
+          guildId,
+          message.author.id,
+        );
+      }
     } catch {
       // ignore
     }
@@ -189,7 +234,18 @@ export class MahoragaService {
     if (guildId) {
       await this.discordService.logEvent(
         guildId,
-        `Mahoraga manual softban: <@${userId}> by ${actorId ? `<@${actorId}>` : 'API'}.`,
+        new EmbedBuilder()
+          .setColor(0x992d22)
+          .setTitle('Manual Softban')
+          .addFields(
+            { name: 'User', value: `<@${userId}>`, inline: true },
+            {
+              name: 'Actor',
+              value: actorId ? `<@${actorId}>` : 'API',
+              inline: true,
+            },
+          )
+          .setTimestamp(),
       );
     }
 
@@ -216,7 +272,18 @@ export class MahoragaService {
     if (guildId) {
       await this.discordService.logEvent(
         guildId,
-        `Mahoraga unban: <@${userId}> by ${actorId ? `<@${actorId}>` : 'API'}.`,
+        new EmbedBuilder()
+          .setColor(0x9b59b6)
+          .setTitle('Mahoraga Unban')
+          .addFields(
+            { name: 'User', value: `<@${userId}>`, inline: true },
+            {
+              name: 'Actor',
+              value: actorId ? `<@${actorId}>` : 'API',
+              inline: true,
+            },
+          )
+          .setTimestamp(),
       );
     }
 

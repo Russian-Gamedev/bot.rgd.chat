@@ -1,3 +1,5 @@
+import { EmbedBuilder } from 'discord.js';
+
 export enum MahoragaCaseStatus {
   Observed = 'observed',
   Active = 'active',
@@ -72,4 +74,14 @@ export interface MahoragaRegisterCaseInput {
 export interface MahoragaRegisterCaseResult {
   case: import('./entities/mahoraga-case.entity').MahoragaCaseEntity;
   shouldApplySoftban: boolean;
+}
+
+export function createHoneypotEmbed(count: number): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(0xff0000)
+    .setTitle('НЕ ПИШИТЕ СЮДА СООБЩЕНИЯ')
+    .setDescription(
+      'Этот канал для рыбалки спам ботов. За любое сообщение вы получите softban. (если вы глупенький и написали, разбана не будет)',
+    )
+    .setFooter({ text: `Поймано спаммеров: ${count}` });
 }

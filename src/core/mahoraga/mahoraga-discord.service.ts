@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Client, GuildMember } from 'discord.js';
+import { Client, EmbedBuilder, GuildMember } from 'discord.js';
 
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
@@ -57,7 +57,12 @@ export class MahoragaDiscordService {
     if (!roleId) {
       await this.logEvent(
         guildId,
-        `Mahoraga softban skipped for <@${userId}>: softban role is not configured.`,
+        new EmbedBuilder()
+          .setColor(0xf1c40f)
+          .setTitle('Softban Skipped')
+          .setDescription('Softban role is not configured.')
+          .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
+          .setTimestamp(),
       );
       return { guildId, status: 'skipped', detail: 'missing softban role' };
     }
@@ -73,7 +78,12 @@ export class MahoragaDiscordService {
       if (!role) {
         await this.logEvent(
           guildId,
-          `Mahoraga softban skipped for <@${userId}>: role <@&${roleId}> was not found.`,
+          new EmbedBuilder()
+            .setColor(0xf1c40f)
+            .setTitle('Softban Skipped')
+            .setDescription(`Role <@&${roleId}> was not found.`)
+            .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
+            .setTimestamp(),
         );
         return { guildId, status: 'skipped', detail: 'role not found' };
       }
@@ -85,7 +95,14 @@ export class MahoragaDiscordService {
       await member.roles.add(role, 'Mahoraga softban');
       await this.logEvent(
         guildId,
-        `Mahoraga softban applied to <@${userId}> with <@&${roleId}>.`,
+        new EmbedBuilder()
+          .setColor(0x2ecc71)
+          .setTitle('Softban Applied')
+          .addFields(
+            { name: 'User', value: `<@${userId}>`, inline: true },
+            { name: 'Role', value: `<@&${roleId}>`, inline: true },
+          )
+          .setTimestamp(),
       );
       return { guildId, status: 'applied' };
     } catch (error) {
@@ -93,7 +110,12 @@ export class MahoragaDiscordService {
       this.logger.error(`Failed to apply softban in guild ${guildId}:`, error);
       await this.logEvent(
         guildId,
-        `Mahoraga softban failed for <@${userId}>: ${detail}`,
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle('Softban Failed')
+          .setDescription(detail)
+          .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
+          .setTimestamp(),
       );
       return { guildId, status: 'failed', detail };
     }
@@ -122,7 +144,7 @@ export class MahoragaDiscordService {
     await this.applySoftbanToGuild(member.id, member.guild.id);
   }
 
-  async logEvent(guildId: string, content: string): Promise<void> {
+  async logEvent(guildId: string, embed: EmbedBuilder): Promise<void> {
     const logChannelId = await this.guildSettings.getSetting<string>(
       guildId,
       GuildSettings.MahoragaLogChannelId,
@@ -137,10 +159,7 @@ export class MahoragaDiscordService {
         .catch(() => null);
       if (!channel?.isSendable()) return;
 
-      await channel.send({
-        content: content.slice(0, 1900),
-        allowedMentions: { parse: [] },
-      });
+      await channel.send({ embeds: [embed] });
     } catch (error) {
       this.logger.warn(
         `Could not send Mahoraga log to guild ${guildId}: ${
@@ -177,7 +196,11 @@ export class MahoragaDiscordService {
       await member.roles.remove(roleId, 'Mahoraga unban');
       await this.logEvent(
         guildId,
-        `Mahoraga softban removed from <@${userId}>.`,
+        new EmbedBuilder()
+          .setColor(0x9b59b6)
+          .setTitle('Softban Removed')
+          .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
+          .setTimestamp(),
       );
       return { guildId, status: 'applied', detail: 'removed' };
     } catch (error) {

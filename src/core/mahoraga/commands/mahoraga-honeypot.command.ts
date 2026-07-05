@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   ChannelType,
-  EmbedBuilder,
   GuildChannel,
   MessageFlags,
 } from 'discord.js';
@@ -15,7 +14,7 @@ import {
 
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
-import { MahoragaReason } from '#core/mahoraga/mahoraga.types';
+import { createHoneypotEmbed, MahoragaReason } from '#core/mahoraga/mahoraga.types';
 import { MahoragaCaseService } from '#core/mahoraga/mahoraga-case.service';
 
 import { MahoragaCommandDecorator } from './mahoraga.command';
@@ -66,13 +65,7 @@ export class MahoragaHoneypotCommand {
       guildId,
     );
 
-    const embed = new EmbedBuilder()
-      .setColor(0xff0000)
-      .setTitle('НЕ ПИШИТЕ СЮДА СООБЩЕНИЯ')
-      .setDescription(
-        'Этот канал для рыбалки спам ботов. За любое сообщение вы получите softban. (если вы глупенький и нажали разбана не будет)',
-      )
-      .setFooter({ text: `Поймано спаммеров: ${count}` });
+    const embed = createHoneypotEmbed(count);
 
     const existingMessageId = await this.guildSettings.getSetting<string>(
       guildId,
