@@ -2,12 +2,26 @@ import { raw } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Client, type Role } from 'discord.js';
 
+import { PatronEntity } from '#core/patrons/entities/patron.entity';
 import { DiscordID } from '#root/lib/types';
 
 import { DiscordProfileSyncService } from './discord-profile-sync.service';
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import { UserProfileEntity } from './entities/user-profile.entity';
+import { UserProfileTagEntity } from './entities/user-profile-tag.entity';
+
+export interface PublicUserProfileTag {
+  name: string;
+  color: string;
+  background: string;
+  description: string;
+}
+
+const PATRON_TAG_COLOR = '#5C87E7';
+const PATRON_TAG_BACKGROUND = '#FEFEFE';
+const PATRON_TAG_DESCRIPTION = 'Донат';
 
 @Injectable()
 export class UserService {
@@ -18,8 +32,13 @@ export class UserService {
     private readonly userRepository: EntityRepository<UserProfileEntity>,
     @InjectRepository(MemberProfileEntity)
     private readonly memberProfileRepository: EntityRepository<MemberProfileEntity>,
+    @InjectRepository(PatronEntity)
+    private readonly patronRepository: EntityRepository<PatronEntity>,
+    @InjectRepository(UserProfileTagEntity)
+    private readonly userProfileTagRepository: EntityRepository<UserProfileTagEntity>,
     private readonly em: EntityManager,
     private readonly discordProfileSync: DiscordProfileSyncService,
+    private readonly client: Client,
   ) {}
 
   async findOrCreateMember(
@@ -76,6 +95,34 @@ export class UserService {
       .orWhere(raw('lower(u.nickname) = ?', [normalizedName]))
       .limit(1)
       .getSingleResult();
+  }
+
+  async getPublicProfileTags(
+    userId: DiscordID,
+  ): Promise<PublicUserProfileTag[]> {
+    const user_id = BigInt(userId);
+    const tags = await this.getRoleTags(user_id);
+    const patronTag = await this.getPatronTag(user_id);
+
+    if (patronTag) {
+      tags.push(patronTag);
+    }
+
+    const customTags = await this.userProfileTagRepository.find(
+      { user_id },
+      { orderBy: { id: 'ASC' } },
+    );
+
+    tags.push(
+      ...customTags.map((tag) => ({
+        name: tag.name,
+        color: tag.color,
+        background: tag.background,
+        description: tag.description,
+      })),
+    );
+
+    return tags;
   }
 
   async save(entity: UserProfileEntity | MemberProfileEntity): Promise<void> {
@@ -189,6 +236,50 @@ export class UserService {
       );
     }
   }
+
+  private async getRoleTags(userId: bigint): Promise<PublicUserProfileTag[]> {
+    const memberships = await this.memberProfileRepository.find({
+      user_id: userId,
+      isLeftGuild: false,
+    });
+    const tags: PublicUserProfileTag[] = [];
+
+    for (const membership of memberships) {
+      const guild = await this.client.guilds
+        .fetch(membership.guild_id.toString())
+        .catch(() => null);
+      if (!guild) continue;
+
+      const member = await guild.members
+        .fetch(userId.toString())
+        .catch(() => null);
+      if (!member) continue;
+
+      const role = member.roles.cache
+        .filter((role) => role.name !== '@everyone' && !role.tags)
+        .sort((left, right) => right.position - left.position)
+        .first();
+      if (!role) continue;
+
+      tags.push(roleToTag(role));
+    }
+
+    return tags;
+  }
+
+  private async getPatronTag(
+    userId: bigint,
+  ): Promise<PublicUserProfileTag | null> {
+    const patron = await this.patronRepository.findOne({ user_id: userId });
+    if (!patron || patron.value <= 0) return null;
+
+    return {
+      name: formatDonation(patron.value),
+      color: PATRON_TAG_COLOR,
+      background: PATRON_TAG_BACKGROUND,
+      description: PATRON_TAG_DESCRIPTION,
+    };
+  }
 }
 
 function isDefaultAvatar(avatar: string): boolean {
@@ -209,4 +300,26 @@ function formatError(error: unknown): string {
   return error instanceof Error
     ? (error.stack ?? error.message)
     : String(error);
+}
+
+function roleToTag(role: Role): PublicUserProfileTag {
+  return {
+    name: role.name,
+    color: role.hexColor,
+    background: getTagBackground(role.hexColor),
+    description: `Роль на сервере ${role.guild.name}`,
+  };
+}
+
+function getTagBackground(color: string): string {
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? `${color}29` : '#5865f229';
+}
+
+function formatDonation(value: number): string {
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(value);
 }

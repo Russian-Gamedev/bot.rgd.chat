@@ -17,6 +17,24 @@ export class ActorPermissionsDto {
   guilds: Record<string, Permission[]>;
 }
 
+export class PublicUserProfileTagDto {
+  @ApiProperty({ example: 'Admin' })
+  @Expose()
+  name: string;
+
+  @ApiProperty({ example: '#ffffff' })
+  @Expose()
+  color: string;
+
+  @ApiProperty({ example: '#5865f229' })
+  @Expose()
+  background: string;
+
+  @ApiProperty({ example: 'Роль на сервере RGD' })
+  @Expose()
+  description: string;
+}
+
 export class PublicUserProfileDto {
   @ApiProperty({
     description: 'Discord User ID.',
@@ -105,6 +123,12 @@ export class PublicUserProfileDto {
     toClassOnly: true,
   })
   max_active_streak: number;
+
+  @ApiProperty({ type: [PublicUserProfileTagDto] })
+  @Expose()
+  @Type(() => PublicUserProfileTagDto)
+  @Transform(({ value }) => value ?? [], { toClassOnly: true })
+  tags: PublicUserProfileTagDto[] = [];
 }
 
 export class CurrentUserProfileDto extends PublicUserProfileDto {
