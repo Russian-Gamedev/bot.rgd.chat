@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import type { FilterQuery } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
@@ -51,31 +50,13 @@ export class MahoragaCaseService {
     return mahoragaCase;
   }
 
-  async getCaseByVerificationToken(
-    token: string,
-  ): Promise<MahoragaCaseEntity | null> {
-    return this.casesRepository.findOne({ verification_token: token });
-  }
-
   async getActiveCaseByUserId(
     userId: string,
   ): Promise<MahoragaCaseEntity | null> {
     const user_id = this.parseDiscordId(userId);
     return this.casesRepository.findOne({
       user_id,
-      status: {
-        $in: [
-          MahoragaCaseStatus.Active,
-          MahoragaCaseStatus.PendingVerification,
-        ],
-      },
-    });
-  }
-
-  async getExpiredVerificationCases(): Promise<MahoragaCaseEntity[]> {
-    return this.casesRepository.find({
-      status: MahoragaCaseStatus.PendingVerification,
-      verification_expires_at: { $lte: new Date() },
+      status: MahoragaCaseStatus.Active,
     });
   }
 
@@ -91,9 +72,6 @@ export class MahoragaCaseService {
       (!mahoragaCase ||
         mahoragaCase.status === MahoragaCaseStatus.Pardoned ||
         mahoragaCase.status === MahoragaCaseStatus.Observed);
-    const shouldSendVerification =
-      shouldApplySoftban &&
-      input.status === MahoragaCaseStatus.PendingVerification;
 
     if (!mahoragaCase) {
       mahoragaCase = new MahoragaCaseEntity();
@@ -123,19 +101,6 @@ export class MahoragaCaseService {
     mahoragaCase.last_detected_at = now;
 
     if (
-      nextStatus === MahoragaCaseStatus.PendingVerification &&
-      shouldSendVerification
-    ) {
-      mahoragaCase.verification_token ??= this.createVerificationToken();
-      mahoragaCase.verification_expires_at = new Date(
-        now.getTime() + (input.verificationTimeoutMinutes ?? 30) * 60_000,
-      );
-    } else if (nextStatus !== MahoragaCaseStatus.PendingVerification) {
-      mahoragaCase.verification_token = null;
-      mahoragaCase.verification_expires_at = null;
-    }
-
-    if (
       previousStatus === MahoragaCaseStatus.Pardoned &&
       nextStatus !== MahoragaCaseStatus.Pardoned
     ) {
@@ -145,7 +110,7 @@ export class MahoragaCaseService {
     }
 
     await this.save(mahoragaCase);
-    return { case: mahoragaCase, shouldApplySoftban, shouldSendVerification };
+    return { case: mahoragaCase, shouldApplySoftban };
   }
 
   async pardonCase(
@@ -157,8 +122,6 @@ export class MahoragaCaseService {
     const now = new Date();
 
     mahoragaCase.status = MahoragaCaseStatus.Pardoned;
-    mahoragaCase.verification_token = null;
-    mahoragaCase.verification_expires_at = null;
     mahoragaCase.pardoned_at = now;
     mahoragaCase.pardoned_by = actorId ? this.parseDiscordId(actorId) : null;
     mahoragaCase.pardon_reason = reason ?? null;
@@ -169,16 +132,6 @@ export class MahoragaCaseService {
       createdAt: now.toISOString(),
     });
 
-    await this.save(mahoragaCase);
-    return mahoragaCase;
-  }
-
-  async activatePendingCase(
-    mahoragaCase: MahoragaCaseEntity,
-  ): Promise<MahoragaCaseEntity> {
-    mahoragaCase.status = MahoragaCaseStatus.Active;
-    mahoragaCase.verification_token = null;
-    mahoragaCase.verification_expires_at = null;
     await this.save(mahoragaCase);
     return mahoragaCase;
   }
@@ -201,7 +154,7 @@ export class MahoragaCaseService {
     if (
       requested === MahoragaCaseStatus.Observed &&
       (currentStatus === MahoragaCaseStatus.Active ||
-        currentStatus === MahoragaCaseStatus.PendingVerification)
+        currentStatus === MahoragaCaseStatus.Observed)
     ) {
       return currentStatus;
     }
@@ -214,9 +167,5 @@ export class MahoragaCaseService {
     evidence: MahoragaEvidence,
   ): MahoragaEvidence[] {
     return [...current, evidence].slice(-MAX_EVIDENCE_ITEMS);
-  }
-
-  private createVerificationToken(): string {
-    return randomBytes(16).toString('hex');
   }
 }

@@ -13,7 +13,6 @@ import { MahoragaWatcher } from './mahoraga.watcher';
 import { MahoragaCaseService } from './mahoraga-case.service';
 import { MahoragaDetectionService } from './mahoraga-detection.service';
 import { MahoragaDiscordService } from './mahoraga-discord.service';
-import { MahoragaVerificationService } from './mahoraga-verification.service';
 
 @Module({
   imports: [
@@ -28,7 +27,6 @@ import { MahoragaVerificationService } from './mahoraga-verification.service';
     MahoragaCaseService,
     MahoragaDetectionService,
     MahoragaDiscordService,
-    MahoragaVerificationService,
     MahoragaService,
     MahoragaWatcher,
     ...commands,

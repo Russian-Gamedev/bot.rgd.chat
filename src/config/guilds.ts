@@ -12,7 +12,9 @@ export enum GuildSettings {
   BirthdayRoleId = 'birthday_role_id',
   CreateBirthdayEvents = 'create_birthday_events',
   MahoragaEnabled = 'mahoraga_enabled',
-  MahoragaEnforcementMode = 'mahoraga_enforcement_mode',
+  MahoragaHoneypotMode = 'mahoraga_honeypot_mode',
+  MahoragaRepeatMode = 'mahoraga_repeat_mode',
+  MahoragaYoungAccountMode = 'mahoraga_young_account_mode',
   MahoragaHoneypotChannelId = 'mahoraga_honeypot_channel_id',
   MahoragaSoftbanRoleId = 'mahoraga_softban_role_id',
   MahoragaLogChannelId = 'mahoraga_log_channel_id',
@@ -23,7 +25,6 @@ export enum GuildSettings {
   MahoragaImageRepeatLimit = 'mahoraga_image_repeat_limit',
   MahoragaImageWindowSeconds = 'mahoraga_image_window_seconds',
   MahoragaYoungAccountMonths = 'mahoraga_young_account_months',
-  MahoragaVerificationTimeoutMinutes = 'mahoraga_verification_timeout_minutes',
 }
 
 export enum GuildEvents {

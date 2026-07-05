@@ -8,17 +8,14 @@ import {
 import { MahoragaCaseEntity } from './entities/mahoraga-case.entity';
 import {
   MahoragaCaseStatus,
-  MahoragaEnforcementMode,
+  MahoragaDetectionMode,
+  MahoragaDetectionSettings,
   MahoragaReason,
   MahoragaSoftbanResult,
 } from './mahoraga.types';
 import { MahoragaCaseService } from './mahoraga-case.service';
 import { MahoragaDetectionService } from './mahoraga-detection.service';
 import { MahoragaDiscordService } from './mahoraga-discord.service';
-import {
-  MahoragaVerificationResult,
-  MahoragaVerificationService,
-} from './mahoraga-verification.service';
 
 @Injectable()
 export class MahoragaService {
@@ -26,7 +23,6 @@ export class MahoragaService {
     private readonly detectionService: MahoragaDetectionService,
     private readonly caseService: MahoragaCaseService,
     private readonly discordService: MahoragaDiscordService,
-    private readonly verificationService: MahoragaVerificationService,
   ) {}
 
   async inspectMessage(message: Message): Promise<MahoragaCaseEntity | null> {
@@ -38,12 +34,14 @@ export class MahoragaService {
       status: detection.status,
       reason: detection.reason,
       evidence: detection.evidence,
-      verificationTimeoutMinutes: detection.settings.verificationTimeoutMinutes,
     });
 
-    if (
-      detection.settings.enforcementMode === MahoragaEnforcementMode.Monitor
-    ) {
+    const detectorMode = this.getDetectorMode(
+      detection.settings,
+      detection.reason,
+    );
+
+    if (detectorMode === MahoragaDetectionMode.Monitor) {
       await this.discordService.logEvent(
         detection.guildId,
         `Mahoraga would softban <@${detection.userId}> for ${detection.reason} in <#${detection.channelId}>.`,
@@ -60,11 +58,35 @@ export class MahoragaService {
       await this.discordService.applySoftbanToAllGuilds(detection.userId);
     }
 
-    if (result.shouldSendVerification) {
-      await this.verificationService.sendVerification(result.case);
+    const cutoff =
+      Date.now() - detection.settings.youngAccountMonths * 30 * 86_400_000;
+    if (
+      message.author.createdTimestamp >= cutoff &&
+      detection.settings.youngAccountMode === MahoragaDetectionMode.On
+    ) {
+      await this.discordService.logEvent(
+        detection.guildId,
+        `Mahoraga attention: account <@${detection.userId}> is less than ${detection.settings.youngAccountMonths} months old.`,
+      );
     }
 
     return result.case;
+  }
+
+  private getDetectorMode(
+    settings: MahoragaDetectionSettings,
+    reason: MahoragaReason,
+  ): MahoragaDetectionMode {
+    switch (reason) {
+      case MahoragaReason.Honeypot:
+        return settings.honeypotMode;
+      case MahoragaReason.TextRepeat:
+      case MahoragaReason.LinkRepeat:
+      case MahoragaReason.ImageRepeat:
+        return settings.repeatMode;
+      default:
+        return MahoragaDetectionMode.On;
+    }
   }
 
   listCases(query: MahoragaListQueryDto): Promise<MahoragaCaseEntity[]> {
@@ -154,12 +176,5 @@ export class MahoragaService {
 
   handleMemberJoin(member: GuildMember): Promise<void> {
     return this.discordService.handleMemberJoin(member);
-  }
-
-  verifyByToken(
-    token: string,
-    interactionUserId: string,
-  ): Promise<MahoragaVerificationResult> {
-    return this.verificationService.verifyByToken(token, interactionUserId);
   }
 }

@@ -16,8 +16,8 @@ import {
 import {
   MahoragaCaseStatus,
   MahoragaDetection,
+  MahoragaDetectionMode,
   MahoragaDetectionSettings,
-  MahoragaEnforcementMode,
   MahoragaEvidence,
   MahoragaReason,
 } from './mahoraga.types';
@@ -29,7 +29,6 @@ const LINK_WINDOW_SECONDS = 60;
 const IMAGE_REPEAT_LIMIT = 2;
 const IMAGE_WINDOW_SECONDS = 600;
 const YOUNG_ACCOUNT_MONTHS = 3;
-const VERIFICATION_TIMEOUT_MINUTES = 30;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 @Injectable()
@@ -53,7 +52,11 @@ export class MahoragaDetectionService {
       GuildSettings.MahoragaHoneypotChannelId,
       null,
     );
-    if (honeypotChannelId && message.channelId === honeypotChannelId) {
+    if (
+      settings.honeypotMode !== MahoragaDetectionMode.Off &&
+      honeypotChannelId &&
+      message.channelId === honeypotChannelId
+    ) {
       return this.buildDetection(
         message,
         settings,
@@ -62,70 +65,72 @@ export class MahoragaDetectionService {
       );
     }
 
-    for (const url of extractNormalizedUrls(message.content)) {
-      const isRepeated = await this.hitDetector(
-        'link',
-        guildId,
-        message.author.id,
-        url,
-        settings.linkRepeatLimit,
-        settings.linkWindowSeconds,
-      );
-      if (isRepeated) {
-        return this.buildDetection(
-          message,
-          settings,
-          MahoragaReason.LinkRepeat,
+    if (settings.repeatMode !== MahoragaDetectionMode.Off) {
+      for (const url of extractNormalizedUrls(message.content)) {
+        const isRepeated = await this.hitDetector(
+          'link',
+          guildId,
+          message.author.id,
           url,
-          { url },
+          settings.linkRepeatLimit,
+          settings.linkWindowSeconds,
         );
+        if (isRepeated) {
+          return this.buildDetection(
+            message,
+            settings,
+            MahoragaReason.LinkRepeat,
+            url,
+            { url },
+          );
+        }
       }
-    }
 
-    const imageHashes = new Set<string>();
-    for (const attachment of message.attachments.values()) {
-      const imageHash = await this.getImageAttachmentHash(attachment);
-      if (!imageHash || imageHashes.has(imageHash)) continue;
-      imageHashes.add(imageHash);
+      const imageHashes = new Set<string>();
+      for (const attachment of message.attachments.values()) {
+        const imageHash = await this.getImageAttachmentHash(attachment);
+        if (!imageHash || imageHashes.has(imageHash)) continue;
+        imageHashes.add(imageHash);
 
-      const isRepeated = await this.hitDetector(
-        'image',
-        guildId,
-        message.author.id,
-        imageHash,
-        settings.imageRepeatLimit,
-        settings.imageWindowSeconds,
-      );
-      if (isRepeated) {
-        return this.buildDetection(
-          message,
-          settings,
-          MahoragaReason.ImageRepeat,
+        const isRepeated = await this.hitDetector(
+          'image',
+          guildId,
+          message.author.id,
           imageHash,
-          { imageHash },
+          settings.imageRepeatLimit,
+          settings.imageWindowSeconds,
         );
+        if (isRepeated) {
+          return this.buildDetection(
+            message,
+            settings,
+            MahoragaReason.ImageRepeat,
+            imageHash,
+            { imageHash },
+          );
+        }
       }
-    }
 
-    const normalizedText = normalizeMessageText(message.content);
-    if (normalizedText.length >= 4) {
-      const textHash = hashValue(normalizedText);
-      const isRepeated = await this.hitDetector(
-        'text',
-        guildId,
-        message.author.id,
-        textHash,
-        settings.textRepeatLimit,
-        settings.textWindowSeconds,
-      );
-      if (isRepeated) {
-        return this.buildDetection(
-          message,
-          settings,
-          MahoragaReason.TextRepeat,
+      const normalizedText = normalizeMessageText(message.content);
+      if (normalizedText.length >= 4) {
+        const textHash = hashValue(normalizedText);
+        const isRepeated = await this.hitDetector(
+          'text',
+          guildId,
+          message.author.id,
           textHash,
-          { textHash },
+          settings.textRepeatLimit,
+          settings.textWindowSeconds,
         );
+        if (isRepeated) {
+          return this.buildDetection(
+            message,
+            settings,
+            MahoragaReason.TextRepeat,
+            textHash,
+            { textHash },
+          );
+        }
       }
     }
 
@@ -139,13 +144,11 @@ export class MahoragaDetectionService {
     matchedValue: string,
     extra: Partial<MahoragaEvidence> = {},
   ): MahoragaDetection {
+    const detectorMode = this.getDetectorMode(settings, reason);
     const status =
-      settings.enforcementMode === MahoragaEnforcementMode.Monitor
+      detectorMode === MahoragaDetectionMode.Monitor
         ? MahoragaCaseStatus.Observed
-        : this.getEnforcedStatus(
-            message.author.createdTimestamp,
-            settings.youngAccountMonths,
-          );
+        : this.getEnforcedStatus(message.author.createdTimestamp, settings);
 
     return {
       userId: message.author.id,
@@ -168,13 +171,10 @@ export class MahoragaDetectionService {
   }
 
   private getEnforcedStatus(
-    createdTimestamp: number,
-    youngAccountMonths: number,
+    _createdTimestamp: number,
+    _settings: MahoragaDetectionSettings,
   ): MahoragaCaseStatus {
-    const cutoff = Date.now() - youngAccountMonths * 30 * 86_400_000;
-    return createdTimestamp >= cutoff
-      ? MahoragaCaseStatus.PendingVerification
-      : MahoragaCaseStatus.Active;
+    return MahoragaCaseStatus.Active;
   }
 
   private async shouldIgnoreMessage(message: Message): Promise<boolean> {
@@ -239,12 +239,21 @@ export class MahoragaDetectionService {
         GuildSettings.MahoragaYoungAccountMonths,
         YOUNG_ACCOUNT_MONTHS,
       ),
-      verificationTimeoutMinutes: await this.getNumberSetting(
+      honeypotMode: await this.getModeSetting(
         guildId,
-        GuildSettings.MahoragaVerificationTimeoutMinutes,
-        VERIFICATION_TIMEOUT_MINUTES,
+        GuildSettings.MahoragaHoneypotMode,
+        MahoragaDetectionMode.On,
       ),
-      enforcementMode: await this.getEnforcementMode(guildId),
+      repeatMode: await this.getModeSetting(
+        guildId,
+        GuildSettings.MahoragaRepeatMode,
+        MahoragaDetectionMode.On,
+      ),
+      youngAccountMode: await this.getModeSetting(
+        guildId,
+        GuildSettings.MahoragaYoungAccountMode,
+        MahoragaDetectionMode.On,
+      ),
     };
   }
 
@@ -262,17 +271,36 @@ export class MahoragaDetectionService {
     return value;
   }
 
-  private async getEnforcementMode(
+  private async getModeSetting(
     guildId: string,
-  ): Promise<MahoragaEnforcementMode> {
+    key: GuildSettings,
+    fallback: MahoragaDetectionMode,
+  ): Promise<MahoragaDetectionMode> {
     const value = await this.guildSettings.getSetting<string>(
       guildId,
-      GuildSettings.MahoragaEnforcementMode,
-      MahoragaEnforcementMode.Enforce,
+      key,
+      fallback,
     );
-    return value === MahoragaEnforcementMode.Monitor
-      ? MahoragaEnforcementMode.Monitor
-      : MahoragaEnforcementMode.Enforce;
+    if (value === MahoragaDetectionMode.Off) return MahoragaDetectionMode.Off;
+    if (value === MahoragaDetectionMode.Monitor)
+      return MahoragaDetectionMode.Monitor;
+    return MahoragaDetectionMode.On;
+  }
+
+  private getDetectorMode(
+    settings: MahoragaDetectionSettings,
+    reason: MahoragaReason,
+  ): MahoragaDetectionMode {
+    switch (reason) {
+      case MahoragaReason.Honeypot:
+        return settings.honeypotMode;
+      case MahoragaReason.TextRepeat:
+      case MahoragaReason.LinkRepeat:
+      case MahoragaReason.ImageRepeat:
+        return settings.repeatMode;
+      default:
+        return MahoragaDetectionMode.On;
+    }
   }
 
   private async hitDetector(

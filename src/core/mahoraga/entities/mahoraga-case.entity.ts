@@ -54,12 +54,6 @@ export class MahoragaCaseEntity extends BaseEntity {
   @Property({ type: 'timestamptz', defaultRaw: 'now()' })
   last_detected_at = new Date();
 
-  @Property({ type: 'text', nullable: true, unique: true })
-  verification_token: string | null = null;
-
-  @Property({ type: 'timestamptz', nullable: true })
-  verification_expires_at: Date | null = null;
-
   @Property({ type: 'timestamptz', nullable: true })
   pardoned_at: Date | null = null;
 

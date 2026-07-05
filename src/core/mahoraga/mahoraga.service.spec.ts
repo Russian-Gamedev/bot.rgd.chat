@@ -10,13 +10,12 @@ import { MahoragaCaseEntity } from './entities/mahoraga-case.entity';
 import { MahoragaService } from './mahoraga.service';
 import {
   MahoragaCaseStatus,
-  MahoragaEnforcementMode,
+  MahoragaDetectionMode,
   MahoragaReason,
 } from './mahoraga.types';
 import { MahoragaCaseService } from './mahoraga-case.service';
 import { MahoragaDetectionService } from './mahoraga-detection.service';
 import { MahoragaDiscordService } from './mahoraga-discord.service';
-import { MahoragaVerificationService } from './mahoraga-verification.service';
 
 const USER_ID = '111111111111111111';
 const GUILD_ID = '222222222222222222';
@@ -33,12 +32,6 @@ function createRepository(getStored: () => MahoragaCaseEntity | null) {
       if (!stored) return null;
 
       if ('user_id' in query && query.user_id !== stored.user_id) return null;
-      if (
-        'verification_token' in query &&
-        query.verification_token !== stored.verification_token
-      ) {
-        return null;
-      }
       if ('status' in query) {
         const status = query.status as
           | MahoragaCaseStatus
@@ -88,7 +81,6 @@ describe('MahoragaService', () => {
   let settings: Partial<Record<GuildSettings, unknown>>;
   let roleAdd: ReturnType<typeof mock>;
   let roleRemove: ReturnType<typeof mock>;
-  let dmSend: ReturnType<typeof mock>;
   let logSend: ReturnType<typeof mock>;
   let redisStorage: Map<string, number>;
   let hasSoftbanRole: boolean;
@@ -98,13 +90,14 @@ describe('MahoragaService', () => {
     redisStorage = new Map();
     roleAdd = mock(async () => undefined);
     roleRemove = mock(async () => undefined);
-    dmSend = mock(async () => undefined);
     logSend = mock(async () => undefined);
     hasSoftbanRole = false;
 
     settings = {
       [GuildSettings.MahoragaEnabled]: true,
-      [GuildSettings.MahoragaEnforcementMode]: MahoragaEnforcementMode.Enforce,
+      [GuildSettings.MahoragaHoneypotMode]: MahoragaDetectionMode.On,
+      [GuildSettings.MahoragaRepeatMode]: MahoragaDetectionMode.On,
+      [GuildSettings.MahoragaYoungAccountMode]: MahoragaDetectionMode.Off,
       [GuildSettings.MahoragaSoftbanRoleId]: ROLE_ID,
       [GuildSettings.MahoragaHoneypotChannelId]: HONEYPOT_CHANNEL_ID,
       [GuildSettings.MahoragaLogChannelId]: CHANNEL_ID,
@@ -113,7 +106,6 @@ describe('MahoragaService', () => {
       [GuildSettings.MahoragaLinkRepeatLimit]: 3,
       [GuildSettings.MahoragaLinkWindowSeconds]: 60,
       [GuildSettings.MahoragaYoungAccountMonths]: 3,
-      [GuildSettings.MahoragaVerificationTimeoutMinutes]: 30,
     };
 
     const repository = createRepository(() => storedCase);
@@ -169,7 +161,7 @@ describe('MahoragaService', () => {
       },
       users: {
         fetch: mock(async () => ({
-          send: dmSend,
+          send: mock(async () => undefined),
         })),
       },
     } as unknown as Client;
@@ -184,13 +176,12 @@ describe('MahoragaService', () => {
       new MahoragaDetectionService(redis, guildSettings),
       caseService,
       discordService,
-      new MahoragaVerificationService(discord, caseService, discordService),
     );
   });
 
-  it('creates an observed case in monitor mode without softban or verification', async () => {
-    settings[GuildSettings.MahoragaEnforcementMode] =
-      MahoragaEnforcementMode.Monitor;
+  it('creates an observed case in monitor mode without softban', async () => {
+    settings[GuildSettings.MahoragaHoneypotMode] =
+      MahoragaDetectionMode.Monitor;
 
     const result = await service.inspectMessage(
       createMessage({
@@ -206,7 +197,6 @@ describe('MahoragaService', () => {
     expect(result?.status).toBe(MahoragaCaseStatus.Observed);
     expect(result?.reason).toBe(MahoragaReason.Honeypot);
     expect(roleAdd).not.toHaveBeenCalled();
-    expect(dmSend).not.toHaveBeenCalled();
     expect(
       logSend.mock.calls.some(([payload]) =>
         String((payload as { content?: string }).content).includes(
@@ -217,8 +207,8 @@ describe('MahoragaService', () => {
   });
 
   it('promotes observed cases when enforcement mode is enabled later', async () => {
-    settings[GuildSettings.MahoragaEnforcementMode] =
-      MahoragaEnforcementMode.Monitor;
+    settings[GuildSettings.MahoragaHoneypotMode] =
+      MahoragaDetectionMode.Monitor;
 
     await service.inspectMessage(
       createMessage({ channelId: HONEYPOT_CHANNEL_ID }),
@@ -226,8 +216,7 @@ describe('MahoragaService', () => {
     expect(storedCase?.status).toBe(MahoragaCaseStatus.Observed);
     expect(roleAdd).not.toHaveBeenCalled();
 
-    settings[GuildSettings.MahoragaEnforcementMode] =
-      MahoragaEnforcementMode.Enforce;
+    settings[GuildSettings.MahoragaHoneypotMode] = MahoragaDetectionMode.On;
 
     const result = await service.inspectMessage(
       createMessage({ channelId: HONEYPOT_CHANNEL_ID }),
@@ -262,6 +251,29 @@ describe('MahoragaService', () => {
     expect(result?.reason).toBe(MahoragaReason.Honeypot);
     expect(result?.source_guild_id).toBe(BigInt(GUILD_ID));
     expect(roleAdd).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs attention for young accounts with softban when youngAccountMode is on', async () => {
+    settings[GuildSettings.MahoragaYoungAccountMode] = MahoragaDetectionMode.On;
+
+    const result = await service.inspectMessage(
+      createMessage({
+        channelId: HONEYPOT_CHANNEL_ID,
+        author: {
+          id: USER_ID,
+          bot: false,
+          createdTimestamp: Date.now(),
+        },
+      }),
+    );
+
+    expect(result?.status).toBe(MahoragaCaseStatus.Active);
+    expect(roleAdd).toHaveBeenCalledTimes(2);
+    expect(
+      logSend.mock.calls.some(([payload]) =>
+        String((payload as { content?: string }).content).includes('attention'),
+      ),
+    ).toBe(true);
   });
 
   it('creates one case when repeated links reach the configured threshold', async () => {
@@ -308,41 +320,5 @@ describe('MahoragaService', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
-  });
-
-  it('activates young-account cases when DM verification cannot be sent', async () => {
-    dmSend.mockRejectedValueOnce(
-      new Error('Cannot send messages to this user'),
-    );
-
-    const result = await service.inspectMessage(
-      createMessage({
-        channelId: HONEYPOT_CHANNEL_ID,
-        author: {
-          id: USER_ID,
-          bot: false,
-          createdTimestamp: Date.now(),
-        },
-      }),
-    );
-
-    expect(result?.status).toBe(MahoragaCaseStatus.Active);
-    expect(result?.verification_token).toBeNull();
-  });
-
-  it('pardons pending cases when verification token is valid', async () => {
-    const mahoragaCase = new MahoragaCaseEntity();
-    mahoragaCase.user_id = BigInt(USER_ID);
-    mahoragaCase.status = MahoragaCaseStatus.PendingVerification;
-    mahoragaCase.reason = MahoragaReason.Honeypot;
-    mahoragaCase.source_guild_id = BigInt(GUILD_ID);
-    mahoragaCase.verification_token = 'token';
-    mahoragaCase.verification_expires_at = new Date(Date.now() + 60_000);
-    storedCase = mahoragaCase;
-    hasSoftbanRole = true;
-
-    expect(await service.verifyByToken('token', USER_ID)).toBe('verified');
-    expect(storedCase.status).toBe(MahoragaCaseStatus.Pardoned);
-    expect(roleRemove).toHaveBeenCalledTimes(2);
   });
 });

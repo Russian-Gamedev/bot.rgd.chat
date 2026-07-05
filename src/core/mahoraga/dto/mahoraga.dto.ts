@@ -78,7 +78,6 @@ export class MahoragaCaseResponseDto {
   detection_count: number;
   detected_at: Date;
   last_detected_at: Date;
-  verification_expires_at: Date | null;
   pardoned_at: Date | null;
   pardoned_by: string | null;
   pardon_reason: string | null;
@@ -99,7 +98,6 @@ export class MahoragaCaseResponseDto {
     dto.detection_count = mahoragaCase.detection_count;
     dto.detected_at = mahoragaCase.detected_at;
     dto.last_detected_at = mahoragaCase.last_detected_at;
-    dto.verification_expires_at = mahoragaCase.verification_expires_at;
     dto.pardoned_at = mahoragaCase.pardoned_at;
     dto.pardoned_by = mahoragaCase.pardoned_by?.toString() ?? null;
     dto.pardon_reason = mahoragaCase.pardon_reason;

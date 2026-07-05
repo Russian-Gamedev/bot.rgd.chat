@@ -1,13 +1,13 @@
 export enum MahoragaCaseStatus {
   Observed = 'observed',
-  PendingVerification = 'pending_verification',
   Active = 'active',
   Pardoned = 'pardoned',
 }
 
-export enum MahoragaEnforcementMode {
-  Enforce = 'enforce',
+export enum MahoragaDetectionMode {
+  Off = 'off',
   Monitor = 'monitor',
+  On = 'on',
 }
 
 export enum MahoragaReason {
@@ -47,8 +47,9 @@ export interface MahoragaDetectionSettings {
   imageRepeatLimit: number;
   imageWindowSeconds: number;
   youngAccountMonths: number;
-  verificationTimeoutMinutes: number;
-  enforcementMode: MahoragaEnforcementMode;
+  honeypotMode: MahoragaDetectionMode;
+  repeatMode: MahoragaDetectionMode;
+  youngAccountMode: MahoragaDetectionMode;
 }
 
 export interface MahoragaDetection {
@@ -66,11 +67,9 @@ export interface MahoragaRegisterCaseInput {
   status: MahoragaCaseStatus;
   reason: MahoragaReason;
   evidence: MahoragaEvidence;
-  verificationTimeoutMinutes?: number;
 }
 
 export interface MahoragaRegisterCaseResult {
   case: import('./entities/mahoraga-case.entity').MahoragaCaseEntity;
   shouldApplySoftban: boolean;
-  shouldSendVerification: boolean;
 }
