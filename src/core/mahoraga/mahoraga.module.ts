@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { RedisModule } from '#common/redis.module';
 import { BotsModule } from '#core/bots/bots.module';
 import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
+import { PermissionsModule } from '#core/permissions/permissions.module';
 import { commands } from './commands';
 import { MahoragaCaseEntity } from './entities/mahoraga-case.entity';
 import { MahoragaController } from './mahoraga.controller';
@@ -20,6 +21,7 @@ import { MahoragaVerificationService } from './mahoraga-verification.service';
     RedisModule,
     GuildSettingsModule,
     BotsModule,
+    PermissionsModule,
   ],
   controllers: [MahoragaController],
   providers: [
