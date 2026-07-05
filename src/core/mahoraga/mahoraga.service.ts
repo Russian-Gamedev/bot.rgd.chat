@@ -153,13 +153,7 @@ export class MahoragaService {
         MahoragaReason.Honeypot,
         guildId,
       );
-      const embed = new EmbedBuilder()
-        .setColor(0xff0000)
-        .setTitle('НЕ ПИШИТЕ СЮДА СООБЩЕНИЯ')
-        .setDescription(
-          'Этот канал для рыбалки спам ботов. За любое сообщение вы получите softban. (если вы глупенький и нажали разбана не будет)',
-        )
-        .setFooter({ text: `Поймано спаммеров: ${count}` });
+      const embed = createHoneypotEmbed(count);
 
       const embedMessage = await channel.messages
         .fetch(messageId)

@@ -49,6 +49,7 @@ export interface MahoragaDetectionSettings {
   imageRepeatLimit: number;
   imageWindowSeconds: number;
   youngAccountMonths: number;
+  messageTrackingWindowSeconds: number;
   honeypotMode: MahoragaDetectionMode;
   repeatMode: MahoragaDetectionMode;
   youngAccountMode: MahoragaDetectionMode;

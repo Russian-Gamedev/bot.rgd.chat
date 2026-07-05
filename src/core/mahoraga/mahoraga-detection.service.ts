@@ -29,6 +29,7 @@ const LINK_WINDOW_SECONDS = 60;
 const IMAGE_REPEAT_LIMIT = 2;
 const IMAGE_WINDOW_SECONDS = 600;
 const YOUNG_ACCOUNT_MONTHS = 3;
+const MESSAGE_TRACKING_WINDOW_SECONDS = 600;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 @Injectable()
@@ -46,6 +47,14 @@ export class MahoragaDetectionService {
 
     const guildId = message.guildId!;
     const settings = await this.getDetectionSettings(guildId);
+
+    await this.trackMessage(
+      guildId,
+      message.author.id,
+      message.channelId,
+      message.id,
+      settings.messageTrackingWindowSeconds,
+    );
 
     const honeypotChannelId = await this.guildSettings.getSetting<string>(
       guildId,
@@ -234,6 +243,11 @@ export class MahoragaDetectionService {
         GuildSettings.MahoragaImageWindowSeconds,
         IMAGE_WINDOW_SECONDS,
       ),
+      messageTrackingWindowSeconds: await this.getNumberSetting(
+        guildId,
+        GuildSettings.MahoragaMessageTrackingWindowSeconds,
+        MESSAGE_TRACKING_WINDOW_SECONDS,
+      ),
       youngAccountMonths: await this.getNumberSetting(
         guildId,
         GuildSettings.MahoragaYoungAccountMonths,
@@ -315,6 +329,36 @@ export class MahoragaDetectionService {
       value,
     )}`;
     return hitFixedWindowThreshold(this.redis, key, limit, windowSeconds);
+  }
+
+  private async trackMessage(
+    guildId: string,
+    userId: string,
+    channelId: string,
+    messageId: string,
+    windowSeconds: number,
+  ): Promise<void> {
+    if (windowSeconds < 1) return;
+    const key = `mahoraga:messages:${guildId}:${userId}`;
+    await this.redis.sadd(key, `${channelId}:${messageId}`);
+    await this.redis.expire(key, windowSeconds);
+  }
+
+  async getTrackedMessages(
+    guildId: string,
+    userId: string,
+  ): Promise<Array<{ channelId: string; messageId: string }>> {
+    const entries = await this.redis.smembers(
+      `mahoraga:messages:${guildId}:${userId}`,
+    );
+    return entries.map((entry) => {
+      const [channelId, messageId] = entry.split(':');
+      return { channelId, messageId };
+    });
+  }
+
+  async clearTrackedMessages(guildId: string, userId: string): Promise<void> {
+    await this.redis.del(`mahoraga:messages:${guildId}:${userId}`);
   }
 
   private async getImageAttachmentHash(
