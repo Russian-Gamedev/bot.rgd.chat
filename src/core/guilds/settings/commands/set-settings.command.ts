@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseInterceptors } from '@nestjs/common';
 import { MessageFlags } from 'discord.js';
 import { Context, Options, type SlashCommandContext, Subcommand } from 'necord';
 
@@ -6,14 +6,15 @@ import { GuildSettings } from '#config/guilds';
 
 import { SetSettingDto } from '../dto/set-setting.dto';
 import { GuildSettingsService } from '../guild-settings.service';
-
 import { SettingsCommandDecorator } from './group.decorator';
+import { SetSettingsAutocompleteInterceptor } from './set-settings.autocomplete';
 
 @SettingsCommandDecorator()
 @Injectable()
 export class SetGuildSettingsCommand {
   constructor(private readonly guildSettingsService: GuildSettingsService) {}
 
+  @UseInterceptors(SetSettingsAutocompleteInterceptor)
   @Subcommand({
     name: 'set-raw',
     description: 'Set a guild setting',
