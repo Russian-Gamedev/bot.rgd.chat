@@ -2,6 +2,7 @@ import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { ActivityType, Client } from 'discord.js';
 import Redis from 'ioredis';
 import { On } from 'necord';
@@ -10,10 +11,11 @@ import { GuildSettingsService } from '../settings/guild-settings.service';
 import { MotdEntity } from './entities/motd.entity';
 import initRuntimeMotds from './runtime-motds';
 
+const BOT_MOTD_INTERVAL = 60 * 1000;
+
 @Injectable()
 export class MotdService {
   private readonly logger = new Logger(MotdService.name);
-  private readonly INTERVAL = 60 * 1000; // 1 minute
   private readonly MOTD_CACHE_KEY = 'motd:queue';
   private readonly LIST_CACHE_KEY = 'motd:list:v1';
   private readonly LIST_CACHE_TTL_SECONDS = 60 * 60;
@@ -39,10 +41,13 @@ export class MotdService {
   async onBotReady() {
     /// fires immediately on startup to set the bot's MOTD status, then every minute via the Interval
     await this.setBotMotd();
-    setInterval(() => this.setBotMotd(), this.INTERVAL);
+  }
 
-    const last = await this.runtimeMotdFunctions?.at(-1)?.();
-    console.log(last);
+  @Interval('bot-motd', BOT_MOTD_INTERVAL)
+  @EnsureRequestContext()
+  async setBotMotdInterval() {
+    if (!this.client.isReady()) return;
+    await this.setBotMotd();
   }
 
   private async loadMotd() {
@@ -155,12 +160,13 @@ export class MotdService {
   }
 
   async setBotMotd() {
-    const motd = await this.getMotd();
-    if (!motd) {
-      this.logger.warn('No MOTD found to set as bot status.');
-      return;
-    }
     try {
+      const motd = await this.getMotd();
+      if (!motd) {
+        this.logger.warn('No MOTD found to set as bot status.');
+        return;
+      }
+
       this.client.user?.setActivity(motd, { type: ActivityType.Playing });
       this.currentMotd = motd;
     } catch (error) {
