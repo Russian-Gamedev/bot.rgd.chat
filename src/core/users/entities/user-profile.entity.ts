@@ -2,6 +2,17 @@ import { Entity, PrimaryKey, Property } from '@mikro-orm/decorators/legacy';
 
 import { BaseEntity } from '#common/entities/base.entity';
 
+export interface UserProfileLinkInfo {
+  label: string;
+  icon: string;
+  url: string;
+}
+
+export interface UserProfileInfo extends Record<string, unknown> {
+  about?: string | null;
+  links?: UserProfileLinkInfo[];
+}
+
 @Entity({ tableName: 'users' })
 export class UserProfileEntity extends BaseEntity {
   @PrimaryKey({ type: 'bigint' })
@@ -34,6 +45,13 @@ export class UserProfileEntity extends BaseEntity {
 
   @Property({ type: 'text', nullable: true })
   about: string | null;
+
+  @Property({
+    fieldName: 'profile_info',
+    type: 'jsonb',
+    defaultRaw: "'{}'::jsonb",
+  })
+  profileInfo: UserProfileInfo = {};
 
   @Property({ fieldName: 'birth_date', type: 'timestamptz', nullable: true })
   birthDate: Date | null = null;

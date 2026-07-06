@@ -46,6 +46,7 @@ export class DiscordProfileSyncService {
         banner_color: discordUser.hexAccentColor ?? '#fff',
         firstJoinedAt: new Date(),
         about: null,
+        profileInfo: {},
         birthDate: null,
         lastActiveAt: new Date(),
       },
@@ -230,6 +231,7 @@ export class DiscordProfileSyncService {
       banner_color: '#fff',
       firstJoinedAt: new Date(),
       about: null,
+      profileInfo: {},
       birthDate: null,
       lastActiveAt: new Date(),
     };
