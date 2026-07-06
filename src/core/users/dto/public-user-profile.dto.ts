@@ -1,137 +1,88 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Expose, Transform, Type } from 'class-transformer';
-import { Permission } from '#core/permissions/permissions.types';
-
-export class ActorPermissionsDto {
-  @ApiProperty({ enum: Permission, isArray: true })
-  global: Permission[];
-
-  @ApiProperty({
-    additionalProperties: {
-      type: 'array',
-      items: { enum: Object.values(Permission), type: 'string' },
-    },
-    description: 'Permissions grouped by Discord Guild ID.',
-    type: 'object',
-  })
-  guilds: Record<string, Permission[]>;
-}
+import { Expose, Type } from 'class-transformer';
+import { PublicUserProfileInfoDto } from './public-profile-info.dto';
 
 export class PublicUserProfileTagDto {
-  @ApiProperty({ example: 'Admin' })
   @Expose()
+  @ApiProperty({ example: 'Admin' })
   name: string;
 
-  @ApiProperty({ example: '#ffffff' })
   @Expose()
+  @ApiProperty({ example: '#ffffff' })
   color: string;
 
-  @ApiProperty({ example: '#5865f229' })
   @Expose()
+  @ApiProperty({ example: '#5865f229' })
   background: string;
 
-  @ApiProperty({ example: 'Роль на сервере RGD' })
   @Expose()
+  @ApiProperty({ example: 'Роль на сервере RGD' })
   description: string;
 }
 
 export class PublicUserProfileDto {
+  @Expose()
   @ApiProperty({
     description: 'Discord User ID.',
     example: '123456789012345678',
   })
-  @Expose({ name: 'user_id' })
-  @Transform(({ obj, value }) => (value ?? obj.id).toString(), {
-    toClassOnly: true,
-  })
   id: string;
 
-  @ApiProperty({ example: 'damir' })
   @Expose()
+  @ApiProperty({ example: 'damir' })
   username: string;
 
-  @ApiPropertyOptional({ nullable: true, example: 'Damir' })
   @Expose()
+  @ApiPropertyOptional({ nullable: true, example: 'Damir' })
   nickname: string | null;
 
+  @Expose()
   @ApiProperty({ example: 'https://cdn.discordapp.com/avatars/...' })
-  @Expose()
-  avatar_url: string;
+  avatarUrl: string;
 
-  @ApiPropertyOptional({ nullable: true })
   @Expose()
+  @ApiPropertyOptional({ nullable: true })
   banner: string | null;
 
-  @ApiPropertyOptional({ nullable: true })
   @Expose()
-  banner_alt: string | null;
+  @ApiPropertyOptional({ nullable: true })
+  bannerAlt: string | null;
 
+  @Expose()
   @ApiProperty({ example: '#111827' })
-  @Expose()
-  banner_color: string;
+  bannerColor: string;
 
-  @ApiPropertyOptional({ nullable: true })
   @Expose()
+  @ApiPropertyOptional({ nullable: true, deprecated: true })
   about: string | null;
 
-  @ApiPropertyOptional({ nullable: true })
-  @Expose({ name: 'birthDate' })
-  @Type(() => Date)
-  @Transform(
-    ({ obj, value }) => {
-      const date = value ?? obj.birth_date;
-      return date == null ? null : date instanceof Date ? date : new Date(date);
-    },
-    { toClassOnly: true },
-  )
-  birth_date: Date | null;
-
-  @ApiProperty()
-  @Expose({ name: 'firstJoinedAt' })
-  @Type(() => Date)
-  @Transform(
-    ({ obj, value }) => {
-      const date = value ?? obj.first_joined_at;
-      return date instanceof Date ? date : new Date(date);
-    },
-    { toClassOnly: true },
-  )
-  first_joined_at: Date;
-
-  @ApiProperty()
-  @Expose({ name: 'lastActiveAt' })
-  @Type(() => Date)
-  @Transform(
-    ({ obj, value }) => {
-      const date = value ?? obj.last_active_at;
-      return date instanceof Date ? date : new Date(date);
-    },
-    { toClassOnly: true },
-  )
-  last_active_at: Date;
-
-  @ApiProperty({ example: 5 })
-  @Expose({ name: 'activeStreak' })
-  @Transform(({ obj, value }) => value ?? obj.active_streak, {
-    toClassOnly: true,
-  })
-  active_streak: number;
-
-  @ApiProperty({ example: 30 })
-  @Expose({ name: 'maxActiveStreak' })
-  @Transform(({ obj, value }) => value ?? obj.max_active_streak, {
-    toClassOnly: true,
-  })
-  max_active_streak: number;
-
-  @ApiProperty({ type: [PublicUserProfileTagDto] })
   @Expose()
-  @Type(() => PublicUserProfileTagDto)
-  @Transform(({ value }) => value ?? [], { toClassOnly: true })
-  tags: PublicUserProfileTagDto[] = [];
-}
+  @ApiProperty({ type: PublicUserProfileInfoDto })
+  @Type(() => PublicUserProfileInfoDto)
+  info: PublicUserProfileInfoDto;
 
-export class CurrentUserProfileDto extends PublicUserProfileDto {
-  @ApiProperty({ type: ActorPermissionsDto })
-  permissions: ActorPermissionsDto;
+  @Expose()
+  @ApiPropertyOptional({ nullable: true })
+  birthDate: Date | null;
+
+  @Expose()
+  @ApiPropertyOptional({ nullable: true })
+  firstJoinedAt: Date | null;
+
+  @Expose()
+  @ApiPropertyOptional({ nullable: true })
+  lastActiveAt: Date | null;
+
+  @Expose()
+  @ApiProperty({ example: 5 })
+  activeStreak: number;
+
+  @Expose()
+  @ApiProperty({ example: 30 })
+  maxActiveStreak: number;
+
+  @Expose()
+  @ApiProperty({ type: [PublicUserProfileTagDto] })
+  @Type(() => PublicUserProfileTagDto)
+  tags: PublicUserProfileTagDto[];
 }

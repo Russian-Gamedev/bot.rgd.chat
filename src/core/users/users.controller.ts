@@ -1,19 +1,21 @@
 import {
+  Body,
   Controller,
   Get,
   NotFoundException,
   Param,
+  Patch,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBody,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { plainToInstance } from 'class-transformer';
 import Redis from 'ioredis';
 import { getActorUserId } from '#core/permissions/actor-user-id';
 import { ApiActorAuth } from '#core/permissions/openapi-auth.decorator';
@@ -22,16 +24,19 @@ import { ActorAuthGuard } from '#core/permissions/permissions.guard';
 import { PermissionService } from '#core/permissions/permissions.service';
 import { type AuthenticatedActor } from '#core/permissions/permissions.types';
 
+import { CurrentUserProfileDto } from './dto/current-user-profile.dto';
+import { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
+import { PublicUserProfileDto } from './dto/public-user-profile.dto';
 import {
-  CurrentUserProfileDto,
-  PublicUserProfileDto,
-} from './dto/public-user-profile.dto';
+  toCachedPublicUserProfileDto,
+  toCurrentUserProfileDto,
+  toPublicUserProfileDto,
+} from './mappers/public-user-profile.mapper';
 import { UserService } from './users.service';
 
 const USER_RESPONSE_CACHE_TTL_SECONDS = 60;
 const USER_RESPONSE_CACHE_MISS = '-';
-const USER_RESPONSE_CACHE_VERSION = 'v3';
-const PUBLIC_USER_PROFILE_DTO_OPTIONS = { excludeExtraneousValues: true };
+const USER_RESPONSE_CACHE_VERSION = 'v5';
 
 @ApiTags('Users')
 @Controller('users')
@@ -65,14 +70,34 @@ export class UsersController {
     const permissions = await this.permissionService.getActorPermissions(actor);
     const tags = await this.userService.getPublicProfileTags(profile.user_id);
 
-    return {
-      ...plainToInstance(
-        PublicUserProfileDto,
-        { ...profile, tags },
-        PUBLIC_USER_PROFILE_DTO_OPTIONS,
-      ),
-      permissions,
-    };
+    return toCurrentUserProfileDto(profile, tags, permissions);
+  }
+
+  @Patch('me')
+  @UseGuards(ActorAuthGuard)
+  @ApiActorAuth()
+  @ApiOperation({
+    summary: 'Update current user profile information',
+    description:
+      'Accepts a user JWT from cookie/header or a linked bot bearer token. Missing fields are preserved; null clears nullable fields.',
+  })
+  @ApiBody({ type: PatchCurrentUserProfileDto })
+  @ApiOkResponse({ type: CurrentUserProfileDto })
+  @ApiBadRequestResponse({
+    description: 'Bot token is not linked to a Discord profile.',
+  })
+  async patchMe(
+    @Actor() actor: AuthenticatedActor,
+    @Body() dto: PatchCurrentUserProfileDto,
+  ): Promise<CurrentUserProfileDto> {
+    const userId = getActorUserId(actor);
+    const profile = await this.userService.updateProfileInfo(userId, dto);
+    await this.invalidatePublicProfileCache(profile);
+
+    const permissions = await this.permissionService.getActorPermissions(actor);
+    const tags = await this.userService.getPublicProfileTags(profile.user_id);
+
+    return toCurrentUserProfileDto(profile, tags, permissions);
   }
 
   @Get(':id')
@@ -101,11 +126,10 @@ export class UsersController {
     }
     if (cached) {
       try {
-        return plainToInstance(
-          PublicUserProfileDto,
-          JSON.parse(cached) as object,
-          PUBLIC_USER_PROFILE_DTO_OPTIONS,
-        );
+        const response = toCachedPublicUserProfileDto(JSON.parse(cached));
+        if (response) return response;
+
+        await this.redis.del(cacheKey);
       } catch {
         await this.redis.del(cacheKey);
       }
@@ -122,13 +146,9 @@ export class UsersController {
       throw new NotFoundException('User profile was not found.');
     }
 
-    const response = plainToInstance(
-      PublicUserProfileDto,
-      {
-        ...profile,
-        tags: await this.userService.getPublicProfileTags(profile.user_id),
-      },
-      PUBLIC_USER_PROFILE_DTO_OPTIONS,
+    const response = toPublicUserProfileDto(
+      profile,
+      await this.userService.getPublicProfileTags(profile.user_id),
     );
     await this.redis.set(
       cacheKey,
@@ -137,5 +157,15 @@ export class UsersController {
       USER_RESPONSE_CACHE_TTL_SECONDS,
     );
     return response;
+  }
+
+  private async invalidatePublicProfileCache(profile: {
+    user_id: bigint;
+    username: string;
+  }): Promise<void> {
+    await this.redis.del(
+      `users:lookup-profile-response:${USER_RESPONSE_CACHE_VERSION}:${profile.user_id.toString()}`,
+      `users:lookup-profile-response:${USER_RESPONSE_CACHE_VERSION}:${profile.username.toLowerCase()}`,
+    );
   }
 }

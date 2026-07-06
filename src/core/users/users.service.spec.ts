@@ -159,6 +159,87 @@ describe('UserService', () => {
     expect(qb.getSingleResult).toHaveBeenCalled();
   });
 
+  it('updates profile info while preserving future profileInfo keys', async () => {
+    const profile = createUserProfile(123n);
+    profile.banner_alt = 'old banner';
+    profile.birthDate = new Date('2000-01-02T00:00:00.000Z');
+    profile.profileInfo = {
+      about: 'old about',
+      links: [
+        {
+          label: 'Old',
+          icon: 'old',
+          url: 'https://example.com/old',
+        },
+      ],
+      location: 'Earth',
+    } as UserProfileEntity['profileInfo'];
+    (
+      discordProfileSync.ensureUserProfile as ReturnType<typeof mock>
+    ).mockResolvedValueOnce(profile);
+
+    const result = await service.updateProfileInfo(123n, {
+      bannerAlt: 'https://example.com/banner.png',
+      birthDate: new Date('2001-02-03T00:00:00.000Z'),
+      info: {
+        about: '  new about  ',
+      },
+    });
+
+    expect(result.banner_alt).toBe('https://example.com/banner.png');
+    expect(result.birthDate).toEqual(new Date('2001-02-03T00:00:00.000Z'));
+    expect(result.profileInfo).toEqual({
+      about: 'new about',
+      links: [
+        {
+          label: 'Old',
+          icon: 'old',
+          url: 'https://example.com/old',
+        },
+      ],
+      location: 'Earth',
+    });
+    expect(em.persist).toHaveBeenCalledWith(profile);
+    expect(em.flush).toHaveBeenCalled();
+  });
+
+  it('clears nullable profile info fields without removing unrelated keys', async () => {
+    const profile = createUserProfile(123n);
+    profile.banner_alt = 'https://example.com/banner.png';
+    profile.birthDate = new Date('2001-02-03T00:00:00.000Z');
+    profile.profileInfo = {
+      about: 'old about',
+      links: [
+        {
+          label: 'Old',
+          icon: 'old',
+          url: 'https://example.com/old',
+        },
+      ],
+      location: 'Earth',
+    } as UserProfileEntity['profileInfo'];
+    (
+      discordProfileSync.ensureUserProfile as ReturnType<typeof mock>
+    ).mockResolvedValueOnce(profile);
+
+    const result = await service.updateProfileInfo(123n, {
+      bannerAlt: null,
+      birthDate: null,
+      info: {
+        about: null,
+        links: [],
+      },
+    });
+
+    expect(result.banner_alt).toBeNull();
+    expect(result.birthDate).toBeNull();
+    expect(result.profileInfo).toEqual({
+      about: null,
+      links: [],
+      location: 'Earth',
+    });
+  });
+
   it('returns the highest current non-managed role per active guild as a public tag', async () => {
     const membership = createMemberProfile(10n, 123n);
     (memberProfileRepository.find as ReturnType<typeof mock>).mockResolvedValue(
@@ -358,6 +439,17 @@ function createRole(
     hexColor,
     tags,
   } as Role;
+}
+
+function createUserProfile(userId: bigint): UserProfileEntity {
+  const profile = new UserProfileEntity();
+  profile.user_id = userId;
+  profile.username = 'alice';
+  profile.avatar_url = 'https://cdn.discordapp.com/avatar.webp';
+  profile.banner_color = '#fff';
+  profile.firstJoinedAt = new Date('2026-06-01T00:00:00.000Z');
+  profile.lastActiveAt = new Date('2026-06-13T00:00:00.000Z');
+  return profile;
 }
 
 function assertUsesGuildUsersTable(condition: unknown): void {

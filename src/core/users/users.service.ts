@@ -8,9 +8,14 @@ import { PatronEntity } from '#core/patrons/entities/patron.entity';
 import { DiscordID } from '#root/lib/types';
 
 import { DiscordProfileSyncService } from './discord-profile-sync.service';
+import type { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
 import { MemberProfileEntity } from './entities/member-profile.entity';
-import { UserProfileEntity } from './entities/user-profile.entity';
+import {
+  UserProfileEntity,
+  type UserProfileInfo,
+} from './entities/user-profile.entity';
 import { UserProfileTagEntity } from './entities/user-profile-tag.entity';
+import { normalizePublicProfileInfo } from './normalizers/public-profile-info.normalizer';
 
 export interface PublicUserProfileTag {
   name: string;
@@ -123,6 +128,31 @@ export class UserService {
     );
 
     return tags;
+  }
+
+  async updateProfileInfo(
+    userId: DiscordID,
+    dto: PatchCurrentUserProfileDto,
+  ): Promise<UserProfileEntity> {
+    const profile = await this.findOrCreateProfile(userId);
+
+    if (hasOwn(dto, 'bannerAlt')) {
+      profile.banner_alt = dto.bannerAlt ?? null;
+    }
+
+    if (hasOwn(dto, 'birthDate')) {
+      profile.birthDate = dto.birthDate ?? null;
+    }
+
+    if (dto.info) {
+      profile.profileInfo = mergeProfileInfoPatch(
+        profile.profileInfo,
+        dto.info,
+      );
+    }
+
+    await this.save(profile);
+    return profile;
   }
 
   async save(entity: UserProfileEntity | MemberProfileEntity): Promise<void> {
@@ -294,6 +324,36 @@ function assertPositiveInteger(amount: number, field: string): void {
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new BadRequestException(`Invalid ${field} amount.`);
   }
+}
+
+function mergeProfileInfoPatch(
+  current: UserProfileInfo,
+  patch: PatchCurrentUserProfileDto['info'],
+): UserProfileInfo {
+  const next: UserProfileInfo = isObject(current) ? { ...current } : {};
+
+  if (!patch) return next;
+
+  if (hasOwn(patch, 'about')) {
+    next.about = normalizePublicProfileInfo({ about: patch.about }).about;
+  }
+
+  if (hasOwn(patch, 'links')) {
+    next.links = normalizePublicProfileInfo({ links: patch.links }).links;
+  }
+
+  return next;
+}
+
+function hasOwn<T extends object, K extends PropertyKey>(
+  value: T,
+  key: K,
+): value is T & Record<K, unknown> {
+  return Object.hasOwn(value, key);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function formatError(error: unknown): string {
