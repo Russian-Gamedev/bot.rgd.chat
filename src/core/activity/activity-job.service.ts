@@ -73,8 +73,8 @@ export class ActivityJobService {
     await interaction.reply({ embeds: [embed] });
   }
 
-  @EnsureRequestContext()
   @Cron('0 15 * * *', { name: 'daily-activity' })
+  @EnsureRequestContext()
   async handleDailyJob() {
     /// Runs every day at 15:00 MSK
     this.logger.log('Running daily activity job');

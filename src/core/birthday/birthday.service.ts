@@ -30,8 +30,8 @@ export class BirthdayService {
     private readonly guildMemberRolesService: GuildMemberRolesService,
   ) {}
 
-  @EnsureRequestContext()
   @Cron('0 8 * * *', { name: 'birthday-greeting' })
+  @EnsureRequestContext()
   async postBirthdayGreeting() {
     const guilds = this.discord.guilds.cache;
 
