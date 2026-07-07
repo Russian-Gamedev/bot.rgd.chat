@@ -8,7 +8,7 @@ export class UserActivityDailyEntity extends BaseEntity {
   id: string;
 
   @Property({ type: 'date', index: true })
-  date: Date;
+  date: string;
 
   @Property({ type: 'bigint', index: true })
   user_id: bigint;

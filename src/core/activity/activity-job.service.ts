@@ -18,12 +18,11 @@ import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
 import { formatTime, pickRandom, pluralize } from '#lib/utils';
 import { ActivityService, ActivityStats } from './activity.service';
-
-export enum ActivityPeriod {
-  Day = 'day',
-  Week = 'week',
-  Month = 'month',
-}
+import {
+  ActivityPeriod,
+  getActivityPeriodRange,
+  moscowDateKeyToStartDate,
+} from './activity-period';
 
 @Injectable()
 export class ActivityJobService {
@@ -48,12 +47,9 @@ export class ActivityJobService {
     if (!interaction.guild) return;
 
     const period = ActivityPeriod.Day;
-    const [start, end] = this.getPeriodRange(period);
-
-    const activities = await this.activityService.getActivityStatsInRange(
+    const activities = await this.getActivitiesForPeriod(
       interaction.guild.id,
-      start,
-      end,
+      period,
     );
 
     if (activities.length === 0) {
@@ -101,20 +97,20 @@ export class ActivityJobService {
         );
       });
 
-      await this.postActivitySummary(guild, ActivityPeriod.Day);
+      await this.postActivitySummarySafely(guild, ActivityPeriod.Day);
       const today = new Date();
 
       const isSaturday = today.getDay() === 6;
 
       if (isSaturday) {
-        await this.postActivitySummary(guild, ActivityPeriod.Week);
+        await this.postActivitySummarySafely(guild, ActivityPeriod.Week);
       }
 
       const isLastDayOfMonth =
         new Date(today.getTime() + 1_000 * 60 * 60 * 24).getDate() === 1;
 
       if (isLastDayOfMonth) {
-        await this.postActivitySummary(guild, ActivityPeriod.Month);
+        await this.postActivitySummarySafely(guild, ActivityPeriod.Month);
       }
     }
 
@@ -122,11 +118,9 @@ export class ActivityJobService {
   }
 
   private async giveAwayDailyCoins(guild: Guild) {
-    const [start, end] = this.getPeriodRange(ActivityPeriod.Day);
-    const activities = await this.activityService.getActivityStatsInRange(
+    const activities = await this.getActivitiesForPeriod(
       guild.id,
-      start,
-      end,
+      ActivityPeriod.Day,
     );
 
     for (const activity of activities) {
@@ -167,11 +161,9 @@ export class ActivityJobService {
       30,
     );
 
-    const [start, end] = this.getPeriodRange(ActivityPeriod.Day);
-    const activities = await this.activityService.getActivityStatsInRange(
+    const activities = await this.getActivitiesForPeriod(
       guild.id,
-      start,
-      end,
+      ActivityPeriod.Day,
     );
 
     const activeUsers: bigint[] = [];
@@ -286,14 +278,14 @@ export class ActivityJobService {
       .getSetting(BigInt(guild.id), GuildSettings.PostActivityMessages, false)
       .then((value) => this.guildSettings.asBoolean(value));
 
-    if (!postMessages) return;
+    if (!postMessages) {
+      this.logger.log(
+        `Skipping activity summary for guild ${guild.id} and period ${period}: post activity messages disabled`,
+      );
+      return;
+    }
 
-    const [start, end] = this.getPeriodRange(period);
-    const activities = await this.activityService.getActivityStatsInRange(
-      guild.id,
-      start,
-      end,
-    );
+    const activities = await this.getActivitiesForPeriod(guild.id, period);
 
     if (activities.length === 0) {
       this.logger.log(
@@ -307,14 +299,35 @@ export class ActivityJobService {
       GuildSettings.EventMessageChannel,
     );
 
-    if (!channelId) return;
+    if (!channelId) {
+      this.logger.warn(
+        `Skipping activity summary for guild ${guild.id} and period ${period}: event message channel is not configured`,
+      );
+      return;
+    }
 
     const channel = await guild.channels.fetch(channelId).catch(() => null);
-    if (!channel?.isSendable()) return;
+    if (!channel) {
+      this.logger.warn(
+        `Skipping activity summary for guild ${guild.id} and period ${period}: channel ${channelId} was not found`,
+      );
+      return;
+    }
+    if (!channel.isSendable()) {
+      this.logger.warn(
+        `Skipping activity summary for guild ${guild.id} and period ${period}: channel ${channelId} is not sendable`,
+      );
+      return;
+    }
 
     const embed = await this.buildEmbed(activities, period, BigInt(guild.id));
 
-    await channel.send({ embeds: [embed] });
+    await channel.send({ embeds: [embed] }).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Failed to send activity summary for guild ${guild.id} and period ${period}: ${message}`,
+      );
+    });
   }
 
   private async buildEmbed(
@@ -323,7 +336,10 @@ export class ActivityJobService {
     guildId: bigint,
   ) {
     const [date] = this.getPeriodRange(period);
-    const newRegs = await this.userService.getNewUsers(date, guildId);
+    const newRegs = await this.userService.getNewUsers(
+      moscowDateKeyToStartDate(date),
+      guildId,
+    );
     const usersStreak = await this.activityService.getTopMemberStreaks(
       guildId,
       15,
@@ -458,18 +474,31 @@ export class ActivityJobService {
     return embed;
   }
 
-  private getPeriodRange(period: ActivityPeriod): [Date, Date] {
-    const end = new Date();
-    end.setHours(24, 0, 0, 0);
+  private getPeriodRange(period: ActivityPeriod): [string, string] {
+    return getActivityPeriodRange(period);
+  }
 
-    const start = new Date(end);
-    const days = {
-      [ActivityPeriod.Day]: 1,
-      [ActivityPeriod.Week]: 7,
-      [ActivityPeriod.Month]: 30,
-    }[period];
-    start.setDate(start.getDate() - days);
+  private async getActivitiesForPeriod(
+    guildId: string,
+    period: ActivityPeriod,
+  ): Promise<ActivityStats[]> {
+    const [start, end] = this.getPeriodRange(period);
+    this.logger.log(
+      `Loading activity stats for guild ${guildId} and period ${period}: ${start} <= date < ${end}`,
+    );
 
-    return [start, end];
+    return this.activityService.getActivityStatsInRange(guildId, start, end);
+  }
+
+  private async postActivitySummarySafely(
+    guild: Guild,
+    period: ActivityPeriod,
+  ) {
+    await this.postActivitySummary(guild, period).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Failed to post activity summary for guild ${guild.id} and period ${period}: ${message}`,
+      );
+    });
   }
 }

@@ -11,9 +11,9 @@ import { UserActivityTotalEntity } from './entities/user-activity-total.entity';
 function activityKey(
   userId: bigint,
   guildId: bigint | null,
-  date?: Date,
+  date?: string,
 ): string {
-  return `${date?.toISOString() ?? 'total'}:${userId}:${guildId ?? 'global'}`;
+  return `${date ?? 'total'}:${userId}:${guildId ?? 'global'}`;
 }
 
 describe('ActivityService', () => {
@@ -45,7 +45,7 @@ describe('ActivityService', () => {
           (row) =>
             row.user_id === where.user_id &&
             row.guild_id === where.guild_id &&
-            row.date.getTime() === where.date.getTime(),
+            row.date === where.date,
         ),
       ),
     } as unknown as EntityRepository<UserActivityDailyEntity>;
@@ -208,7 +208,7 @@ describe('ActivityService', () => {
 
   it('increments existing bigint voice counters returned by postgres', async () => {
     const at = new Date('2026-06-13T12:34:00.000Z');
-    const date = new Date('2026-06-13T00:00:00.000Z');
+    const date = '2026-06-13';
     const daily = new UserActivityDailyEntity();
     daily.date = date;
     daily.user_id = 20n;
@@ -243,11 +243,7 @@ describe('ActivityService', () => {
     });
 
     await expect(
-      service.getActivityStatsInRange(
-        10n,
-        new Date('2026-06-13T00:00:00.000Z'),
-        new Date('2026-06-14T00:00:00.000Z'),
-      ),
+      service.getActivityStatsInRange(10n, '2026-06-13', '2026-06-14'),
     ).resolves.toEqual([
       {
         guild_id: 10n,
@@ -261,18 +257,14 @@ describe('ActivityService', () => {
 
   it('aggregates bigint voice counters returned by postgres', async () => {
     const row = new UserActivityDailyEntity();
-    row.date = new Date('2026-06-13T00:00:00.000Z');
+    row.date = '2026-06-13';
     row.guild_id = 10n;
     row.user_id = 20n;
     row.voice_seconds = 30n as unknown as number;
     dailyRows.push(row);
 
     await expect(
-      service.getActivityStatsInRange(
-        10n,
-        new Date('2026-06-13T00:00:00.000Z'),
-        new Date('2026-06-14T00:00:00.000Z'),
-      ),
+      service.getActivityStatsInRange(10n, '2026-06-13', '2026-06-14'),
     ).resolves.toEqual([
       {
         guild_id: 10n,
@@ -281,6 +273,18 @@ describe('ActivityService', () => {
         user_id: 20n,
         voice_seconds: 30,
       },
+    ]);
+  });
+
+  it('stores daily activity by Moscow calendar date without UTC date shift', async () => {
+    await service.recordActivity(10n, 20n, {
+      at: new Date('2026-07-06T15:08:34.000Z'),
+      voiceSeconds: 60,
+    });
+
+    expect(dailyRows.map((row) => row.date).toSorted()).toEqual([
+      '2026-07-06',
+      '2026-07-06',
     ]);
   });
 

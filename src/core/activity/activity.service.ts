@@ -1,12 +1,12 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { UserService } from '#core/users/users.service';
 import { DiscordID } from '#root/lib/types';
-
+import { toMoscowDateKey } from './activity-period';
 import { UserActivityDailyEntity } from './entities/user-activity-daily.entity';
 import { UserActivityTotalEntity } from './entities/user-activity-total.entity';
 
@@ -32,6 +32,8 @@ export type ActivitySortableField =
 
 @Injectable()
 export class ActivityService {
+  private readonly logger = new Logger(ActivityService.name);
+
   constructor(
     @InjectRepository(UserActivityDailyEntity)
     private readonly dailyActivityRepository: EntityRepository<UserActivityDailyEntity>,
@@ -54,8 +56,16 @@ export class ActivityService {
     const messageScore = increment.messageScore ?? 0;
     const voiceSeconds = increment.voiceSeconds ?? 0;
     const reactionCount = increment.reactionCount ?? 0;
+    const activityDate = toMoscowDateKey(at);
+
+    this.logger.log(
+      `Recording activity for guild ${normalizedGuildId}, user ${normalizedUserId}, date ${activityDate}, at ${at.toISOString()}: messageScore=${messageScore}, voiceSeconds=${voiceSeconds}, reactionCount=${reactionCount}`,
+    );
 
     if (messageScore === 0 && voiceSeconds === 0 && reactionCount === 0) {
+      this.logger.log(
+        `Skipped activity record for guild ${normalizedGuildId}, user ${normalizedUserId}: zero increment`,
+      );
       return;
     }
 
@@ -68,8 +78,9 @@ export class ActivityService {
       const daily = await this.getOrCreateDailyActivity(
         normalizedUserId,
         scopeGuildId,
-        at,
+        activityDate,
       );
+      const dailyBefore = toActivityLogSnapshot(daily);
       applyActivityIncrement(daily, messageScore, voiceSeconds, reactionCount);
       this.em.persist(daily);
 
@@ -77,9 +88,14 @@ export class ActivityService {
         normalizedUserId,
         scopeGuildId,
       );
+      const totalBefore = toActivityLogSnapshot(total);
       applyActivityIncrement(total, messageScore, voiceSeconds, reactionCount);
       total.lastActiveAt = at;
       this.em.persist(total);
+
+      this.logger.log(
+        `Applied activity for scope ${formatActivityScope(scopeGuildId)}, user ${normalizedUserId}, date ${activityDate}: daily ${formatActivityLogSnapshot(dailyBefore)} -> ${formatActivityLogSnapshot(daily)}, total ${formatActivityLogSnapshot(totalBefore)} -> ${formatActivityLogSnapshot(total)}, lastActiveAt=${at.toISOString()}`,
+      );
     }
 
     const profile =
@@ -88,6 +104,9 @@ export class ActivityService {
     this.em.persist(profile);
 
     await this.em.flush();
+    this.logger.log(
+      `Persisted activity for guild ${normalizedGuildId}, user ${normalizedUserId}, date ${activityDate}`,
+    );
   }
 
   async getTopActivityTotals(
@@ -138,12 +157,12 @@ export class ActivityService {
 
   async getActivityStatsInRange(
     guildId: DiscordID,
-    start: Date,
-    end: Date,
+    start: string,
+    end: string,
   ): Promise<ActivityStats[]> {
     const rows = await this.dailyActivityRepository.find({
       guild_id: BigInt(guildId),
-      date: { $gte: this.toActivityDate(start), $lt: this.toActivityDate(end) },
+      date: { $gte: start, $lt: end },
     });
 
     return aggregateActivityRows(rows);
@@ -218,9 +237,8 @@ export class ActivityService {
   private async getOrCreateDailyActivity(
     userId: bigint,
     guildId: bigint | null,
-    at: Date,
+    date: string,
   ) {
-    const date = this.toActivityDate(at);
     let activity = await this.dailyActivityRepository.findOne({
       date,
       user_id: userId,
@@ -253,12 +271,6 @@ export class ActivityService {
     }
 
     return activity;
-  }
-
-  private toActivityDate(date: Date) {
-    const day = new Date(date);
-    day.setHours(0, 0, 0, 0);
-    return day;
   }
 }
 
@@ -310,4 +322,27 @@ function aggregateActivityRows(
 
 function toNumber(value: number | bigint): number {
   return Number(value);
+}
+
+function toActivityLogSnapshot(
+  activity: UserActivityDailyEntity | UserActivityTotalEntity,
+) {
+  return {
+    message_score: toNumber(activity.message_score),
+    reaction_count: toNumber(activity.reaction_count),
+    voice_seconds: toNumber(activity.voice_seconds),
+  };
+}
+
+function formatActivityLogSnapshot(
+  activity:
+    | ReturnType<typeof toActivityLogSnapshot>
+    | UserActivityDailyEntity
+    | UserActivityTotalEntity,
+): string {
+  return `{messageScore=${toNumber(activity.message_score)}, voiceSeconds=${toNumber(activity.voice_seconds)}, reactionCount=${toNumber(activity.reaction_count)}}`;
+}
+
+function formatActivityScope(guildId: bigint | null): string {
+  return guildId == null ? 'global' : `guild ${guildId}`;
 }
