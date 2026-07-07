@@ -58,6 +58,7 @@ Mahoraga реагирует на четыре типа событий:
 | `mahoraga_image_repeat_limit` | number | `2` | Сколько одинаковых изображений нужно для срабатывания. |
 | `mahoraga_image_window_seconds` | number | `600` | Окно повторов изображений. |
 | `mahoraga_young_account_months` | number | `3` | Аккаунты моложе этого значения получают лог-предупреждение. |
+| `mahoraga_message_tracking_window_seconds` | number | `600` | Окно хранения последних сообщений пользователя для удаления после honeypot или repeat-детекта. |
 
 Числовые настройки меньше `1` считаются невалидными и заменяются default-значением.
 
@@ -77,6 +78,8 @@ mahoraga:detector:link:{guildId}:{userId}:{hash}
 
 При достижении `mahoraga_link_repeat_limit` внутри `mahoraga_link_window_seconds` создаётся кейс с причиной `link_repeat`.
 
+В режиме `on` Mahoraga удаляет сообщение, которое вызвало repeat-детект, и последние отслеженные сообщения пользователя за `mahoraga_message_tracking_window_seconds`. В режиме `monitor` сообщения не удаляются.
+
 ### Повтор изображений
 
 Mahoraga проверяет только image attachments. Файл скачивается, если размер не больше 8 MiB, затем хешируется. Повтор считается через Redis key:
@@ -87,6 +90,8 @@ mahoraga:detector:image:{guildId}:{userId}:{hash}
 
 При достижении `mahoraga_image_repeat_limit` внутри `mahoraga_image_window_seconds` создаётся кейс с причиной `image_repeat`.
 
+В режиме `on` Mahoraga удаляет сообщение, которое вызвало repeat-детект, и последние отслеженные сообщения пользователя за `mahoraga_message_tracking_window_seconds`. В режиме `monitor` сообщения не удаляются.
+
 ### Повтор текста
 
 Текст нормализуется. Сообщения с нормализованной длиной меньше 4 символов не учитываются. Повтор считается через Redis key:
@@ -96,6 +101,8 @@ mahoraga:detector:text:{guildId}:{userId}:{hash}
 ```
 
 При достижении `mahoraga_text_repeat_limit` внутри `mahoraga_text_window_seconds` создаётся кейс с причиной `text_repeat`.
+
+В режиме `on` Mahoraga удаляет сообщение, которое вызвало repeat-детект, и последние отслеженные сообщения пользователя за `mahoraga_message_tracking_window_seconds`. В режиме `monitor` сообщения не удаляются.
 
 ## Softban
 
