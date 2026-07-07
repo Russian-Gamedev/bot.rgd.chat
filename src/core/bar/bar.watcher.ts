@@ -4,11 +4,13 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   Client,
+  ChannelType as DiscordChannelType,
   Guild,
   GuildMember,
   InteractionContextType,
   MessageFlags,
   PartialUser,
+  PermissionFlagsBits,
   User,
 } from 'discord.js';
 import {
@@ -27,11 +29,18 @@ import { cast, getDisplayAvatar } from '#lib/utils';
 import { type BarGateway } from './bar.gateway';
 import { ChannelType, ConnectedPayload } from './bar.protocol';
 
+type BarConnectedGuild = ConnectedPayload['guilds'][number];
+type BarConnectedChannel = BarConnectedGuild['channels'][number];
+type BarInitialData = Pick<ConnectedPayload, 'guilds'>;
+
 @Injectable()
 export class BarWatcher {
   private readonly logger = new Logger(BarWatcher.name);
+  private readonly guildRefreshIntervalMs = 1000 * 60 * 60;
 
   private guilds: Guild[] = [];
+  private guildsLastRefreshedAt: number | null = null;
+  private guildRefreshPromise: Promise<void> | null = null;
   barGateway: BarGateway;
 
   constructor(
@@ -94,38 +103,181 @@ export class BarWatcher {
   async onInit() {
     this.logger.log(generateDependencyReport());
 
+    await this.refreshGuilds();
+    this.logger.log('BarGateway initialized');
+  }
+
+  @EnsureRequestContext()
+  public async getInitialData(): Promise<BarInitialData> {
+    await this.refreshGuildsIfStale();
+
+    return {
+      guilds: await Promise.all(
+        this.guilds.map(async (guild) => {
+          return {
+            id: guild.id,
+            name: guild.name,
+            icon_url: guild.iconURL() ?? '',
+            channels: this.getPublicChannels(guild),
+            members: await this.getActiveMembers(guild),
+          };
+        }),
+      ),
+    };
+  }
+
+  private getPublicChannels(guild: Guild): BarConnectedChannel[] {
+    const channels = guild.channels.cache.filter(
+      (channel) =>
+        this.getBarChannelType(channel.type) !== null &&
+        this.canEveryoneUseChannel(channel, guild.roles.everyone),
+    );
+    const result: BarConnectedChannel[] = [];
+    const addedChannelIds = new Set<string>();
+
+    const addChannelsByParent = (parentId: string | null) => {
+      const childChannels = this.sortChannels(
+        channels
+          .filter((channel) => (channel.parentId ?? null) === parentId)
+          .values(),
+      );
+
+      for (const channel of childChannels.values()) {
+        if (addedChannelIds.has(channel.id)) continue;
+
+        const type = this.getBarChannelType(channel.type);
+        if (type === null) continue;
+
+        addedChannelIds.add(channel.id);
+        result.push({
+          id: channel.id,
+          name: channel.name,
+          type,
+        });
+        addChannelsByParent(channel.id);
+      }
+    };
+
+    addChannelsByParent(null);
+
+    for (const channel of this.sortChannels(channels.values())) {
+      if (addedChannelIds.has(channel.id)) continue;
+
+      const type = this.getBarChannelType(channel.type);
+      if (type === null) continue;
+
+      addedChannelIds.add(channel.id);
+      result.push({
+        id: channel.id,
+        name: channel.name,
+        type,
+      });
+    }
+
+    return result;
+  }
+
+  private sortChannels<
+    Channel extends { id: string; position?: number; rawPosition?: number },
+  >(channels: Iterable<Channel>): Channel[] {
+    return Array.from(channels).sort((a, b) => {
+      const aPosition = a.rawPosition ?? a.position ?? 0;
+      const bPosition = b.rawPosition ?? b.position ?? 0;
+
+      return aPosition - bPosition || Number(BigInt(a.id) - BigInt(b.id));
+    });
+  }
+
+  private canEveryoneUseChannel(
+    channel: Guild['channels']['cache'] extends Map<string, infer Channel>
+      ? Channel
+      : never,
+    everyoneRole: Guild['roles']['everyone'],
+  ) {
+    const permissions = channel.permissionsFor(everyoneRole);
+    if (!permissions?.has(PermissionFlagsBits.ViewChannel)) return false;
+
+    switch (channel.type) {
+      case DiscordChannelType.GuildCategory:
+        return true;
+      case DiscordChannelType.GuildText:
+        return permissions.has(PermissionFlagsBits.SendMessages);
+      case DiscordChannelType.GuildVoice:
+        return permissions.has(PermissionFlagsBits.Connect);
+      case DiscordChannelType.PublicThread:
+        return permissions.has(PermissionFlagsBits.SendMessagesInThreads);
+      default:
+        return false;
+    }
+  }
+
+  private getBarChannelType(
+    type: DiscordChannelType,
+  ): keyof typeof ChannelType | null {
+    switch (type) {
+      case DiscordChannelType.GuildText:
+        return 'text';
+      case DiscordChannelType.GuildVoice:
+        return 'voice';
+      case DiscordChannelType.GuildCategory:
+        return 'category';
+      case DiscordChannelType.PublicThread:
+        return 'thread';
+      default:
+        return null;
+    }
+  }
+
+  private async getActiveMembers(guild: Guild) {
+    const activeRoleId = await this.guildSettings.getSetting<string>(
+      BigInt(guild.id),
+      GuildSettings.ActiveRoleId,
+      null,
+    );
+    if (!activeRoleId) return [];
+
+    return guild.members.cache
+      .filter((member) => member.roles.cache.has(activeRoleId))
+      .map((member) => this.normalizeMember(member));
+  }
+
+  private async refreshGuildsIfStale() {
+    const now = Date.now();
+    if (
+      this.guildsLastRefreshedAt !== null &&
+      now - this.guildsLastRefreshedAt < this.guildRefreshIntervalMs
+    ) {
+      return;
+    }
+
+    if (this.guildRefreshPromise) {
+      return this.guildRefreshPromise;
+    }
+
+    this.guildRefreshPromise = this.refreshGuilds().finally(() => {
+      this.guildRefreshPromise = null;
+    });
+    return this.guildRefreshPromise;
+  }
+
+  private async refreshGuilds() {
     const enabledGuilds = await this.guildSettings.getGuildsWithEnabledFeature(
       GuildSettings.BarEnabled,
     );
 
     this.logger.log('Enabled guilds for BarGateway:', enabledGuilds);
 
+    const guilds: Guild[] = [];
     for (const guildId of enabledGuilds) {
       const guild = await this.discord.guilds.fetch(guildId).catch(() => null);
 
       if (guild) {
-        this.guilds.push(guild);
+        guilds.push(guild);
       }
     }
 
-    this.logger.log('BarGateway initialized');
-  }
-
-  public getInitialData(): ConnectedPayload {
-    return {
-      guilds: this.guilds.map((guild) => {
-        return {
-          id: guild.id,
-          name: guild.name,
-          icon_url: guild.iconURL() ?? '',
-          channels: guild.channels.cache.map((channel) => ({
-            id: channel.id,
-            name: channel.name,
-            type: ChannelType[channel.type] as keyof typeof ChannelType,
-          })),
-        };
-      }),
-    };
+    this.guilds = guilds;
+    this.guildsLastRefreshedAt = Date.now();
   }
 
   @On('typingStart')
