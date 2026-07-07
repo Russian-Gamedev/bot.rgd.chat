@@ -1,0 +1,398 @@
+import { afterEach, describe, expect, it, mock } from 'bun:test';
+
+import { BarGateway } from './bar.gateway';
+import { BarWatcher } from './bar.watcher';
+
+const originalDateNow = Date.now;
+
+function setNow(now: number) {
+  Date.now = mock(() => now);
+}
+
+function createRawSocket() {
+  let messageListener: ((data: unknown, isBinary?: boolean) => void) | null =
+    null;
+  const sent: string[] = [];
+
+  return {
+    sent,
+    send: mock((message: string) => {
+      sent.push(message);
+    }),
+    close: mock(() => undefined),
+    on: mock(
+      (
+        event: 'message',
+        listener: (data: unknown, isBinary?: boolean) => void,
+      ) => {
+        if (event === 'message') {
+          messageListener = listener;
+        }
+      },
+    ),
+    emitMessage(data: unknown, isBinary = false) {
+      if (!messageListener) throw new Error('message listener is not bound');
+      messageListener(data, isBinary);
+    },
+  };
+}
+
+function createGateway(getInitialData = mock(async () => ({ guilds: [] }))) {
+  const watcher = {
+    getInitialData,
+  } as unknown as BarWatcher;
+
+  return new BarGateway(watcher);
+}
+
+async function connect(
+  gateway: BarGateway,
+  socket: ReturnType<typeof createRawSocket>,
+) {
+  await gateway.handleConnection(
+    socket as unknown as Bun.WebSocket,
+    {
+      headers: {},
+    } as Request,
+  );
+}
+
+function parseSent(socket: ReturnType<typeof createRawSocket>) {
+  return socket.sent.map((message) => JSON.parse(message));
+}
+
+function expectConnected(message: unknown) {
+  expect(message).toMatchObject({
+    type: 'connected',
+    data: { guilds: [] },
+    ts: 1000,
+  });
+  expect(
+    typeof (message as { data: { client_id: unknown } }).data.client_id,
+  ).toBe('string');
+  expect(
+    Array.isArray((message as { data: { clients: unknown } }).data.clients),
+  ).toBe(true);
+}
+
+function getConnectedMessage(socket: ReturnType<typeof createRawSocket>) {
+  return parseSent(socket).find((message) => message.type === 'connected');
+}
+
+describe('BarGateway relay', () => {
+  afterEach(() => {
+    Date.now = originalDateNow;
+  });
+
+  it('broadcasts valid relay messages to other clients only', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const sender = createRawSocket();
+    const receiver = createRawSocket();
+
+    await connect(gateway, sender);
+    await connect(gateway, receiver);
+
+    sender.emitMessage(
+      JSON.stringify({ type: 'relay', data: { action: 'wave' } }),
+    );
+
+    const senderMessages = parseSent(sender);
+    const receiverMessages = parseSent(receiver);
+    const relayMessage = receiverMessages.at(-1);
+
+    expectConnected(senderMessages[0]);
+    expect(relayMessage).toMatchObject({
+      type: 'relay',
+      data: {
+        payload: { action: 'wave' },
+      },
+      ts: 1000,
+    });
+    expect(typeof relayMessage.data.client_id).toBe('string');
+  });
+
+  it('accepts JSON relay messages sent as buffers', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const sender = createRawSocket();
+    const receiver = createRawSocket();
+
+    await connect(gateway, sender);
+    await connect(gateway, receiver);
+
+    sender.emitMessage(
+      Buffer.from(JSON.stringify({ type: 'relay', data: { kind: 'cursor' } })),
+      true,
+    );
+
+    expect(parseSent(receiver).at(-1)).toMatchObject({
+      type: 'relay',
+      data: {
+        payload: { kind: 'cursor' },
+      },
+      ts: 1000,
+    });
+  });
+
+  it('accepts null-terminated JSON relay messages', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const sender = createRawSocket();
+    const receiver = createRawSocket();
+
+    await connect(gateway, sender);
+    await connect(gateway, receiver);
+
+    sender.emitMessage(
+      `${JSON.stringify({
+        type: 'relay',
+        data: { kind: 'cursor', x: 143.0, y: 84.0 },
+      })}\0`,
+    );
+
+    expect(parseSent(receiver).at(-1)).toMatchObject({
+      type: 'relay',
+      data: {
+        payload: { kind: 'cursor', x: 143.0, y: 84.0 },
+      },
+      ts: 1000,
+    });
+  });
+
+  it('does not replay relay messages to new clients', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const sender = createRawSocket();
+    const receiver = createRawSocket();
+    const lateClient = createRawSocket();
+
+    await connect(gateway, sender);
+    await connect(gateway, receiver);
+    sender.emitMessage(JSON.stringify({ type: 'relay', data: 'transient' }));
+    await connect(gateway, lateClient);
+
+    const lateClientMessages = parseSent(lateClient);
+
+    expect(
+      lateClientMessages.filter((message) => message.type === 'relay'),
+    ).toEqual([]);
+    expectConnected(lateClientMessages[0]);
+  });
+
+  it('sends client list on connect and broadcasts presence events', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const first = createRawSocket();
+    const second = createRawSocket();
+
+    await connect(gateway, first);
+
+    const firstConnected = getConnectedMessage(first);
+    const firstClientId = firstConnected.data.client_id;
+
+    expect(firstConnected).toMatchObject({
+      type: 'connected',
+      data: {
+        clients: [{ client_id: firstClientId }],
+      },
+      ts: 1000,
+    });
+    expect(parseSent(first).slice(1)).toEqual([
+      {
+        type: 'client_connected',
+        data: { client_id: firstClientId },
+        ts: 1000,
+      },
+      { type: 'client_count', data: { count: 1 }, ts: 1000 },
+    ]);
+
+    await connect(gateway, second);
+
+    const secondConnected = getConnectedMessage(second);
+    const secondClientId = secondConnected.data.client_id;
+
+    expect(secondConnected).toMatchObject({
+      type: 'connected',
+      data: {
+        clients: [{ client_id: firstClientId }, { client_id: secondClientId }],
+      },
+      ts: 1000,
+    });
+    expect(parseSent(first).slice(-2)).toEqual([
+      {
+        type: 'client_connected',
+        data: { client_id: secondClientId },
+        ts: 1000,
+      },
+      { type: 'client_count', data: { count: 2 }, ts: 1000 },
+    ]);
+    expect(parseSent(second).slice(1)).toEqual([
+      {
+        type: 'client_connected',
+        data: { client_id: secondClientId },
+        ts: 1000,
+      },
+      { type: 'client_count', data: { count: 2 }, ts: 1000 },
+    ]);
+
+    gateway.handleDisconnect(first as unknown as Bun.WebSocket);
+
+    expect(parseSent(second).slice(-2)).toEqual([
+      {
+        type: 'client_disconnected',
+        data: { client_id: firstClientId },
+        ts: 1000,
+      },
+      { type: 'client_count', data: { count: 1 }, ts: 1000 },
+    ]);
+  });
+
+  it('rejects oversized relay payloads without broadcasting', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const sender = createRawSocket();
+    const receiver = createRawSocket();
+
+    await connect(gateway, sender);
+    await connect(gateway, receiver);
+
+    sender.emitMessage(
+      JSON.stringify({ type: 'relay', data: 'x'.repeat(16 * 1024 + 1) }),
+    );
+
+    expect(
+      parseSent(receiver).filter((message) => message.type === 'relay'),
+    ).toEqual([]);
+    expect(parseSent(sender).at(-1)).toMatchObject({
+      type: 'error',
+      data: { code: 'payload_too_large' },
+      ts: 1000,
+    });
+  });
+
+  it('rejects malformed JSON and invalid envelopes', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const socket = createRawSocket();
+
+    await connect(gateway, socket);
+
+    socket.emitMessage('');
+    socket.emitMessage('{');
+    socket.emitMessage(Buffer.from([1, 2, 3]), true);
+    socket.emitMessage(JSON.stringify([]));
+    socket.emitMessage(JSON.stringify({ type: 'relay' }));
+
+    const errors = parseSent(socket).filter(
+      (message) => message.type === 'error',
+    );
+
+    expect(errors).toMatchObject([
+      {
+        type: 'error',
+        data: { code: 'invalid_json' },
+      },
+      {
+        type: 'error',
+        data: { code: 'invalid_json' },
+      },
+      {
+        type: 'error',
+        data: { code: 'invalid_json' },
+      },
+      {
+        type: 'error',
+        data: { code: 'invalid_message' },
+      },
+      {
+        type: 'error',
+        data: { code: 'invalid_payload' },
+      },
+    ]);
+  });
+
+  it('rate-limits relay messages per client', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const sender = createRawSocket();
+    const receiver = createRawSocket();
+
+    await connect(gateway, sender);
+    await connect(gateway, receiver);
+
+    for (let i = 0; i < 61; i++) {
+      sender.emitMessage(JSON.stringify({ type: 'relay', data: i }));
+    }
+
+    const receiverRelayMessages = parseSent(receiver).filter(
+      (message) => message.type === 'relay',
+    );
+
+    expect(receiverRelayMessages).toHaveLength(60);
+    expect(parseSent(sender).at(-1)).toMatchObject({
+      type: 'error',
+      data: { code: 'rate_limited' },
+    });
+  });
+
+  it('accepts ping without response', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const socket = createRawSocket();
+
+    await connect(gateway, socket);
+    socket.emitMessage(JSON.stringify({ type: 'ping' }));
+
+    const messages = parseSent(socket);
+
+    expectConnected(messages[0]);
+    expect(messages.filter((message) => message.type === 'error')).toEqual([]);
+  });
+
+  it('keeps the connection when initial data cannot be built', async () => {
+    setNow(1000);
+    const gateway = createGateway(
+      mock(async () => {
+        throw new Error('Discord rate limited');
+      }),
+    );
+    const socket = createRawSocket();
+
+    await connect(gateway, socket);
+
+    const messages = parseSent(socket);
+
+    expectConnected(messages[0]);
+  });
+
+  it('closes active clients and clears relay state on shutdown', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const first = createRawSocket();
+    const second = createRawSocket();
+
+    await connect(gateway, first);
+    await connect(gateway, second);
+    first.emitMessage(JSON.stringify({ type: 'relay', data: 'hello' }));
+
+    gateway.beforeApplicationShutdown();
+    gateway.broadcast('client_count', { count: 10 });
+
+    expect(first.close).toHaveBeenCalledWith(1001, 'Server shutdown');
+    expect(second.close).toHaveBeenCalledWith(1001, 'Server shutdown');
+    expect(
+      parseSent(first).filter((message) => message.data?.count === 10),
+    ).toEqual([]);
+    expect(
+      (gateway as unknown as { relayRateLimits: Map<unknown, unknown> })
+        .relayRateLimits.size,
+    ).toBe(0);
+  });
+
+  it('does not fail shutdown without clients', () => {
+    const gateway = createGateway();
+
+    expect(() => gateway.beforeApplicationShutdown()).not.toThrow();
+  });
+});

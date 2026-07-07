@@ -18,6 +18,11 @@ export interface BarMember {
 
 export interface ServerToClient {
   connected: ConnectedPayload;
+  relay: RelayPayload;
+  error: ErrorPayload;
+  client_connected: ClientPresencePayload;
+  client_disconnected: ClientPresencePayload;
+  client_count: ClientCountPayload;
   member_start_typing: MemberStartTypingPayload;
   message_create: MessageCreatePayload;
   member_join_voice: MemberJoinVoicePayload;
@@ -29,12 +34,41 @@ export interface ServerToClient {
 }
 
 export interface ConnectedPayload {
+  client_id: string;
+  clients: ClientPresencePayload[];
   guilds: {
     id: string;
     name: string;
     icon_url: string;
     channels: { id: string; name: string; type: keyof typeof ChannelType }[];
+    members: BarMember[];
   }[];
+}
+
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export interface RelayPayload {
+  client_id: string;
+  payload: JsonValue;
+}
+
+export interface ErrorPayload {
+  code: string;
+  message: string;
+}
+
+export interface ClientPresencePayload {
+  client_id: string;
+}
+
+export interface ClientCountPayload {
+  count: number;
 }
 
 export interface MemberStartTypingPayload {
@@ -102,6 +136,7 @@ export interface MemberSpeakingPayload {
 
 export interface ClientToServer {
   ping: never;
+  relay: JsonValue;
 }
 
 /// Util Types
