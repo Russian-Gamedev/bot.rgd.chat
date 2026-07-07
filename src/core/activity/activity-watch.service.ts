@@ -26,10 +26,12 @@ export const VOICE_ACTIVITY_SAVE_INTERVAL_MS = 60_000;
 export const VOICE_ACTIVITY_STALE_MULTIPLIER = 5;
 export const VOICE_ACTIVITY_STALE_TIMEOUT_MS =
   VOICE_ACTIVITY_SAVE_INTERVAL_MS * VOICE_ACTIVITY_STALE_MULTIPLIER;
+const ACTIVITY_DIAGNOSTIC_LOG_INTERVAL_MS = 10 * 60 * 1000;
 
 @Injectable()
 export class ActivityWatchService implements BeforeApplicationShutdown {
   private readonly logger = new Logger(ActivityWatchService.name);
+  private readonly diagnosticLogTimestamps = new Map<string, number>();
 
   constructor(
     readonly em: EntityManager,
@@ -104,7 +106,13 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
       .split(' ')
       .filter((word) => word.length > 0);
 
-    if (words.length === 0) return;
+    if (words.length === 0) {
+      this.warnRateLimited(
+        `message-empty-content:${message.guildId}`,
+        `Received guild message with empty content in guild ${message.guildId}; check Discord MessageContent intent and message payload access`,
+      );
+      return;
+    }
 
     const user = await this.userService.findOrCreateMember(
       BigInt(message.guildId!),
@@ -178,18 +186,68 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     reaction: MessageReaction | PartialMessageReaction,
     user: User | PartialUser,
   ) {
-    const message = await reaction.message.fetch();
-    if (!message.guild) return;
+    const message = await reaction.message.fetch().catch((err) => {
+      const messageId = reaction.message.id ?? 'unknown';
+      const reason = err instanceof Error ? err.message : String(err);
+      this.warnRateLimited(
+        `reaction-fetch:${messageId}`,
+        `Skipping reaction activity for message ${messageId}: failed to fetch message: ${reason}`,
+      );
+      return null;
+    });
+    if (!message) return;
+    if (!message.guild) {
+      this.warnRateLimited(
+        `reaction-no-guild:${message.id}`,
+        `Skipping reaction activity for message ${message.id}: message has no guild`,
+      );
+      return;
+    }
 
     const member = await message.guild.members.fetch(user.id).catch(() => null);
-    if (!member) return;
+    if (!member) {
+      this.warnRateLimited(
+        `reaction-no-member:${message.guild.id}:${user.id}`,
+        `Skipping reaction activity in guild ${message.guild.id}: reacting user ${user.id} was not found`,
+      );
+      return;
+    }
 
-    if (message.author.id === user.id) return;
+    if (!message.author) {
+      this.warnRateLimited(
+        `reaction-no-author:${message.id}`,
+        `Skipping reaction activity for message ${message.id}: message author is missing`,
+      );
+      return;
+    }
+
+    if (message.author.id === user.id) {
+      this.warnRateLimited(
+        `reaction-self:${message.id}:${user.id}`,
+        `Skipping reaction activity for message ${message.id}: user ${user.id} reacted to their own message`,
+      );
+      return;
+    }
 
     const diffTime = Date.now() - message.createdTimestamp;
-    if (diffTime > 1000 * 60 * 60 * 24) return; // older than 24 hours
+    if (diffTime > 1000 * 60 * 60 * 24) {
+      this.warnRateLimited(
+        `reaction-old:${message.id}`,
+        `Skipping reaction activity for message ${message.id}: message is older than 24 hours`,
+      );
+      return;
+    }
 
     return true;
+  }
+
+  private warnRateLimited(key: string, message: string) {
+    const now = Date.now();
+    const previous = this.diagnosticLogTimestamps.get(key) ?? 0;
+    if (now - previous < ACTIVITY_DIAGNOSTIC_LOG_INTERVAL_MS) return;
+
+    this.diagnosticLogTimestamps.set(key, now);
+    this.logger.warn(message);
   }
 
   private getVoiceActivityKey(guildId: string) {
