@@ -94,8 +94,8 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     });
   }
 
-  @EnsureRequestContext()
   @On('messageCreate')
+  @EnsureRequestContext()
   public async onMessage(@Context() [message]: ContextOf<'messageCreate'>) {
     if (message.webhookId) return;
     if (!message.guild) return;
@@ -129,8 +129,8 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     );
   }
 
-  @EnsureRequestContext()
   @On('voiceStateUpdate')
+  @EnsureRequestContext()
   public async onVoiceStateUpdate(
     @Context() [oldState, newState]: ContextOf<'voiceStateUpdate'>,
   ) {
@@ -152,8 +152,8 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     }
   }
 
-  @EnsureRequestContext()
   @On('messageReactionAdd')
+  @EnsureRequestContext()
   public async onReactionAdd(
     @Context() [reaction, user]: ContextOf<'messageReactionAdd'>,
   ) {
@@ -167,8 +167,8 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     );
   }
 
-  @EnsureRequestContext()
   @On('messageReactionRemove')
+  @EnsureRequestContext()
   public async onReactionRemove(
     @Context() [reaction, user]: ContextOf<'messageReactionRemove'>,
   ) {

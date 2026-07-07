@@ -15,8 +15,8 @@ export class RoleReactionWatcher {
     private readonly roleReactionRepository: EntityRepository<RoleReactionEntity>,
   ) {}
 
-  @EnsureRequestContext()
   @On('messageReactionAdd')
+  @EnsureRequestContext()
   async handleReactionAdded(
     @Context() [reaction, user]: ContextOf<'messageReactionAdd'>,
   ) {
@@ -40,8 +40,8 @@ export class RoleReactionWatcher {
     }
   }
 
-  @EnsureRequestContext()
   @On('messageReactionRemove')
+  @EnsureRequestContext()
   async handleReactionRemoved(
     @Context() [reaction, user]: ContextOf<'messageReactionRemove'>,
   ) {

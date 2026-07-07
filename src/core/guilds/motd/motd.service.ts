@@ -5,7 +5,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { ActivityType, Client } from 'discord.js';
 import Redis from 'ioredis';
-import { On } from 'necord';
+import { Once } from 'necord';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { GuildSettingsService } from '../settings/guild-settings.service';
 import { MotdEntity } from './entities/motd.entity';
@@ -36,8 +36,8 @@ export class MotdService {
     });
   }
 
+  @Once('clientReady')
   @EnsureRequestContext()
-  @On('clientReady')
   async onBotReady() {
     /// fires immediately on startup to set the bot's MOTD status, then every minute via the Interval
     await this.setBotMotd();

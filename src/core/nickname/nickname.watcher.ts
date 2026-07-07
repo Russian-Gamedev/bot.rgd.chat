@@ -14,8 +14,8 @@ export class NicknameWatcher {
     readonly _client: Client,
   ) {}
 
-  @EnsureRequestContext()
   @On('guildMemberUpdate')
+  @EnsureRequestContext()
   async onGuildMemberUpdate(
     @Context() [oldMember, newMember]: ContextOf<'guildMemberUpdate'>,
   ) {

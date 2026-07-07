@@ -23,8 +23,8 @@ export class GuildInviteWatcher {
     await this.syncInvitesForAllGuilds();
   }
 
-  @EnsureRequestContext()
   @On('inviteCreate')
+  @EnsureRequestContext()
   async onInviteCreate(@Context() [invite]: ContextOf<'inviteCreate'>) {
     this.logger.log(
       `Invite created: ${invite.code} for guild ${invite.guild?.id}`,
@@ -32,8 +32,8 @@ export class GuildInviteWatcher {
     await this.guildInviteService.create(invite);
   }
 
-  @EnsureRequestContext()
   @On('inviteDelete')
+  @EnsureRequestContext()
   async onInviteDelete(@Context() [invite]: ContextOf<'inviteDelete'>) {
     this.logger.log(
       `Invite deleted: ${invite.code} for guild ${invite.guild?.id}`,

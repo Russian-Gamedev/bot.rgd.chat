@@ -23,8 +23,8 @@ export class GuildService {
     private readonly client: Client,
   ) {}
 
-  @EnsureRequestContext()
   @Once('clientReady')
+  @EnsureRequestContext()
   async onReady() {
     await this.fetchGuilds();
     this.logger.log('Fetched guilds from Discord');

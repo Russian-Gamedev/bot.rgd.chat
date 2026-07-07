@@ -26,8 +26,8 @@ export class GuildWatcherService {
     private readonly guildInviteService: GuildInviteService,
   ) {}
 
-  @EnsureRequestContext()
   @On('guildMemberAdd')
+  @EnsureRequestContext()
   async onMemberJoin(@Context() [member]: ContextOf<'guildMemberAdd'>) {
     this.logger.log(
       `Member ${member.displayName} joined guild ${member.guild.name}`,
@@ -86,8 +86,8 @@ export class GuildWatcherService {
     });
   }
 
-  @EnsureRequestContext()
   @On('guildMemberRemove')
+  @EnsureRequestContext()
   async onMemberLeave(@Context() [member]: ContextOf<'guildMemberRemove'>) {
     this.logger.log(
       `Member ${member.displayName} left guild ${member.guild.name}`,

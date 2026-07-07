@@ -98,8 +98,8 @@ export class BarWatcher {
     });
   }
 
-  @EnsureRequestContext()
   @Once('clientReady')
+  @EnsureRequestContext()
   async onInit() {
     this.logger.log(generateDependencyReport());
 
