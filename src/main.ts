@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
@@ -16,12 +16,61 @@ import './lib/polyfill';
 
 import { AppModule } from './app.module';
 
+const SHUTDOWN_TIMEOUT_MS = 15_000;
+const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+
+type ShutdownSignal = (typeof SHUTDOWN_SIGNALS)[number];
+type ShutdownApplication = INestApplication & {
+  close(signal?: ShutdownSignal): Promise<void>;
+};
+
 async function getSwaggerCustom() {
   const assetsDir = path.resolve('./assets/swagger');
   const customCss = await Bun.file(path.join(assetsDir, 'custom.css')).text();
   const customJs = await Bun.file(path.join(assetsDir, 'custom.js')).text();
 
   return { customCss, customJs };
+}
+
+function registerProcessShutdownHandlers(
+  app: ShutdownApplication,
+  logger: Logger,
+) {
+  let shutdownStarted = false;
+
+  const shutdown = async (signal: ShutdownSignal) => {
+    if (shutdownStarted) {
+      return;
+    }
+
+    shutdownStarted = true;
+    logger.log(`Закрываем приложение... (${signal})`);
+
+    const forceExitTimer = setTimeout(() => {
+      logger.error(
+        `Shutdown timed out after ${SHUTDOWN_TIMEOUT_MS}ms, forcing exit`,
+      );
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceExitTimer.unref();
+
+    try {
+      await app.close(signal);
+      logger.log('Application closed gracefully');
+      process.exit(0);
+    } catch (error) {
+      logger.error(`Failed to close application gracefully: ${String(error)}`);
+      process.exit(1);
+    } finally {
+      clearTimeout(forceExitTimer);
+    }
+  };
+
+  for (const signal of SHUTDOWN_SIGNALS) {
+    process.once(signal, () => {
+      void shutdown(signal);
+    });
+  }
 }
 
 async function main() {
@@ -31,7 +80,7 @@ async function main() {
 
   const config = app.get(ConfigService<EnvironmentVariables>);
 
-  app.enableShutdownHooks();
+  registerProcessShutdownHandlers(app, logger);
   const origin = config.get<string[]>('CORS_ORIGINS', []);
   app.enableCors({
     credentials: true,
