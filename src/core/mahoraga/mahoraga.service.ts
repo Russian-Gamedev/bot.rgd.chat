@@ -73,6 +73,10 @@ export class MahoragaService {
       return result.case;
     }
 
+    if (this.isRepeatReason(detection.reason)) {
+      await this.deleteTrackedUserMessages(message, detection.guildId);
+    }
+
     await this.discordService.logEvent(
       detection.guildId,
       new EmbedBuilder()
@@ -115,27 +119,7 @@ export class MahoragaService {
     message: Message,
     guildId: string,
   ): Promise<void> {
-    try {
-      await message.delete().catch(() => {});
-    } catch {
-      // ignore
-    }
-
-    try {
-      const entries = await this.detectionService.getTrackedMessages(
-        guildId,
-        message.author.id,
-      );
-      if (entries.length > 0) {
-        await this.discordService.deleteUserMessages(guildId, entries);
-        await this.detectionService.clearTrackedMessages(
-          guildId,
-          message.author.id,
-        );
-      }
-    } catch {
-      // ignore
-    }
+    await this.deleteTrackedUserMessages(message, guildId);
 
     try {
       const messageId = await this.guildSettings.getSetting<string>(
@@ -172,6 +156,41 @@ export class MahoragaService {
         `Failed to update honeypot embed in guild ${guildId}: ${error}`,
       );
     }
+  }
+
+  private async deleteTrackedUserMessages(
+    message: Message,
+    guildId: string,
+  ): Promise<void> {
+    try {
+      await message.delete().catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    try {
+      const entries = await this.detectionService.getTrackedMessages(
+        guildId,
+        message.author.id,
+      );
+      if (entries.length > 0) {
+        await this.discordService.deleteUserMessages(guildId, entries);
+        await this.detectionService.clearTrackedMessages(
+          guildId,
+          message.author.id,
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private isRepeatReason(reason: MahoragaReason): boolean {
+    return (
+      reason === MahoragaReason.TextRepeat ||
+      reason === MahoragaReason.LinkRepeat ||
+      reason === MahoragaReason.ImageRepeat
+    );
   }
 
   private getDetectorMode(

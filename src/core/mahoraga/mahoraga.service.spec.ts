@@ -82,6 +82,7 @@ describe('MahoragaService', () => {
   let roleAdd: ReturnType<typeof mock>;
   let roleRemove: ReturnType<typeof mock>;
   let logSend: ReturnType<typeof mock>;
+  let fetchedMessageDelete: ReturnType<typeof mock>;
   let redisStorage: Map<string, number>;
   let redisSetStorage: Map<string, Set<string>>;
   let hasSoftbanRole: boolean;
@@ -93,6 +94,7 @@ describe('MahoragaService', () => {
     roleAdd = mock(async () => undefined);
     roleRemove = mock(async () => undefined);
     logSend = mock(async () => undefined);
+    fetchedMessageDelete = mock(async () => undefined);
     hasSoftbanRole = false;
 
     settings = {
@@ -169,8 +171,14 @@ describe('MahoragaService', () => {
           },
           channels: {
             fetch: mock(async () => ({
+              isTextBased: () => true,
               isSendable: () => true,
               send: logSend,
+              messages: {
+                fetch: mock(async () => ({
+                  delete: fetchedMessageDelete,
+                })),
+              },
             })),
           },
         })),
@@ -310,6 +318,69 @@ describe('MahoragaService', () => {
     expect(roleAdd).toHaveBeenCalledTimes(2);
   });
 
+  it('deletes tracked messages when repeated links reach the threshold in enforcement mode', async () => {
+    settings[GuildSettings.MahoragaTextRepeatLimit] = 99;
+
+    const messageDelete = mock(async () => undefined);
+    const content = 'check https://example.com/spam?a=1&b=2';
+
+    expect(
+      await service.inspectMessage(
+        createMessage({ id: '444444444444444441', content }),
+      ),
+    ).toBeNull();
+    expect(
+      await service.inspectMessage(
+        createMessage({ id: '444444444444444442', content }),
+      ),
+    ).toBeNull();
+
+    const result = await service.inspectMessage(
+      createMessage({
+        id: '444444444444444443',
+        content,
+        delete: messageDelete,
+      }),
+    );
+
+    expect(result?.reason).toBe(MahoragaReason.LinkRepeat);
+    expect(messageDelete).toHaveBeenCalledTimes(1);
+    expect(fetchedMessageDelete).toHaveBeenCalledTimes(3);
+    expect(
+      redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+    ).toBe(false);
+  });
+
+  it('does not delete tracked messages for repeated text in monitor mode', async () => {
+    settings[GuildSettings.MahoragaRepeatMode] = MahoragaDetectionMode.Monitor;
+    settings[GuildSettings.MahoragaTextRepeatLimit] = 2;
+
+    const messageDelete = mock(async () => undefined);
+    const content = 'same spam text';
+
+    expect(
+      await service.inspectMessage(
+        createMessage({ id: '444444444444444451', content }),
+      ),
+    ).toBeNull();
+
+    const result = await service.inspectMessage(
+      createMessage({
+        id: '444444444444444452',
+        content,
+        delete: messageDelete,
+      }),
+    );
+
+    expect(result?.status).toBe(MahoragaCaseStatus.Observed);
+    expect(result?.reason).toBe(MahoragaReason.TextRepeat);
+    expect(messageDelete).not.toHaveBeenCalled();
+    expect(fetchedMessageDelete).not.toHaveBeenCalled();
+    expect(
+      redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+    ).toBe(true);
+  });
+
   it('creates a case when repeated image hashes reach the threshold', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(
@@ -332,6 +403,50 @@ describe('MahoragaService', () => {
       const result = await service.inspectMessage(message);
       expect(result?.reason).toBe(MahoragaReason.ImageRepeat);
       expect(result?.matched_value).toHaveLength(64);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('deletes tracked messages when repeated image hashes reach the threshold in enforcement mode', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () => new Response(new Uint8Array([1, 2, 3, 4])),
+    ) as unknown as typeof fetch;
+
+    try {
+      const messageDelete = mock(async () => undefined);
+      const attachment = {
+        contentType: 'image/png',
+        name: 'spam.png',
+        url: 'https://cdn.example.com/spam.png',
+      };
+
+      expect(
+        await service.inspectMessage(
+          createMessage({
+            id: '444444444444444461',
+            content: '',
+            attachments: new Map([['attachment', attachment]]),
+          }),
+        ),
+      ).toBeNull();
+
+      const result = await service.inspectMessage(
+        createMessage({
+          id: '444444444444444462',
+          content: '',
+          attachments: new Map([['attachment', attachment]]),
+          delete: messageDelete,
+        }),
+      );
+
+      expect(result?.reason).toBe(MahoragaReason.ImageRepeat);
+      expect(messageDelete).toHaveBeenCalledTimes(1);
+      expect(fetchedMessageDelete).toHaveBeenCalledTimes(2);
+      expect(
+        redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+      ).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }
