@@ -1,5 +1,10 @@
 import { ServerToClientEvents, ServerToClientPayload } from './bar.protocol';
 
+export interface ServerEventMetadata {
+  seq: number;
+  ts: number;
+}
+
 export class Socket {
   id = (Date.now() * Math.random()).toString(36).replace('.', '');
 
@@ -8,7 +13,7 @@ export class Socket {
   send<
     Event extends ServerToClientEvents,
     Payload extends ServerToClientPayload<Event>,
-  >(event: Event, data: Payload, ts = Date.now()) {
-    this.rawSocket.send(JSON.stringify({ type: event, data, ts }));
+  >(event: Event, data: Payload, metadata: ServerEventMetadata) {
+    this.rawSocket.send(JSON.stringify({ type: event, data, ...metadata }));
   }
 }

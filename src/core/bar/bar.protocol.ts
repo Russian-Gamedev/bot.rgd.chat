@@ -11,6 +11,7 @@ export interface BarMember {
   id: string;
   username: string;
   avatar_url: string;
+  color: string;
   is_bot: boolean;
 }
 
@@ -42,6 +43,7 @@ export interface ConnectedPayload {
     icon_url: string;
     channels: { id: string; name: string; type: keyof typeof ChannelType }[];
     members: BarMember[];
+    voices: Record<string, BarMember[]>;
   }[];
 }
 

@@ -62,6 +62,7 @@ function parseSent(socket: ReturnType<typeof createRawSocket>) {
 }
 
 function expectConnected(message: unknown) {
+  expect(typeof (message as { seq: unknown }).seq).toBe('number');
   expect(message).toMatchObject({
     type: 'connected',
     data: { guilds: [] },
@@ -108,6 +109,7 @@ describe('BarGateway relay', () => {
         payload: { action: 'wave' },
       },
       ts: 1000,
+      seq: 7,
     });
     expect(typeof relayMessage.data.client_id).toBe('string');
   });
@@ -132,6 +134,7 @@ describe('BarGateway relay', () => {
         payload: { kind: 'cursor' },
       },
       ts: 1000,
+      seq: 7,
     });
   });
 
@@ -157,6 +160,7 @@ describe('BarGateway relay', () => {
         payload: { kind: 'cursor', x: 143.0, y: 84.0 },
       },
       ts: 1000,
+      seq: 7,
     });
   });
 
@@ -197,14 +201,16 @@ describe('BarGateway relay', () => {
         clients: [{ client_id: firstClientId }],
       },
       ts: 1000,
+      seq: 1,
     });
     expect(parseSent(first).slice(1)).toEqual([
       {
         type: 'client_connected',
         data: { client_id: firstClientId },
         ts: 1000,
+        seq: 2,
       },
-      { type: 'client_count', data: { count: 1 }, ts: 1000 },
+      { type: 'client_count', data: { count: 1 }, ts: 1000, seq: 3 },
     ]);
 
     await connect(gateway, second);
@@ -218,22 +224,25 @@ describe('BarGateway relay', () => {
         clients: [{ client_id: firstClientId }, { client_id: secondClientId }],
       },
       ts: 1000,
+      seq: 4,
     });
     expect(parseSent(first).slice(-2)).toEqual([
       {
         type: 'client_connected',
         data: { client_id: secondClientId },
         ts: 1000,
+        seq: 5,
       },
-      { type: 'client_count', data: { count: 2 }, ts: 1000 },
+      { type: 'client_count', data: { count: 2 }, ts: 1000, seq: 6 },
     ]);
     expect(parseSent(second).slice(1)).toEqual([
       {
         type: 'client_connected',
         data: { client_id: secondClientId },
         ts: 1000,
+        seq: 5,
       },
-      { type: 'client_count', data: { count: 2 }, ts: 1000 },
+      { type: 'client_count', data: { count: 2 }, ts: 1000, seq: 6 },
     ]);
 
     gateway.handleDisconnect(first as unknown as Bun.WebSocket);
@@ -243,9 +252,78 @@ describe('BarGateway relay', () => {
         type: 'client_disconnected',
         data: { client_id: firstClientId },
         ts: 1000,
+        seq: 7,
       },
-      { type: 'client_count', data: { count: 1 }, ts: 1000 },
+      { type: 'client_count', data: { count: 1 }, ts: 1000, seq: 8 },
     ]);
+  });
+
+  it('assigns increasing seq values to consecutive server messages in the same millisecond', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const socket = createRawSocket();
+
+    await connect(gateway, socket);
+
+    const messages = parseSent(socket);
+    expect(messages.map((message) => message.ts)).toEqual([1000, 1000, 1000]);
+    expect(messages.map((message) => message.seq)).toEqual([1, 2, 3]);
+  });
+
+  it('replays broadcast history with original seq values', async () => {
+    setNow(1000);
+    const gateway = createGateway();
+    const first = createRawSocket();
+    const late = createRawSocket();
+
+    await connect(gateway, first);
+    gateway.broadcast('client_count', { count: 10 });
+    await connect(gateway, late);
+
+    const firstMessages = parseSent(first);
+    const lateMessages = parseSent(late);
+    const broadcast = firstMessages.find(
+      (message) => message.type === 'client_count' && message.data.count === 10,
+    );
+
+    expect(broadcast).toMatchObject({
+      type: 'client_count',
+      data: { count: 10 },
+      ts: 1000,
+      seq: 4,
+    });
+    expect(lateMessages[0]).toMatchObject({
+      type: 'connected',
+      seq: 5,
+    });
+    expect(lateMessages[1]).toEqual(broadcast);
+  });
+
+  it('replays broadcasts emitted while initial data is pending after connected', async () => {
+    setNow(1000);
+    let resolveInitialData: (value: { guilds: [] }) => void = () => undefined;
+    const initialData = new Promise<{ guilds: [] }>((resolve) => {
+      resolveInitialData = resolve;
+    });
+    const gateway = createGateway(mock(async () => initialData));
+    const socket = createRawSocket();
+
+    const pendingConnection = connect(gateway, socket);
+    gateway.broadcast('client_count', { count: 42 });
+    resolveInitialData({ guilds: [] });
+    await pendingConnection;
+
+    const messages = parseSent(socket);
+    expect(messages[0]).toMatchObject({
+      type: 'connected',
+      seq: 2,
+    });
+    expect(messages[1]).toEqual({
+      type: 'client_count',
+      data: { count: 42 },
+      ts: 1000,
+      seq: 1,
+    });
   });
 
   it('rejects oversized relay payloads without broadcasting', async () => {
@@ -268,6 +346,7 @@ describe('BarGateway relay', () => {
       type: 'error',
       data: { code: 'payload_too_large' },
       ts: 1000,
+      seq: 7,
     });
   });
 
@@ -292,22 +371,27 @@ describe('BarGateway relay', () => {
       {
         type: 'error',
         data: { code: 'invalid_json' },
+        seq: 4,
       },
       {
         type: 'error',
         data: { code: 'invalid_json' },
+        seq: 5,
       },
       {
         type: 'error',
         data: { code: 'invalid_json' },
+        seq: 6,
       },
       {
         type: 'error',
         data: { code: 'invalid_message' },
+        seq: 7,
       },
       {
         type: 'error',
         data: { code: 'invalid_payload' },
+        seq: 8,
       },
     ]);
   });
@@ -330,9 +414,13 @@ describe('BarGateway relay', () => {
     );
 
     expect(receiverRelayMessages).toHaveLength(60);
+    expect(receiverRelayMessages.map((message) => message.seq)).toEqual(
+      Array.from({ length: 60 }, (_, i) => i + 7),
+    );
     expect(parseSent(sender).at(-1)).toMatchObject({
       type: 'error',
       data: { code: 'rate_limited' },
+      seq: 67,
     });
   });
 

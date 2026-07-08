@@ -12,7 +12,7 @@ import {
   ServerToClientEvents,
   ServerToClientPayload,
 } from './bar.protocol';
-import { Socket } from './bar.type';
+import { ServerEventMetadata, Socket } from './bar.type';
 import { BarWatcher } from './bar.watcher';
 
 @WebSocketGateway({
@@ -26,6 +26,7 @@ export class BarGateway
 {
   private readonly logger = new Logger(BarGateway.name);
   private clients: Socket[] = [];
+  private nextSeq = 1;
 
   private readonly maxLastBroadcastEvents = 50;
   private readonly maxRelayPayloadBytes = 16 * 1024;
@@ -38,11 +39,10 @@ export class BarGateway
     { windowStartedAt: number; count: number }
   >();
 
-  private lastBroadcastEvents: {
+  private lastBroadcastEvents: ({
     event: ServerToClientEvents;
     data: ServerToClientPayload<ServerToClientEvents>;
-    ts: number;
-  }[] = [];
+  } & ServerEventMetadata)[] = [];
 
   constructor(private readonly barWatcher: BarWatcher) {
     barWatcher.barGateway = this;
@@ -50,7 +50,6 @@ export class BarGateway
 
   async handleConnection(client: Bun.WebSocket, req: Request) {
     const socket = new Socket(client);
-    this.clients.push(socket);
     const requestWithSocket = req as Request & {
       socket?: { remoteAddress?: string };
     };
@@ -59,8 +58,6 @@ export class BarGateway
       requestWithSocket.socket?.remoteAddress ??
       'unknown';
     this.logger.log(`Client[${socket.id}] connected ${ip}`);
-
-    this.bindClientMessages(socket);
 
     const initialData = await this.barWatcher
       .getInitialData()
@@ -71,15 +68,22 @@ export class BarGateway
         );
         return { guilds: [] };
       });
-    socket.send('connected', {
-      client_id: socket.id,
-      clients: this.getClientPresenceList(),
-      ...initialData,
-    });
+    socket.send(
+      'connected',
+      {
+        client_id: socket.id,
+        clients: [...this.getClientPresenceList(), { client_id: socket.id }],
+        ...initialData,
+      },
+      this.createEventMetadata(),
+    );
 
-    for (const { event, data, ts } of this.lastBroadcastEvents) {
-      socket.send(event, data, ts);
+    for (const { event, data, seq, ts } of this.lastBroadcastEvents) {
+      socket.send(event, data, { seq, ts });
     }
+
+    this.clients.push(socket);
+    this.bindClientMessages(socket);
 
     this.broadcastPresenceEvent('client_connected', { client_id: socket.id });
     this.broadcastPresenceEvent('client_count', { count: this.clients.length });
@@ -124,13 +128,13 @@ export class BarGateway
     Event extends ServerToClientEvents,
     Payload extends ServerToClientPayload<Event>,
   >(event: Event, data: Payload) {
-    const ts = Date.now();
+    const metadata = this.createEventMetadata();
 
     for (const client of this.clients) {
-      client.send(event, data, ts);
+      client.send(event, data, metadata);
     }
 
-    this.lastBroadcastEvents.push({ event, data, ts });
+    this.lastBroadcastEvents.push({ event, data, ...metadata });
     if (this.lastBroadcastEvents.length > this.maxLastBroadcastEvents) {
       this.lastBroadcastEvents.shift();
     }
@@ -234,7 +238,7 @@ export class BarGateway
   }
 
   private relay(sender: Socket, payload: JsonValue) {
-    const ts = Date.now();
+    const metadata = this.createEventMetadata();
     const data: RelayPayload = {
       client_id: sender.id,
       payload,
@@ -242,7 +246,7 @@ export class BarGateway
 
     for (const client of this.clients) {
       if (client === sender) continue;
-      client.send('relay', data, ts);
+      client.send('relay', data, metadata);
     }
   }
 
@@ -253,15 +257,22 @@ export class BarGateway
   private broadcastPresenceEvent<
     Event extends 'client_connected' | 'client_disconnected' | 'client_count',
   >(event: Event, data: ServerToClientPayload<Event>) {
-    const ts = Date.now();
+    const metadata = this.createEventMetadata();
 
     for (const client of this.clients) {
-      client.send(event, data, ts);
+      client.send(event, data, metadata);
     }
   }
 
   private sendError(socket: Socket, data: ErrorPayload) {
-    socket.send('error', data);
+    socket.send('error', data, this.createEventMetadata());
+  }
+
+  private createEventMetadata(): ServerEventMetadata {
+    return {
+      seq: this.nextSeq++,
+      ts: Date.now(),
+    };
   }
 
   private consumeRelayRateLimit(client: Bun.WebSocket) {

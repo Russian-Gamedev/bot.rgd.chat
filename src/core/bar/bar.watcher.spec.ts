@@ -31,11 +31,12 @@ function createEntityManager() {
   return em as unknown as EntityManager;
 }
 
-function createMember(id: string, roleIds: string[]) {
+function createMember(id: string, roleIds: string[], displayColor = 0x123abc) {
   return {
     id,
     username: `user-${id}`,
     bot: false,
+    displayColor,
     displayAvatarURL: mock(() => `https://example.com/${id}.png`),
     roles: {
       cache: new Collection(roleIds.map((roleId) => [roleId, { id: roleId }])),
@@ -54,6 +55,7 @@ function createChannel(
     type?: DiscordChannelType;
     rawPosition?: number;
     parentId?: string | null;
+    members?: Collection<string, ReturnType<typeof createMember>>;
   } = {},
 ) {
   const everyoneCanSend = options.everyoneCanSend ?? everyoneCanView;
@@ -67,6 +69,7 @@ function createChannel(
     type: options.type ?? DiscordChannelType.GuildText,
     rawPosition: options.rawPosition ?? 0,
     parentId: options.parentId ?? null,
+    members: options.members ?? new Collection(),
     permissionsFor: mock(() => ({
       has: mock((permission: bigint) => {
         switch (permission) {
@@ -160,6 +163,7 @@ describe('BarWatcher', () => {
             },
           ],
           members: [],
+          voices: {},
         },
       ],
     });
@@ -213,13 +217,42 @@ describe('BarWatcher', () => {
               id: activeMember.id,
               username: activeMember.username,
               avatar_url: `https://example.com/${activeMember.id}.png`,
+              color: '123abc',
               is_bot: false,
             },
           ],
+          voices: {},
         },
       ],
     });
     expect(guild.members.fetch).not.toHaveBeenCalled();
+  });
+
+  it('uses zero hex color for active members without a Discord display color', async () => {
+    setNow(0);
+    const activeMember = createMember('111111111', [ACTIVE_ROLE_ID], 0);
+    const guild = createGuild(
+      GUILD_ID,
+      new Collection([[activeMember.id, activeMember]]),
+    );
+    const guildSettings = {
+      getGuildsWithEnabledFeature: mock(async () => [GUILD_ID]),
+      getSetting: mock(async () => ACTIVE_ROLE_ID),
+    } as unknown as GuildSettingsService;
+    const discord = {
+      guilds: {
+        fetch: mock(async () => guild),
+      },
+    } as unknown as Client;
+    const watcher = new BarWatcher(
+      createEntityManager(),
+      guildSettings,
+      discord,
+    );
+
+    expect((await watcher.getInitialData()).guilds[0].members[0].color).toBe(
+      '000000',
+    );
   });
 
   it('includes only channels visible and usable by everyone in initial data', async () => {
@@ -306,6 +339,85 @@ describe('BarWatcher', () => {
     expect(privateChannel.permissionsFor).toHaveBeenCalledWith(
       guild.roles.everyone,
     );
+  });
+
+  it('includes public voice channel members in initial data voices', async () => {
+    setNow(0);
+    const activeMember = createMember('111111111', [ACTIVE_ROLE_ID]);
+    const inactiveVoiceMember = createMember('222222222', []);
+    const privateVoiceMember = createMember('333333333', []);
+    const textChannelMember = createMember('444444444', []);
+    const publicVoice = createChannel('987654401', 'voice', true, {
+      type: DiscordChannelType.GuildVoice,
+      members: new Collection([
+        [activeMember.id, activeMember],
+        [inactiveVoiceMember.id, inactiveVoiceMember],
+      ]),
+    });
+    const emptyPublicVoice = createChannel('987654402', 'empty-voice', true, {
+      type: DiscordChannelType.GuildVoice,
+    });
+    const privateVoice = createChannel('987654403', 'private-voice', false, {
+      type: DiscordChannelType.GuildVoice,
+      members: new Collection([[privateVoiceMember.id, privateVoiceMember]]),
+    });
+    const lockedVoice = createChannel('987654404', 'locked-voice', true, {
+      type: DiscordChannelType.GuildVoice,
+      everyoneCanConnect: false,
+    });
+    const textChannel = createChannel('987654405', 'text', true, {
+      members: new Collection([[textChannelMember.id, textChannelMember]]),
+    });
+    const guild = createGuild(
+      GUILD_ID,
+      new Collection([
+        [activeMember.id, activeMember],
+        [inactiveVoiceMember.id, inactiveVoiceMember],
+        [privateVoiceMember.id, privateVoiceMember],
+        [textChannelMember.id, textChannelMember],
+      ]),
+      new Collection([
+        [publicVoice.id, publicVoice],
+        [emptyPublicVoice.id, emptyPublicVoice],
+        [privateVoice.id, privateVoice],
+        [lockedVoice.id, lockedVoice],
+        [textChannel.id, textChannel],
+      ]),
+    );
+    const guildSettings = {
+      getGuildsWithEnabledFeature: mock(async () => [GUILD_ID]),
+      getSetting: mock(async () => ACTIVE_ROLE_ID),
+    } as unknown as GuildSettingsService;
+    const discord = {
+      guilds: {
+        fetch: mock(async () => guild),
+      },
+    } as unknown as Client;
+    const watcher = new BarWatcher(
+      createEntityManager(),
+      guildSettings,
+      discord,
+    );
+
+    expect((await watcher.getInitialData()).guilds[0].voices).toEqual({
+      [publicVoice.id]: [
+        {
+          id: activeMember.id,
+          username: activeMember.username,
+          avatar_url: `https://example.com/${activeMember.id}.png`,
+          color: '123abc',
+          is_bot: false,
+        },
+        {
+          id: inactiveVoiceMember.id,
+          username: inactiveVoiceMember.username,
+          avatar_url: `https://example.com/${inactiveVoiceMember.id}.png`,
+          color: '123abc',
+          is_bot: false,
+        },
+      ],
+      [emptyPublicVoice.id]: [],
+    });
   });
 
   it('keeps Discord channel order and excludes unsupported channel types', async () => {

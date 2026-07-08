@@ -114,12 +114,14 @@ export class BarWatcher {
     return {
       guilds: await Promise.all(
         this.guilds.map(async (guild) => {
+          const channels = this.getPublicChannels(guild);
           return {
             id: guild.id,
             name: guild.name,
             icon_url: guild.iconURL() ?? '',
-            channels: this.getPublicChannels(guild),
+            channels,
             members: await this.getActiveMembers(guild),
+            voices: this.getVoiceMembersByChannel(guild, channels),
           };
         }),
       ),
@@ -239,6 +241,33 @@ export class BarWatcher {
     return guild.members.cache
       .filter((member) => member.roles.cache.has(activeRoleId))
       .map((member) => this.normalizeMember(member));
+  }
+
+  private getVoiceMembersByChannel(
+    guild: Guild,
+    channels: BarConnectedChannel[],
+  ) {
+    const voices: Record<string, ReturnType<typeof this.normalizeMember>[]> =
+      {};
+
+    for (const channel of channels) {
+      if (channel.type !== 'voice') continue;
+
+      const discordChannel = guild.channels.cache.get(channel.id);
+      if (
+        !discordChannel ||
+        discordChannel.type !== DiscordChannelType.GuildVoice
+      ) {
+        voices[channel.id] = [];
+        continue;
+      }
+
+      voices[channel.id] = Array.from(discordChannel.members.values()).map(
+        (member) => this.normalizeMember(member),
+      );
+    }
+
+    return voices;
   }
 
   private async refreshGuildsIfStale() {
@@ -394,8 +423,17 @@ export class BarWatcher {
         'png',
         256,
       ),
+      color: this.getMemberColor(member),
       is_bot: 'bot' in member ? member.bot : member.user.bot,
     };
+  }
+
+  private getMemberColor(member: GuildMember | User | PartialUser) {
+    if ('displayColor' in member && typeof member.displayColor === 'number') {
+      return member.displayColor.toString(16).padStart(6, '0');
+    }
+
+    return '000000';
   }
 
   private checkGuildFeatureEnabled(guild?: Guild | null): guild is Guild {
