@@ -1,7 +1,8 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { UserService } from '#core/users/users.service';
@@ -43,6 +44,7 @@ export class ActivityService {
     private readonly memberProfileRepository: EntityRepository<MemberProfileEntity>,
     private readonly em: EntityManager,
     private readonly userService: UserService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async recordActivity(
@@ -104,6 +106,7 @@ export class ActivityService {
     this.em.persist(profile);
 
     await this.em.flush();
+    this.recordMetrics(guildId, messageScore, voiceSeconds, reactionCount);
     this.logger.log(
       `Persisted activity for guild ${normalizedGuildId}, user ${normalizedUserId}, date ${activityDate}`,
     );
@@ -253,6 +256,32 @@ export class ActivityService {
     }
 
     return activity;
+  }
+
+  private recordMetrics(
+    guildId: DiscordID,
+    messageScore: number,
+    voiceSeconds: number,
+    reactionCount: number,
+  ) {
+    this.metrics?.recordActivityIncrement({
+      guildId: String(guildId),
+      roleSegment: 'unknown',
+      kind: 'message',
+      amount: messageScore,
+    });
+    this.metrics?.recordActivityIncrement({
+      guildId: String(guildId),
+      roleSegment: 'unknown',
+      kind: 'voice',
+      amount: voiceSeconds,
+    });
+    this.metrics?.recordActivityIncrement({
+      guildId: String(guildId),
+      roleSegment: 'unknown',
+      kind: 'reaction',
+      amount: reactionCount,
+    });
   }
 
   private async getOrCreateTotalActivity(

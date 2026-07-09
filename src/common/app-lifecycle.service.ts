@@ -5,10 +5,12 @@ import {
   Injectable,
   Logger,
   type OnApplicationBootstrap,
+  Optional,
 } from '@nestjs/common';
 import Redis from 'ioredis';
 
 import { type GitInfo, GitInfoService } from '#common/git-info.service';
+import { MetricsService } from './metrics/metrics.service';
 
 export const APP_LIFECYCLE_LAST_START_KEY = 'app:lifecycle:last-start';
 export const APP_LIFECYCLE_LAST_STOP_KEY = 'app:lifecycle:last-stop';
@@ -173,6 +175,7 @@ export class AppLifecycleService
   constructor(
     @Inject(Redis) private readonly redis: Redis,
     private readonly gitInfoService: GitInfoService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     this.currentGitInfo = this.gitInfoService.getGitInfo();
     this.startupReady = new Promise((resolve) => {
@@ -206,6 +209,10 @@ export class AppLifecycleService
       this.logger.log(
         `Lifecycle startup ${JSON.stringify(createStartupLogPayload(this.startupContext))}`,
       );
+      this.metrics?.recordAppLifecycleEvent('startup', 'success');
+    } catch (error) {
+      this.metrics?.recordAppLifecycleEvent('startup', 'error');
+      throw error;
     } finally {
       this.resolveStartupReady();
     }
@@ -225,6 +232,7 @@ export class AppLifecycleService
     this.logger.log(
       `Lifecycle shutdown saved ${JSON.stringify(createShutdownLogPayload(shutdownRecord))}`,
     );
+    this.metrics?.recordAppLifecycleEvent('shutdown', 'success');
   }
 
   async getStartupContext(): Promise<AppStartupContext> {

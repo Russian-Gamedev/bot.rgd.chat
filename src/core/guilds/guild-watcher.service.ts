@@ -1,9 +1,10 @@
 import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AuditLogEvent, Client, Guild, SnowflakeUtil } from 'discord.js';
 import { Context, type ContextOf, On } from 'necord';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import { GuildEvents } from '#config/guilds';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { UserService } from '#core/users/users.service';
@@ -24,6 +25,7 @@ export class GuildWatcherService {
     private readonly userService: UserService,
     private readonly guildMemberRolesService: GuildMemberRolesService,
     private readonly guildInviteService: GuildInviteService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   @On('guildMemberAdd')
@@ -34,6 +36,7 @@ export class GuildWatcherService {
     );
     const guild = await member.guild.fetch();
     if (!guild) return;
+    this.metrics?.recordGuildEvent({ guildId: guild.id, event: 'member_join' });
 
     const user = await this.userService.findOrCreateMember(guild.id, member.id);
 
@@ -94,6 +97,10 @@ export class GuildWatcherService {
     );
     const guild = await member.guild.fetch();
     if (!guild) return;
+    this.metrics?.recordGuildEvent({
+      guildId: guild.id,
+      event: 'member_leave',
+    });
 
     const user = await this.userService.findOrCreateMember(guild.id, member.id);
     await this.userService.leaveGuild(user);
@@ -117,6 +124,7 @@ export class GuildWatcherService {
       guild,
       member.id,
     );
+    this.metrics?.recordGuildEvent({ guildId: guild.id, event });
 
     const userStr = `[<@${member.id}>] **${member.displayName}**`;
     const moderatorStr = moderatorId ? `<@${moderatorId}>` : 'неизвестный';

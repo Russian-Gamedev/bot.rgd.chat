@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 
+import type { MetricsService } from '#common/metrics/metrics.service';
 import { BarGateway } from './bar.gateway';
 import { BarWatcher } from './bar.watcher';
 
@@ -37,12 +38,22 @@ function createRawSocket() {
   };
 }
 
-function createGateway(getInitialData = mock(async () => ({ guilds: [] }))) {
+function createMetrics() {
+  return {
+    recordBarEvent: mock(() => undefined),
+    setBarClientCount: mock(() => undefined),
+  } as unknown as MetricsService;
+}
+
+function createGateway(
+  getInitialData = mock(async () => ({ guilds: [] })),
+  metrics?: MetricsService,
+) {
   const watcher = {
     getInitialData,
   } as unknown as BarWatcher;
 
-  return new BarGateway(watcher);
+  return new BarGateway(watcher, metrics);
 }
 
 async function connect(
@@ -256,6 +267,32 @@ describe('BarGateway relay', () => {
       },
       { type: 'client_count', data: { count: 1 }, ts: 1000, seq: 8 },
     ]);
+  });
+
+  it('updates websocket client and relay metrics', async () => {
+    setNow(1000);
+    const metrics = createMetrics();
+    const gateway = createGateway(
+      mock(async () => ({ guilds: [] })),
+      metrics,
+    );
+    const sender = createRawSocket();
+    const receiver = createRawSocket();
+
+    await connect(gateway, sender);
+    await connect(gateway, receiver);
+    sender.emitMessage(JSON.stringify({ type: 'relay', data: 'ok' }));
+    gateway.handleDisconnect(sender as unknown as Bun.WebSocket);
+
+    expect(metrics.setBarClientCount).toHaveBeenCalledWith(1);
+    expect(metrics.setBarClientCount).toHaveBeenCalledWith(2);
+    expect(metrics.setBarClientCount).toHaveBeenCalledWith(1);
+    expect(metrics.recordBarEvent).toHaveBeenCalledWith('connect', 'success');
+    expect(metrics.recordBarEvent).toHaveBeenCalledWith('relay', 'success');
+    expect(metrics.recordBarEvent).toHaveBeenCalledWith(
+      'disconnect',
+      'success',
+    );
   });
 
   it('assigns increasing seq values to consecutive server messages in the same millisecond', async () => {

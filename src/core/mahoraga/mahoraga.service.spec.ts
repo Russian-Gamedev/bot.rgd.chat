@@ -3,6 +3,7 @@ import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Client, GuildMember, Message, PermissionsBitField } from 'discord.js';
 import Redis from 'ioredis';
 
+import type { MetricsService } from '#common/metrics/metrics.service';
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 
@@ -86,6 +87,7 @@ describe('MahoragaService', () => {
   let redisStorage: Map<string, number>;
   let redisSetStorage: Map<string, Set<string>>;
   let hasSoftbanRole: boolean;
+  let metrics: MetricsService;
 
   beforeEach(() => {
     storedCase = null;
@@ -196,11 +198,15 @@ describe('MahoragaService', () => {
       guildSettings,
       caseService,
     );
+    metrics = {
+      recordMahoragaDetection: mock(() => undefined),
+    } as unknown as MetricsService;
     service = new MahoragaService(
       new MahoragaDetectionService(redis, guildSettings),
       caseService,
       discordService,
       guildSettings,
+      metrics,
     );
   });
 
@@ -274,6 +280,12 @@ describe('MahoragaService', () => {
     expect(result?.reason).toBe(MahoragaReason.Honeypot);
     expect(result?.source_guild_id).toBe(BigInt(GUILD_ID));
     expect(roleAdd).toHaveBeenCalledTimes(2);
+    expect(metrics.recordMahoragaDetection).toHaveBeenCalledWith({
+      guildId: GUILD_ID,
+      reason: MahoragaReason.Honeypot,
+      mode: MahoragaDetectionMode.On,
+      status: MahoragaCaseStatus.Active,
+    });
   });
 
   it('logs attention for young accounts with softban when youngAccountMode is on', async () => {

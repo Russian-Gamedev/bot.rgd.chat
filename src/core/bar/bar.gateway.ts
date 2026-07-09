@@ -1,10 +1,14 @@
-import { type BeforeApplicationShutdown, Logger } from '@nestjs/common';
+import {
+  type BeforeApplicationShutdown,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   WebSocketGateway,
 } from '@nestjs/websockets';
-
+import { MetricsService } from '#common/metrics/metrics.service';
 import {
   ErrorPayload,
   JsonValue,
@@ -44,7 +48,10 @@ export class BarGateway
     data: ServerToClientPayload<ServerToClientEvents>;
   } & ServerEventMetadata)[] = [];
 
-  constructor(private readonly barWatcher: BarWatcher) {
+  constructor(
+    private readonly barWatcher: BarWatcher,
+    @Optional() private readonly metrics?: MetricsService,
+  ) {
     barWatcher.barGateway = this;
   }
 
@@ -83,6 +90,8 @@ export class BarGateway
     }
 
     this.clients.push(socket);
+    this.metrics?.recordBarEvent('connect', 'success');
+    this.metrics?.setBarClientCount(this.clients.length);
     this.bindClientMessages(socket);
 
     this.broadcastPresenceEvent('client_connected', { client_id: socket.id });
@@ -94,6 +103,8 @@ export class BarGateway
     if (!socket) return;
     this.clients = this.clients.filter((s) => s.rawSocket !== client);
     this.relayRateLimits.delete(client);
+    this.metrics?.recordBarEvent('disconnect', 'success');
+    this.metrics?.setBarClientCount(this.clients.length);
     this.logger.log(`Client[${socket.id}] disconnected`);
     this.broadcastPresenceEvent('client_disconnected', {
       client_id: socket.id,
@@ -105,6 +116,7 @@ export class BarGateway
     const clients = this.clients;
     this.clients = [];
     this.relayRateLimits.clear();
+    this.metrics?.setBarClientCount(0);
 
     for (const socket of clients) {
       try {
@@ -160,6 +172,7 @@ export class BarGateway
         code: 'invalid_message',
         message: 'Only JSON text messages are supported.',
       });
+      this.metrics?.recordBarEvent('invalid_message', 'error');
       return;
     }
     const text = this.stripTrailingNullTerminators(rawText);
@@ -169,6 +182,7 @@ export class BarGateway
         code: 'payload_too_large',
         message: `Relay message must be at most ${this.maxRelayPayloadBytes} bytes.`,
       });
+      this.metrics?.recordBarEvent('payload_too_large', 'error');
       return;
     }
 
@@ -183,6 +197,7 @@ export class BarGateway
         code: 'invalid_json',
         message: 'Message must be valid JSON.',
       });
+      this.metrics?.recordBarEvent('invalid_json', 'error');
       return;
     }
 
@@ -191,6 +206,7 @@ export class BarGateway
         code: 'invalid_message',
         message: 'Message must include a string type.',
       });
+      this.metrics?.recordBarEvent('invalid_message', 'error');
       return;
     }
 
@@ -203,6 +219,7 @@ export class BarGateway
         code: 'unknown_event',
         message: 'Unsupported client event type.',
       });
+      this.metrics?.recordBarEvent('unknown_event', 'error');
       return;
     }
 
@@ -211,6 +228,7 @@ export class BarGateway
         code: 'invalid_payload',
         message: 'Relay message must include data.',
       });
+      this.metrics?.recordBarEvent('invalid_payload', 'error');
       return;
     }
 
@@ -223,6 +241,7 @@ export class BarGateway
         code: 'payload_too_large',
         message: `Relay payload must be at most ${this.maxRelayPayloadBytes} bytes.`,
       });
+      this.metrics?.recordBarEvent('payload_too_large', 'error');
       return;
     }
 
@@ -231,10 +250,12 @@ export class BarGateway
         code: 'rate_limited',
         message: 'Too many relay messages.',
       });
+      this.metrics?.recordBarEvent('rate_limited', 'error');
       return;
     }
 
     this.relay(socket, message.data as JsonValue);
+    this.metrics?.recordBarEvent('relay', 'success');
   }
 
   private relay(sender: Socket, payload: JsonValue) {
@@ -262,6 +283,7 @@ export class BarGateway
     for (const client of this.clients) {
       client.send(event, data, metadata);
     }
+    this.metrics?.recordBarEvent(event, 'success');
   }
 
   private sendError(socket: Socket, data: ErrorPayload) {

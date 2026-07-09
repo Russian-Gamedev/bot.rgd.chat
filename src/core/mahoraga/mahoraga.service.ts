@@ -1,6 +1,12 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { EmbedBuilder, GuildMember, Message } from 'discord.js';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 
@@ -30,6 +36,7 @@ export class MahoragaService {
     private readonly caseService: MahoragaCaseService,
     private readonly discordService: MahoragaDiscordService,
     private readonly guildSettings: GuildSettingsService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async inspectMessage(message: Message): Promise<MahoragaCaseEntity | null> {
@@ -53,6 +60,12 @@ export class MahoragaService {
     );
 
     if (detectorMode === MahoragaDetectionMode.Monitor) {
+      this.recordDetectionMetric(
+        detection.guildId,
+        detection.reason,
+        detectorMode,
+        result.case?.status ?? detection.status,
+      );
       await this.discordService.logEvent(
         detection.guildId,
         new EmbedBuilder()
@@ -94,6 +107,13 @@ export class MahoragaService {
       await this.discordService.applySoftbanToAllGuilds(detection.userId);
     }
 
+    this.recordDetectionMetric(
+      detection.guildId,
+      detection.reason,
+      detectorMode,
+      result.case?.status ?? detection.status,
+    );
+
     const cutoff =
       Date.now() - detection.settings.youngAccountMonths * 30 * 86_400_000;
     if (
@@ -113,6 +133,20 @@ export class MahoragaService {
     }
 
     return result.case;
+  }
+
+  private recordDetectionMetric(
+    guildId: string,
+    reason: MahoragaReason,
+    mode: MahoragaDetectionMode,
+    status: MahoragaCaseStatus,
+  ) {
+    this.metrics?.recordMahoragaDetection({
+      guildId,
+      reason,
+      mode,
+      status,
+    });
   }
 
   private async handleHoneypotDetection(
@@ -242,6 +276,12 @@ export class MahoragaService {
     if (result.shouldApplySoftban) {
       await this.discordService.applySoftbanToAllGuilds(userId);
     }
+    this.metrics?.recordMahoragaDetection({
+      guildId,
+      reason: MahoragaReason.Manual,
+      mode: MahoragaDetectionMode.On,
+      status: 'manual',
+    });
 
     if (guildId) {
       await this.discordService.logEvent(
@@ -281,6 +321,12 @@ export class MahoragaService {
       await this.discordService.removeSoftbanFromAllGuilds(userId);
 
     const guildId = mahoragaCase.source_guild_id?.toString();
+    this.metrics?.recordMahoragaDetection({
+      guildId,
+      reason: mahoragaCase.reason,
+      mode: MahoragaDetectionMode.Off,
+      status: MahoragaCaseStatus.Pardoned,
+    });
     if (guildId) {
       await this.discordService.logEvent(
         guildId,
@@ -313,7 +359,14 @@ export class MahoragaService {
       );
     }
 
-    return this.discordService.applySoftbanToAllGuilds(userId);
+    const results = await this.discordService.applySoftbanToAllGuilds(userId);
+    this.metrics?.recordMahoragaDetection({
+      guildId: mahoragaCase.source_guild_id,
+      reason: mahoragaCase.reason,
+      mode: MahoragaDetectionMode.On,
+      status: 'sync',
+    });
+    return results;
   }
 
   handleMemberJoin(member: GuildMember): Promise<void> {

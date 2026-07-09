@@ -1,6 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
   Client,
@@ -10,6 +10,7 @@ import {
 } from 'discord.js';
 import { Context, SlashCommand, type SlashCommandContext } from 'necord';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import { Colors } from '#config/constants';
 import { GuildSettings } from '#config/guilds';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
@@ -36,6 +37,7 @@ export class ActivityJobService {
     private readonly walletService: WalletService,
     private readonly guildSettings: GuildSettingsService,
     private readonly guildMemberRolesService: GuildMemberRolesService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   @SlashCommand({
@@ -72,49 +74,64 @@ export class ActivityJobService {
   @Cron('0 15 * * *', { name: 'daily-activity' })
   @EnsureRequestContext()
   async handleDailyJob() {
+    const startedAt = performance.now();
     /// Runs every day at 15:00 MSK
-    this.logger.log('Running daily activity job');
+    try {
+      this.logger.log('Running daily activity job');
 
-    const guilds = await this.discord.guilds.fetch();
-    const globalActiveUsers = new Set<bigint>();
+      const guilds = await this.discord.guilds.fetch();
+      const globalActiveUsers = new Set<bigint>();
 
-    for (const { id } of guilds.values()) {
-      const guild = await this.discord.guilds.fetch(id);
+      for (const { id } of guilds.values()) {
+        const guild = await this.discord.guilds.fetch(id);
 
-      const activeUsers = await this.calculateDailyActivity(guild).catch(
-        (err) => {
-          this.logger.error(
-            `Failed to calculate daily activity for guild ${guild.id}: ${err.message}`,
-          );
-          return [];
-        },
-      );
-      for (const userId of activeUsers) globalActiveUsers.add(userId);
-
-      await this.giveAwayDailyCoins(guild).catch((err) => {
-        this.logger.error(
-          `Failed to give away daily coins for guild ${guild.id}: ${err.message}`,
+        const activeUsers = await this.calculateDailyActivity(guild).catch(
+          (err) => {
+            this.logger.error(
+              `Failed to calculate daily activity for guild ${guild.id}: ${err.message}`,
+            );
+            return [];
+          },
         );
-      });
+        for (const userId of activeUsers) globalActiveUsers.add(userId);
 
-      await this.postActivitySummarySafely(guild, ActivityPeriod.Day);
-      const today = new Date();
+        await this.giveAwayDailyCoins(guild).catch((err) => {
+          this.logger.error(
+            `Failed to give away daily coins for guild ${guild.id}: ${err.message}`,
+          );
+        });
 
-      const isSaturday = today.getDay() === 6;
+        await this.postActivitySummarySafely(guild, ActivityPeriod.Day);
+        const today = new Date();
 
-      if (isSaturday) {
-        await this.postActivitySummarySafely(guild, ActivityPeriod.Week);
+        const isSaturday = today.getDay() === 6;
+
+        if (isSaturday) {
+          await this.postActivitySummarySafely(guild, ActivityPeriod.Week);
+        }
+
+        const isLastDayOfMonth =
+          new Date(today.getTime() + 1_000 * 60 * 60 * 24).getDate() === 1;
+
+        if (isLastDayOfMonth) {
+          await this.postActivitySummarySafely(guild, ActivityPeriod.Month);
+        }
       }
 
-      const isLastDayOfMonth =
-        new Date(today.getTime() + 1_000 * 60 * 60 * 24).getDate() === 1;
-
-      if (isLastDayOfMonth) {
-        await this.postActivitySummarySafely(guild, ActivityPeriod.Month);
-      }
+      await this.activityService.updateProfileStreaks([...globalActiveUsers]);
+      this.metrics?.recordScheduledJob(
+        'daily_activity',
+        'success',
+        (performance.now() - startedAt) / 1000,
+      );
+    } catch (error) {
+      this.metrics?.recordScheduledJob(
+        'daily_activity',
+        'error',
+        (performance.now() - startedAt) / 1000,
+      );
+      throw error;
     }
-
-    await this.activityService.updateProfileStreaks([...globalActiveUsers]);
   }
 
   private async giveAwayDailyCoins(guild: Guild) {

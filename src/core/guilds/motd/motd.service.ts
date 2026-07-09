@@ -1,11 +1,12 @@
 import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { ActivityType, Client } from 'discord.js';
 import Redis from 'ioredis';
 import { Once } from 'necord';
+import { MetricsService } from '#common/metrics/metrics.service';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { GuildSettingsService } from '../settings/guild-settings.service';
 import { MotdEntity } from './entities/motd.entity';
@@ -28,6 +29,7 @@ export class MotdService {
     private readonly client: Client,
     @Inject(Redis) private readonly redis: Redis,
     private readonly guildSettingsService: GuildSettingsService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     this.runtimeMotdFunctions = initRuntimeMotds({
       redis: this.redis,
@@ -47,7 +49,22 @@ export class MotdService {
   @EnsureRequestContext()
   async setBotMotdInterval() {
     if (!this.client.isReady()) return;
-    await this.setBotMotd();
+    const startedAt = performance.now();
+    try {
+      await this.setBotMotd();
+      this.metrics?.recordScheduledJob(
+        'bot_motd',
+        'success',
+        (performance.now() - startedAt) / 1000,
+      );
+    } catch (error) {
+      this.metrics?.recordScheduledJob(
+        'bot_motd',
+        'error',
+        (performance.now() - startedAt) / 1000,
+      );
+      throw error;
+    }
   }
 
   private async loadMotd() {

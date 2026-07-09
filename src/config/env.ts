@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -68,4 +69,26 @@ export class EnvironmentVariables {
   @IsString({ each: true })
   @Transform(({ value }) => value.split(',').map((s) => s.trim()))
   API_ACCESS_WHITELIST: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => parseOptionalBoolean(value, true))
+  METRICS_ENABLED?: boolean = true;
+
+  @IsOptional()
+  @IsString()
+  METRICS_PATH?: string = '/metrics';
+
+  @IsString()
+  @ValidateIf((o) => o.NODE_ENV === Environment.Production && o.METRICS_ENABLED)
+  METRICS_TOKEN?: string;
+}
+
+function parseOptionalBoolean(value: unknown, defaultValue: boolean): boolean {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
+  }
+  if (typeof value === 'boolean') return value;
+
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
 }

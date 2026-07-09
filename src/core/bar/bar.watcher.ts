@@ -1,7 +1,7 @@
 import { generateDependencyReport, joinVoiceChannel } from '@discordjs/voice';
 import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   Client,
   ChannelType as DiscordChannelType,
@@ -21,7 +21,8 @@ import {
   SlashCommand,
   type SlashCommandContext,
 } from 'necord';
-
+import { recordDiscordCommand } from '#common/metrics/discord-command-metrics';
+import { MetricsService } from '#common/metrics/metrics.service';
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 import { cast, getDisplayAvatar } from '#lib/utils';
@@ -47,6 +48,7 @@ export class BarWatcher {
     readonly em: EntityManager,
     private readonly guildSettings: GuildSettingsService,
     private readonly discord: Client,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   @SlashCommand({
@@ -55,6 +57,14 @@ export class BarWatcher {
     contexts: [InteractionContextType.Guild],
   })
   async joinToChannel(@Context() [interaction]: SlashCommandContext) {
+    if (!this.metrics) return this.joinToChannelCommand(interaction);
+
+    return recordDiscordCommand(this.metrics, 'bar_join', interaction, () => {
+      return this.joinToChannelCommand(interaction);
+    });
+  }
+
+  private async joinToChannelCommand(interaction: SlashCommandContext[0]) {
     const member = interaction.member as GuildMember;
     const channel = member.voice.channel;
 
@@ -307,6 +317,7 @@ export class BarWatcher {
 
     this.guilds = guilds;
     this.guildsLastRefreshedAt = Date.now();
+    this.metrics?.setWatchedGuildCount('bar', guilds.length);
   }
 
   @On('typingStart')

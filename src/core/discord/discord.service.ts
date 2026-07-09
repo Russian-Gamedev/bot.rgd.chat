@@ -1,6 +1,14 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { Client } from 'discord.js';
 import Redis from 'ioredis';
+import { Once } from 'necord';
+
+import { MetricsService } from '#common/metrics/metrics.service';
 
 @Injectable()
 export class DiscordService {
@@ -9,7 +17,14 @@ export class DiscordService {
   constructor(
     private readonly client: Client,
     private readonly redis: Redis,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
+
+  @Once('clientReady')
+  onReady() {
+    this.metrics?.setDiscordReady(true);
+    this.metrics?.setDiscordGuildCount(this.client.guilds.cache.size);
+  }
 
   public async getEmojiImage(emoji: string, size = 128) {
     const emojiId = this.client.emojis.cache.find((e) => e.name === emoji);
@@ -20,8 +35,12 @@ export class DiscordService {
   public async getMembersStats() {
     if (!this.client.isReady()) {
       this.logger.warn('Discord client is not ready');
+      this.metrics?.setDiscordReady(false);
       return { total: 0, online: 0 };
     }
+
+    this.metrics?.setDiscordReady(true);
+    this.metrics?.setDiscordGuildCount(this.client.guilds.cache.size);
 
     const key = 'discord:member_stats';
     const cached = await this.redis.get(key);

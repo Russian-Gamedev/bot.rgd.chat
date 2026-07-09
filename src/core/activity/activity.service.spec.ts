@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 
+import type { MetricsService } from '#common/metrics/metrics.service';
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import type { UserService } from '#core/users/users.service';
@@ -24,6 +25,7 @@ describe('ActivityService', () => {
   let userProfiles: UserProfileEntity[];
   let userService: UserService;
   let em: EntityManager;
+  let metrics: MetricsService;
 
   beforeEach(() => {
     dailyRows = [];
@@ -175,6 +177,9 @@ describe('ActivityService', () => {
       }),
       save: mock(async () => undefined),
     } as unknown as UserService;
+    metrics = {
+      recordActivityIncrement: mock(() => undefined),
+    } as unknown as MetricsService;
 
     service = new ActivityService(
       dailyRepository,
@@ -182,6 +187,7 @@ describe('ActivityService', () => {
       memberRepository,
       em,
       userService,
+      metrics,
     );
   });
 
@@ -204,6 +210,24 @@ describe('ActivityService', () => {
     expect(totalRows.every((row) => row.message_score === 3)).toBe(true);
     expect(totalRows.every((row) => row.voice_seconds === 60)).toBe(true);
     expect(userProfiles[0]?.lastActiveAt).toBe(at);
+    expect(metrics.recordActivityIncrement).toHaveBeenCalledWith({
+      guildId: '10',
+      roleSegment: 'unknown',
+      kind: 'message',
+      amount: 3,
+    });
+    expect(metrics.recordActivityIncrement).toHaveBeenCalledWith({
+      guildId: '10',
+      roleSegment: 'unknown',
+      kind: 'voice',
+      amount: 60,
+    });
+    expect(metrics.recordActivityIncrement).toHaveBeenCalledWith({
+      guildId: '10',
+      roleSegment: 'unknown',
+      kind: 'reaction',
+      amount: 1,
+    });
   });
 
   it('increments existing bigint voice counters returned by postgres', async () => {

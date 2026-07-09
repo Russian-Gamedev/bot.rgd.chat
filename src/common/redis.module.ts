@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 import { EnvironmentVariables } from '#config/env';
+import { MetricsService } from './metrics/metrics.service';
 
 const REDIS_SHUTDOWN_TIMEOUT_MS = 5_000;
 
@@ -49,17 +50,23 @@ export class RedisConnectionService implements BeforeApplicationShutdown {
 }
 
 const redisConnectionProvider: Provider = {
-  useFactory: (config: ConfigService<EnvironmentVariables>) => {
+  useFactory: (
+    config: ConfigService<EnvironmentVariables>,
+    metrics?: MetricsService,
+  ) => {
     const logger = new Logger('RedisModule');
     const client = new Redis(
       config.get<string>('REDIS_URL', 'redis://localhost:6379'),
     );
     client.once('connect', () => {
       logger.log('Connected to Redis');
+      metrics?.setRedisConnected(true);
     });
+    client.once('end', () => metrics?.setRedisConnected(false));
+    client.on('error', () => metrics?.recordRedisError('connection'));
     return new RedisConnectionService(client);
   },
-  inject: [ConfigService],
+  inject: [ConfigService, { token: MetricsService, optional: true }],
   provide: RedisConnectionService,
 };
 

@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { CommonServicesModule } from '#common/common-services.module';
 import { AppConfigModule } from '#common/config/config.module';
 import { DatabaseModule } from '#common/database.module';
+import { MetricsModule } from '#common/metrics/metrics.module';
 import { RedisModule } from '#common/redis.module';
 import { ScheduleLoggerService } from '#common/schedule-logger.service';
 import { ActivityModule } from '#core/activity/activity.module';
@@ -30,6 +31,7 @@ import { AppController } from './app.controller';
     AppConfigModule,
     CommonServicesModule,
     ScheduleModule.forRoot(),
+    MetricsModule,
     DatabaseModule,
     RedisModule,
     DiscordModule,

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 
+import type { MetricsService } from '#common/metrics/metrics.service';
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { WalletEntity } from './entities/wallet.entity';
 import {
@@ -38,6 +39,7 @@ describe('WalletService', () => {
   let innerEm: EntityManager;
   let mockWalletRepo: EntityRepository<WalletEntity>;
   let mockTxRepo: EntityRepository<WalletTransactionEntity>;
+  let metrics: MetricsService;
 
   beforeEach(() => {
     mockWalletRepo = {
@@ -62,8 +64,11 @@ describe('WalletService', () => {
         cb(innerEm),
       ),
     } as unknown as EntityManager;
+    metrics = {
+      recordWalletTransaction: mock(() => undefined),
+    } as unknown as MetricsService;
 
-    service = new WalletService(mockWalletRepo, mockTxRepo, mockEm);
+    service = new WalletService(mockWalletRepo, mockTxRepo, mockEm, metrics);
   });
 
   describe('getBalance', () => {
@@ -104,6 +109,12 @@ describe('WalletService', () => {
       expect(tx.reason).toBe('test-credit');
       expect(tx.user_id).toBe(user.user_id);
       expect(tx.guild_id).toBe(user.guild_id);
+      expect(metrics.recordWalletTransaction).toHaveBeenCalledWith({
+        guildId: user.guild_id,
+        type: WalletTransactionType.CREDIT,
+        reason: 'test-credit',
+        amount: 500n,
+      });
     });
 
     it('creates wallet on first credit', async () => {

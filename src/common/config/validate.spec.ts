@@ -51,10 +51,26 @@ describe('config validation', () => {
     const config = validate({
       ...baseConfig,
       NODE_ENV: Environment.Production,
+      METRICS_TOKEN: 'metrics-secret',
     });
 
     expect(config.NODE_ENV).toBe(Environment.Production);
     expect(config.DISCORD_DEVELOPMENT_GUILD_ID).toBeUndefined();
+  });
+
+  it('requires METRICS_TOKEN in production when metrics are enabled', () => {
+    const spy = mock(() => undefined);
+    Logger.prototype.error = spy;
+    process.env.NODE_ENV = Environment.Production;
+
+    expect(() =>
+      validate({
+        ...baseConfig,
+        NODE_ENV: Environment.Production,
+        METRICS_ENABLED: true,
+      }),
+    ).toThrow('Environment validation failed');
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('METRICS_TOKEN'));
   });
 
   it('requires DISCORD_DEVELOPMENT_GUILD_ID in development', () => {

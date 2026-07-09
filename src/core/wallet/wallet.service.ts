@@ -1,7 +1,8 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { DiscordID } from '#root/lib/types';
 import { WalletEntity } from './entities/wallet.entity';
@@ -28,6 +29,7 @@ export class WalletService {
     @InjectRepository(WalletTransactionEntity)
     private readonly txRepository: EntityRepository<WalletTransactionEntity>,
     private readonly em: EntityManager,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async getBalance(userId: DiscordID): Promise<bigint> {
@@ -88,6 +90,7 @@ export class WalletService {
       em.persist(tx);
       await em.flush();
 
+      this.recordTransactionMetric(tx);
       return tx;
     });
   }
@@ -123,6 +126,7 @@ export class WalletService {
       em.persist(tx);
       await em.flush();
 
+      this.recordTransactionMetric(tx);
       return tx;
     });
   }
@@ -178,6 +182,8 @@ export class WalletService {
       em.persist(creditTx);
       await em.flush();
 
+      this.recordTransactionMetric(debitTx);
+      this.recordTransactionMetric(creditTx);
       return [debitTx, creditTx];
     });
   }
@@ -227,5 +233,14 @@ export class WalletService {
     created.coins = 0n;
     em.persist(created);
     return created;
+  }
+
+  private recordTransactionMetric(tx: WalletTransactionEntity) {
+    this.metrics?.recordWalletTransaction({
+      guildId: tx.guild_id,
+      type: tx.type,
+      reason: tx.reason ?? 'unknown',
+      amount: tx.amount,
+    });
   }
 }
