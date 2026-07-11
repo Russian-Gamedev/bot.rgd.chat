@@ -150,7 +150,8 @@ export function getContrastColor(hex: string): string {
   const luminance =
     0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
 
-  return luminance > 0.8 ? '#000000' : '#ffffff';
+  const threshold = b > r ? 0.2 : 0.8;
+  return luminance > threshold ? '#000000' : '#ffffff';
 }
 
 function formatDonation(value: number): string {

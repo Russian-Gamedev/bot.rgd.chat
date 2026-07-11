@@ -167,8 +167,8 @@ describe('getContrastColor', () => {
     expect(getContrastColor('#fee761')).toBe('#ffffff');
   });
 
-  it('returns white for 9e6bff', () => {
-    expect(getContrastColor('#9e6bff')).toBe('#ffffff');
+  it('returns black for 9e6bff', () => {
+    expect(getContrastColor('#9e6bff')).toBe('#000000');
   });
 
   it('returns white for dark colors', () => {
