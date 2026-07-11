@@ -2,45 +2,35 @@ import { describe, expect, it, mock } from 'bun:test';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import type Redis from 'ioredis';
 
 import { BotEntity } from '#core/bots/entities/bot.entity';
-import { PermissionService } from '#core/permissions/permissions.service';
-import { ActorType, Permission } from '#core/permissions/permissions.types';
+import { ActorType } from '#core/permissions/permissions.types';
+import type { CurrentUserProfileDto } from './dto/current-user-profile.dto';
 import { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
+import type { PublicUserProfileDto } from './dto/public-user-profile.dto';
 import { UserProfileEntity } from './entities/user-profile.entity';
+import type { PublicProfileService } from './public-profile.service';
 import { UsersController } from './users.controller';
 import type { UserService } from './users.service';
 
 describe('UsersController', () => {
-  function createPermissionService() {
+  function createPublicProfileService(
+    overrides: Partial<PublicProfileService> = {},
+  ): PublicProfileService {
     return {
-      getActorPermissions: mock(async () => ({ global: [], guilds: {} })),
-    } as unknown as PermissionService;
+      getPublicProfile: mock(async () => createProfileResponse()),
+      getCurrentUserProfile: mock(async () =>
+        createCurrentUserProfileResponse(),
+      ),
+      invalidateProfileCache: mock(async () => undefined),
+      ...overrides,
+    } as unknown as PublicProfileService;
   }
 
-  function createRedis() {
+  function createProfileResponse(
+    overrides: Partial<PublicUserProfileDto> = {},
+  ): PublicUserProfileDto {
     return {
-      get: mock(async () => null),
-      set: mock(async () => 'OK'),
-      del: mock(async () => 1),
-    } as unknown as Redis;
-  }
-
-  it('returns public profile by id without internal fields', async () => {
-    const profile = createProfile();
-    const userService = {
-      lookupProfile: mock(async () => profile),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const redis = createRedis();
-    const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      redis,
-    );
-
-    const expected = {
       id: '123',
       username: 'alice',
       nickname: 'Ali',
@@ -49,205 +39,94 @@ describe('UsersController', () => {
       bannerAlt: null,
       bannerColor: '#abc',
       about: 'hello',
-      info: {
-        about: 'hello',
-        links: [],
-      },
+      info: { about: 'hello', links: [] },
       birthDate: new Date('2000-01-02T00:00:00.000Z'),
       firstJoinedAt: new Date('2026-06-01T00:00:00.000Z'),
       lastActiveAt: new Date('2026-06-13T00:00:00.000Z'),
       activeStreak: 3,
       maxActiveStreak: 5,
       tags: [],
-    };
+      ...overrides,
+    } as PublicUserProfileDto;
+  }
 
-    await expect(controller.getById('123')).resolves.toEqual(expected);
-    expect(userService.lookupProfile).toHaveBeenCalledWith('123');
-    expect(userService.getPublicProfileTags).toHaveBeenCalledWith(123n);
-    expect(redis.set).toHaveBeenCalledWith(
-      'users:lookup-profile-response:v5:123',
-      JSON.stringify(expected),
-      'EX',
-      60,
-    );
-  });
+  function createCurrentUserProfileResponse(
+    overrides: Partial<CurrentUserProfileDto> = {},
+  ): CurrentUserProfileDto {
+    return {
+      ...createProfileResponse(),
+      permissions: { global: [], guilds: {} },
+      ...overrides,
+    } as CurrentUserProfileDto;
+  }
 
-  it('returns public profile by username lookup', async () => {
-    const profile = createProfile({ username: 'damirlut' });
-    const userService = {
-      lookupProfile: mock(async () => profile),
-      getPublicProfileTags: mock(async () => []),
+  function createUserService(
+    overrides: Partial<UserService> = {},
+  ): UserService {
+    return {
+      updateProfileInfo: mock(async () => createProfile()),
+      ...overrides,
     } as unknown as UserService;
-    const redis = createRedis();
-    const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      redis,
-    );
+  }
 
-    const result = await controller.getById('DamirLut');
-
-    expect(userService.lookupProfile).toHaveBeenCalledWith('DamirLut');
-    expect(result.username).toBe('damirlut');
-    expect(redis.set).toHaveBeenCalledWith(
-      'users:lookup-profile-response:v5:damirlut',
-      JSON.stringify(result),
-      'EX',
-      60,
-    );
-  });
-
-  it('returns 404 for unknown public user id', async () => {
-    const userService = {
-      lookupProfile: mock(async () => null),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const redis = createRedis();
-    const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      redis,
-    );
-
-    await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
-    expect(redis.set).toHaveBeenCalledWith(
-      'users:lookup-profile-response:v5:404',
-      '-',
-      'EX',
-      60,
-    );
-  });
-
-  it('returns cached public profile response without service lookup', async () => {
-    const cached = {
-      id: '123',
-      username: 'alice',
-      nickname: 'Ali',
-      avatarUrl: 'https://cdn.discordapp.com/avatar.webp',
-      banner: null,
-      bannerAlt: null,
-      bannerColor: '#abc',
-      about: 'hello',
-      info: {
-        about: 'hello',
-        links: [],
-      },
-      birthDate: '2000-01-02T00:00:00.000Z',
-      firstJoinedAt: '2026-06-01T00:00:00.000Z',
-      lastActiveAt: '2026-06-13T00:00:00.000Z',
-      activeStreak: 3,
-      maxActiveStreak: 5,
-      tags: [],
-    };
-    const userService = {
-      lookupProfile: mock(async () => null),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const redis = createRedis();
-    (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce(
-      JSON.stringify(cached),
-    );
-    const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      redis,
-    );
-
-    await expect(controller.getById('DamirLut')).resolves.toEqual({
-      ...cached,
-      birthDate: new Date(cached.birthDate),
-      firstJoinedAt: new Date(cached.firstJoinedAt),
-      lastActiveAt: new Date(cached.lastActiveAt),
+  it('returns public profile by id', async () => {
+    const expected = createProfileResponse();
+    const publicProfileService = createPublicProfileService({
+      getPublicProfile: mock(async () => expected),
     });
-    expect(userService.lookupProfile).not.toHaveBeenCalled();
-    expect(userService.getPublicProfileTags).not.toHaveBeenCalled();
-    expect(redis.set).not.toHaveBeenCalled();
-  });
-
-  it('returns public profile links inside profile info', async () => {
-    const profile = createProfile({
-      about: null,
-      profileInfo: {
-        about: '  profile info  ',
-        links: [
-          {
-            label: ' GitHub ',
-            icon: ' github ',
-            url: 'https://github.com/alice',
-          },
-          {
-            label: 'invalid',
-            icon: 'broken',
-            url: 'http://example.com',
-          },
-          {
-            label: 'bad icon',
-            icon: 'bad icon',
-            url: 'https://example.com',
-          },
-        ],
-      },
-    });
-    const userService = {
-      lookupProfile: mock(async () => profile),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
     const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      createRedis(),
+      createUserService(),
+      publicProfileService,
     );
 
     const result = await controller.getById('123');
 
-    expect(result.about).toBe('profile info');
-    expect(result.info).toEqual({
-      about: 'profile info',
-      links: [
-        {
-          label: 'GitHub',
-          icon: 'github',
-          url: 'https://github.com/alice',
-        },
-      ],
-    });
+    expect(result).toEqual(expected);
+    expect(publicProfileService.getPublicProfile).toHaveBeenCalledWith('123');
   });
 
-  it('returns cached public 404 without service lookup', async () => {
-    const userService = {
-      lookupProfile: mock(async () => createProfile()),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const redis = createRedis();
-    (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce('-');
+  it('returns public profile by username lookup', async () => {
+    const expected = createProfileResponse({ username: 'damirlut' });
+    const publicProfileService = createPublicProfileService({
+      getPublicProfile: mock(async () => expected),
+    });
     const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      redis,
+      createUserService(),
+      publicProfileService,
+    );
+
+    const result = await controller.getById('DamirLut');
+
+    expect(result.username).toBe('damirlut');
+    expect(publicProfileService.getPublicProfile).toHaveBeenCalledWith(
+      'DamirLut',
+    );
+  });
+
+  it('throws NotFoundException when public profile is not found', async () => {
+    const publicProfileService = createPublicProfileService({
+      getPublicProfile: mock(async () => {
+        throw new NotFoundException('User profile was not found.');
+      }),
+    });
+    const controller = new UsersController(
+      createUserService(),
+      publicProfileService,
     );
 
     await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
-    expect(userService.lookupProfile).not.toHaveBeenCalled();
-    expect(userService.getPublicProfileTags).not.toHaveBeenCalled();
-    expect(redis.set).not.toHaveBeenCalled();
   });
 
   it('returns current user profile for user actor', async () => {
-    const profile = createProfile();
-    const userService = {
-      getProfile: mock(async () => profile),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const permissionService = {
-      getActorPermissions: mock(async () => ({
-        global: [Permission.WalletReadOwn],
-        guilds: {},
-      })),
-    } as unknown as PermissionService;
+    const expected = createCurrentUserProfileResponse({
+      permissions: { global: [], guilds: {} },
+    });
+    const publicProfileService = createPublicProfileService({
+      getCurrentUserProfile: mock(async () => expected),
+    });
     const controller = new UsersController(
-      userService,
-      permissionService,
-      createRedis(),
+      createUserService(),
+      publicProfileService,
     );
 
     const result = await controller.getMe({
@@ -256,35 +135,28 @@ describe('UsersController', () => {
       username: 'alice',
     });
 
-    expect(userService.getProfile).toHaveBeenCalledWith('123');
-    expect(userService.getPublicProfileTags).toHaveBeenCalledWith(123n);
-    expect(permissionService.getActorPermissions).toHaveBeenCalled();
     expect(result.tags).toEqual([]);
-    expect(result.permissions).toEqual({
-      global: [Permission.WalletReadOwn],
-      guilds: {},
-    });
+    expect(result.permissions).toEqual({ global: [], guilds: {} });
+    expect(publicProfileService.getCurrentUserProfile).toHaveBeenCalledWith(
+      '123',
+      { type: ActorType.User, id: '123', username: 'alice' },
+    );
   });
 
   it('returns linked Discord bot profile for bot actor', async () => {
     const bot = new BotEntity();
     bot.id = 1;
     bot.botUserId = 999n;
-    const profile = createProfile({ user_id: 999n, username: 'bot-user' });
-    const userService = {
-      getProfile: mock(async () => profile),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const permissionService = {
-      getActorPermissions: mock(async () => ({
-        global: [Permission.GuildRead],
-        guilds: {},
-      })),
-    } as unknown as PermissionService;
+    const expected = createCurrentUserProfileResponse({
+      id: '999',
+      username: 'bot-user',
+    });
+    const publicProfileService = createPublicProfileService({
+      getCurrentUserProfile: mock(async () => expected),
+    });
     const controller = new UsersController(
-      userService,
-      permissionService,
-      createRedis(),
+      createUserService(),
+      publicProfileService,
     );
 
     const result = await controller.getMe({
@@ -293,15 +165,8 @@ describe('UsersController', () => {
       bot,
     });
 
-    expect(userService.getProfile).toHaveBeenCalledWith('999');
-    expect(userService.getPublicProfileTags).toHaveBeenCalledWith(999n);
     expect(result.id).toBe('999');
     expect(result.username).toBe('bot-user');
-    expect(result.tags).toEqual([]);
-    expect(result.permissions).toEqual({
-      global: [Permission.GuildRead],
-      guilds: {},
-    });
   });
 
   it('updates current user profile information', async () => {
@@ -333,22 +198,18 @@ describe('UsersController', () => {
         ],
       },
     } satisfies PatchCurrentUserProfileDto;
-    const userService = {
+    const userService = createUserService({
       updateProfileInfo: mock(async () => updated),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const permissionService = {
-      getActorPermissions: mock(async () => ({
-        global: [Permission.WalletReadOwn],
-        guilds: {},
-      })),
-    } as unknown as PermissionService;
-    const redis = createRedis();
-    const controller = new UsersController(
-      userService,
-      permissionService,
-      redis,
-    );
+    });
+    const expected = createCurrentUserProfileResponse({
+      bannerAlt: 'https://example.com/banner-alt.png',
+      birthDate: new Date('2001-02-03T00:00:00.000Z'),
+      info: dto.info,
+    });
+    const publicProfileService = createPublicProfileService({
+      getCurrentUserProfile: mock(async () => expected),
+    });
+    const controller = new UsersController(userService, publicProfileService);
 
     const result = await controller.patchMe(
       {
@@ -360,17 +221,12 @@ describe('UsersController', () => {
     );
 
     expect(userService.updateProfileInfo).toHaveBeenCalledWith('123', dto);
-    expect(redis.del).toHaveBeenCalledWith(
-      'users:lookup-profile-response:v5:123',
-      'users:lookup-profile-response:v5:alice',
+    expect(publicProfileService.invalidateProfileCache).toHaveBeenCalledWith(
+      updated,
     );
     expect(result.bannerAlt).toBe('https://example.com/banner-alt.png');
     expect(result.birthDate).toEqual(new Date('2001-02-03T00:00:00.000Z'));
     expect(result.info).toEqual(dto.info);
-    expect(result.permissions).toEqual({
-      global: [Permission.WalletReadOwn],
-      guilds: {},
-    });
   });
 
   it('updates linked bot user profile information', async () => {
@@ -378,21 +234,14 @@ describe('UsersController', () => {
     bot.id = 1;
     bot.botUserId = 999n;
     const updated = createProfile({ user_id: 999n, username: 'bot-user' });
-    const userService = {
+    const userService = createUserService({
       updateProfileInfo: mock(async () => updated),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const permissionService = {
-      getActorPermissions: mock(async () => ({
-        global: [Permission.GuildRead],
-        guilds: {},
-      })),
-    } as unknown as PermissionService;
-    const controller = new UsersController(
-      userService,
-      permissionService,
-      createRedis(),
-    );
+    });
+    const expected = createCurrentUserProfileResponse({ id: '999' });
+    const publicProfileService = createPublicProfileService({
+      getCurrentUserProfile: mock(async () => expected),
+    });
+    const controller = new UsersController(userService, publicProfileService);
 
     const result = await controller.patchMe(
       {
@@ -413,14 +262,16 @@ describe('UsersController', () => {
     const bot = new BotEntity();
     bot.id = 1;
     bot.botUserId = null;
-    const userService = {
-      getProfile: mock(async () => null),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
+    const publicProfileService = createPublicProfileService({
+      getCurrentUserProfile: mock(async () => {
+        throw new BadRequestException(
+          'Bot token is not linked to a Discord profile.',
+        );
+      }),
+    });
     const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      createRedis(),
+      createUserService(),
+      publicProfileService,
     );
 
     await expect(
@@ -436,15 +287,15 @@ describe('UsersController', () => {
     const bot = new BotEntity();
     bot.id = 1;
     bot.botUserId = null;
-    const userService = {
-      updateProfileInfo: mock(async () => createProfile()),
-      getPublicProfileTags: mock(async () => []),
-    } as unknown as UserService;
-    const controller = new UsersController(
-      userService,
-      createPermissionService(),
-      createRedis(),
-    );
+    const userService = createUserService();
+    const publicProfileService = createPublicProfileService({
+      getCurrentUserProfile: mock(async () => {
+        throw new BadRequestException(
+          'Bot token is not linked to a Discord profile.',
+        );
+      }),
+    });
+    const controller = new UsersController(userService, publicProfileService);
 
     await expect(
       controller.patchMe(
