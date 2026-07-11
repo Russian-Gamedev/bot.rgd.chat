@@ -4,7 +4,10 @@ import { Client, Collection, type Role } from 'discord.js';
 
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import { UserProfileTagEntity } from './entities/user-profile-tag.entity';
-import { PublicProfileTagService } from './public-profile-tag.service';
+import {
+  getContrastColor,
+  PublicProfileTagService,
+} from './public-profile-tag.service';
 
 describe('PublicProfileTagService', () => {
   let service: PublicProfileTagService;
@@ -48,7 +51,7 @@ describe('PublicProfileTagService', () => {
     await expect(service.getPublicProfileTags(123n)).resolves.toEqual([
       {
         name: 'Admin',
-        color: '#000000',
+        color: '#ffffff',
         background: '#ff0000',
         description: 'Роль на сервере RGD',
       },
@@ -101,7 +104,7 @@ describe('PublicProfileTagService', () => {
       await expect(service.getPublicProfileTags(123n)).resolves.toEqual([
         {
           name: 'Admin',
-          color: '#000000',
+          color: '#ffffff',
           background: '#ff0000',
           description: 'Роль на сервере RGD',
         },
@@ -152,6 +155,29 @@ describe('PublicProfileTagService', () => {
     );
 
     await expect(service.getPublicProfileTags(123n)).resolves.toEqual([]);
+  });
+});
+
+describe('getContrastColor', () => {
+  it('returns white for ee5245', () => {
+    expect(getContrastColor('#ee5245')).toBe('#ffffff');
+  });
+
+  it('returns white for fee761', () => {
+    expect(getContrastColor('#fee761')).toBe('#ffffff');
+  });
+
+  it('returns white for 9e6bff', () => {
+    expect(getContrastColor('#9e6bff')).toBe('#ffffff');
+  });
+
+  it('returns white for dark colors', () => {
+    expect(getContrastColor('#111111')).toBe('#ffffff');
+  });
+
+  it('returns black for very bright colors', () => {
+    expect(getContrastColor('#ffffff')).toBe('#000000');
+    expect(getContrastColor('#ffff00')).toBe('#000000');
   });
 });
 

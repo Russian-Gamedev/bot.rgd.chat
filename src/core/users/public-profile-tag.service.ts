@@ -137,7 +137,7 @@ function roleToTag(role: Role): PublicUserProfileTag {
   };
 }
 
-function getContrastColor(hex: string): string {
+export function getContrastColor(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -150,7 +150,7 @@ function getContrastColor(hex: string): string {
   const luminance =
     0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
 
-  return luminance > 0.179 ? '#000000' : '#ffffff';
+  return luminance > 0.8 ? '#000000' : '#ffffff';
 }
 
 function formatDonation(value: number): string {
