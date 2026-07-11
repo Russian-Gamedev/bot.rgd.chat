@@ -8,6 +8,7 @@ export enum Permission {
   ReadMessages = 'read:messages',
   SendMessages = 'send:messages',
   MahoragaManage = 'manage:mahoraga',
+  GamesReview = 'games:review',
 }
 
 export enum ActorType {

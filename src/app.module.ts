@@ -14,6 +14,7 @@ import { BirthdayModule } from '#core/birthday/birthday.module';
 import { BotsModule } from '#core/bots/bots.module';
 import { DiscordModule } from '#core/discord/discord.module';
 import { FunModule } from '#core/fun/fun.module';
+import { GamesModule } from '#core/games/games.module';
 import { GuildModule } from '#core/guilds/guild.module';
 import { ItemsModule } from '#core/items/items.module';
 import { MahoragaModule } from '#core/mahoraga/mahoraga.module';
@@ -36,6 +37,7 @@ import { AppController } from './app.controller';
     DiscordModule,
     UserModule,
     GuildModule,
+    GamesModule,
     BirthdayModule,
     ActivityModule,
     BotsModule,
