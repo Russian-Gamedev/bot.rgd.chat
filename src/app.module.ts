@@ -19,7 +19,6 @@ import { ItemsModule } from '#core/items/items.module';
 import { MahoragaModule } from '#core/mahoraga/mahoraga.module';
 import { MiniGamesModule } from '#core/mini-games/mini-games.module';
 import { NicknameModule } from '#core/nickname/nickname.module';
-import { PatronsModule } from '#core/patrons/patrons.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
 import { UserModule } from '#core/users/users.module';
 import { WalletModule } from '#core/wallet/wallet.module';
@@ -49,7 +48,6 @@ import { AppController } from './app.controller';
     RoleManagerModule,
     FunModule,
     NicknameModule,
-    PatronsModule,
   ],
   controllers: [AppController],
   providers: [ScheduleLoggerService],
