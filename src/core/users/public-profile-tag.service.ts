@@ -125,16 +125,32 @@ export class PublicProfileTagService {
 }
 
 function roleToTag(role: Role): PublicUserProfileTag {
+  const background = /^#[0-9a-fA-F]{6}$/.test(role.hexColor)
+    ? role.hexColor
+    : '#5865f2';
+
   return {
     name: role.name,
-    color: role.hexColor,
-    background: getTagBackground(role.hexColor),
+    color: getContrastColor(background),
+    background,
     description: `Роль на сервере ${role.guild.name}`,
   };
 }
 
-function getTagBackground(color: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? `${color}29` : '#5865f229';
+function getContrastColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+
+  const linearize = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+
+  const luminance =
+    0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+
+  return luminance > 0.179 ? '#000000' : '#ffffff';
 }
 
 function formatDonation(value: number): string {

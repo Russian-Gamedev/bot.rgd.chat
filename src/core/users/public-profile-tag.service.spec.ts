@@ -48,8 +48,8 @@ describe('PublicProfileTagService', () => {
     await expect(service.getPublicProfileTags(123n)).resolves.toEqual([
       {
         name: 'Admin',
-        color: '#ff0000',
-        background: '#ff000029',
+        color: '#000000',
+        background: '#ff0000',
         description: 'Роль на сервере RGD',
       },
     ]);
@@ -101,8 +101,8 @@ describe('PublicProfileTagService', () => {
       await expect(service.getPublicProfileTags(123n)).resolves.toEqual([
         {
           name: 'Admin',
-          color: '#ff0000',
-          background: '#ff000029',
+          color: '#000000',
+          background: '#ff0000',
           description: 'Роль на сервере RGD',
         },
         {
