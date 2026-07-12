@@ -24,7 +24,7 @@
     "typecheck": "bunx --bun tsc --noEmit",
     "lint": "bunx --bun biome ci",
     "lint:fix": "bunx --bun biome check --write",
-    "check:all": "bun run typecheck && bun run lint && bun test"
+    "check:all": "bun run typecheck && bun run lint && bun test --path-ignore-patterns 'dist/**'"
   },
   "mikro-orm": {
     "useTsNode": true,
@@ -35,7 +35,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
     "@mikro-orm/cli": "^7.1.5",
+    "@mikro-orm/pglite": "^7.1.5",
     "@nestjs/cli": "^11.0.23",
+    "@nestjs/testing": "^11",
     "@types/bun": "^1.3.14",
     "@types/express": "^5.0.6",
     "typescript": "^6.0.3"

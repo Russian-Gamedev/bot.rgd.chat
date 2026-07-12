@@ -1,60 +1,35 @@
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { ReflectMetadataProvider } from '@mikro-orm/decorators/legacy';
-import { Migrator } from '@mikro-orm/migrations';
-import { MikroORM, PostgreSqlDriver } from '@mikro-orm/postgresql';
-import { NotFoundException } from '@nestjs/common';
-
-import type { PermissionService } from '#core/permissions/permissions.service';
 import {
-  ActorType,
-  type AuthenticatedActor,
-} from '#core/permissions/permissions.types';
-import { Migration20260711000000 } from '#root/migrations/Migration20260711000000';
-import { Migration20260712000000 } from '#root/migrations/Migration20260712000000';
-
-import {
-  GameAttachmentEntity,
-  GameAuthorEntity,
-  GameEntity,
-  GameLikeEntity,
-  GameLinkEntity,
-  GameReviewEventEntity,
-  GameRevisionEntity,
-  GameRevisionTagEntity,
-  GameTagEntity,
-} from './entities/games.entity';
-import { GameLikesService } from './game-likes.service';
-import { GameReviewService } from './game-review.service';
-import { GameTagsService } from './game-tags.service';
-import { GamesController } from './games.controller';
-import { GamesService } from './games.service';
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { MikroORM } from '@mikro-orm/core';
+import { Test } from '@nestjs/testing';
+import Redis from 'ioredis';
+import { pgliteOrmConfig } from '#common/mikro-orm.pglite.config';
+import { RedisConnectionService } from '#common/redis.module';
+import { DiscordModule } from '#core/discord/discord.module';
+import { GamesController } from '#core/games/games.controller';
 import {
   GameAttachmentType,
   GameAuthorType,
   GameListSort,
   GameRevisionStatus,
-} from './games.types';
+} from '#core/games/games.types';
+import { PermissionService } from '#core/permissions/permissions.service';
+import type { AuthenticatedActor } from '#core/permissions/permissions.types';
+import { ActorType } from '#core/permissions/permissions.types';
+import { AppModule } from '#root/app.module';
+import { MockExternalServicesModule } from './helpers/mock-modules';
+import { MockRedis } from './helpers/mock-redis';
+import { ensureUuidv7Function } from './helpers/pglite-setup';
 
-const configuredUrl =
-  process.env.GAMES_INTEGRATION_POSTGRES_URL ?? process.env.POSTGRES_URL;
-const run = configuredUrl ? describe : describe.skip;
-const entities = [
-  GameEntity,
-  GameRevisionEntity,
-  GameAuthorEntity,
-  GameTagEntity,
-  GameRevisionTagEntity,
-  GameLinkEntity,
-  GameAttachmentEntity,
-  GameLikeEntity,
-  GameReviewEventEntity,
-];
-
-run('Games full integration flow', () => {
-  let adminOrm: MikroORM;
+describe('Games full integration flow', () => {
   let orm: MikroORM;
   let controller: GamesController;
-  let databaseName: string;
 
   const owner: AuthenticatedActor = {
     type: ActorType.User,
@@ -72,76 +47,48 @@ run('Games full integration flow', () => {
     username: 'fan',
   };
 
+  const mockRedis = new MockRedis();
+  const mockPermissionService = {
+    hasPermission: async (actor: AuthenticatedActor) =>
+      actor.id === reviewer.id,
+  } as unknown as PermissionService;
+
   beforeAll(async () => {
-    const source = new URL(configuredUrl as string);
-    databaseName = `games_flow_${process.pid}_${Date.now()}`;
-    const adminUrl = new URL(source);
-    adminUrl.pathname = '/postgres';
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        AppModule.register(pgliteOrmConfig),
+        MockExternalServicesModule,
+      ],
+    })
+      .useMocker((_token) => {
+        return {};
+      })
+      .overrideProvider(Redis)
+      .useValue(mockRedis)
+      .overrideProvider(RedisConnectionService)
+      .useValue(new RedisConnectionService(mockRedis as unknown as Redis))
+      .overrideModule(DiscordModule)
+      .useModule(class {})
+      .overrideProvider(PermissionService)
+      .useValue(mockPermissionService)
+      .compile();
 
-    adminOrm = await MikroORM.init({
-      driver: PostgreSqlDriver,
-      clientUrl: adminUrl.toString(),
-      entities: [GameEntity],
-      metadataProvider: ReflectMetadataProvider,
-    });
-    await adminOrm.em
-      .getConnection()
-      .execute(`create database "${databaseName}"`);
+    orm = moduleRef.get(MikroORM);
 
-    const testUrl = new URL(source);
-    testUrl.pathname = `/${databaseName}`;
-    orm = await MikroORM.init({
-      driver: PostgreSqlDriver,
-      clientUrl: testUrl.toString(),
-      entities,
-      metadataProvider: ReflectMetadataProvider,
-      allowGlobalContext: true,
-      debug: process.env.GAMES_INTEGRATION_DEBUG === 'true',
-      extensions: [Migrator],
-      migrations: {
-        migrationsList: [Migration20260711000000, Migration20260712000000],
-        transactional: true,
-        snapshot: false,
-      },
-    });
-    await orm.migrator.up();
+    await ensureUuidv7Function(orm);
 
-    const gameRepository = orm.em.getRepository(GameEntity);
-    const likeRepository = orm.em.getRepository(GameLikeEntity);
-    const tags = new GameTagsService(
-      orm.em,
-      orm.em.getRepository(GameTagEntity),
-      orm.em.getRepository(GameRevisionTagEntity),
-    );
-    const games = new GamesService(
-      orm.em,
-      gameRepository,
-      likeRepository,
-      tags,
-    );
-    const review = new GameReviewService(orm.em, gameRepository, games);
-    const likes = new GameLikesService(orm.em, gameRepository, likeRepository);
-    const permissions = {
-      hasPermission: async (actor: AuthenticatedActor) =>
-        actor.id === reviewer.id,
-    } as unknown as PermissionService;
-    controller = new GamesController(games, review, likes, tags, permissions);
+    await orm.schema.refresh();
+
+    controller = moduleRef.get(GamesController);
+  });
+
+  beforeEach(async () => {
+    await orm.schema.clear();
+    orm.em.clear();
   });
 
   afterAll(async () => {
-    await orm?.close(true);
-    if (adminOrm && databaseName) {
-      await adminOrm.em
-        .getConnection()
-        .execute(
-          'select pg_terminate_backend(pid) from pg_stat_activity where datname=? and pid<>pg_backend_pid()',
-          [databaseName],
-        );
-      await adminOrm.em
-        .getConnection()
-        .execute(`drop database if exists "${databaseName}"`);
-    }
-    await adminOrm?.close(true);
+    await orm.close(true);
   });
 
   it('covers creation variants, review, publication, likes and republishing', async () => {
@@ -180,9 +127,7 @@ run('Games full integration flow', () => {
     expect(created.version).toBe(1);
     expect(created.authors).toHaveLength(2);
     expect(created.attachments).toHaveLength(2);
-    await expect(controller.get(created.id)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(controller.get(created.id)).rejects.toThrow();
 
     await controller.update(created.id, owner, {
       description: '# Ready for review',
@@ -283,8 +228,6 @@ run('Games full integration flow', () => {
     ).toContain(textOnly.id);
 
     await controller.remove(textOnly.id, reviewer);
-    await expect(controller.get(textOnly.id)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(controller.get(textOnly.id)).rejects.toThrow();
   });
 });

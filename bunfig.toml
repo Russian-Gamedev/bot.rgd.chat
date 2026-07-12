@@ -1,2 +1,2 @@
 [test]
-root="./src/"
+preload = "./tests/env.setup.ts"
