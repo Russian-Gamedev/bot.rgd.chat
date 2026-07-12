@@ -15,6 +15,7 @@ import {
 import './lib/polyfill';
 
 import { AppModule } from './app.module';
+import { postgresOrmConfig } from './common/mikro-orm.postgres.config';
 
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
@@ -76,7 +77,7 @@ function registerProcessShutdownHandlers(
 async function main() {
   const logger = new Logger('Bootstrap');
   logger.log('Starting application...');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule.register(postgresOrmConfig));
 
   const config = app.get(ConfigService<EnvironmentVariables>);
 

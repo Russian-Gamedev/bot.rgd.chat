@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { type DynamicModule, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { CommonServicesModule } from '#common/common-services.module';
@@ -26,13 +27,14 @@ import { WalletModule } from '#core/wallet/wallet.module';
 
 import { AppController } from './app.controller';
 
+type MikroOrmRootOptions = Record<string, unknown>;
+
 @Module({
   imports: [
     AppConfigModule,
     CommonServicesModule,
     ScheduleModule.forRoot(),
     MetricsModule,
-    DatabaseModule,
     RedisModule,
     DiscordModule,
     UserModule,
@@ -54,4 +56,20 @@ import { AppController } from './app.controller';
   controllers: [AppController],
   providers: [ScheduleLoggerService],
 })
-export class AppModule {}
+// biome-ignore lint/complexity/noStaticOnlyClass: dynamic module pattern
+export class AppModule {
+  static async register(
+    ormOptions: MikroOrmRootOptions,
+  ): Promise<DynamicModule> {
+    const ormModule = await MikroOrmModule.forRoot({
+      ...ormOptions,
+      autoLoadEntities: true,
+      // biome-ignore lint/suspicious/noExplicitAny: MikroOrmModule.forRoot accepts Options<IDatabaseDriver> but we pass driver-agnostic config
+    } as any);
+
+    return {
+      module: AppModule,
+      imports: [ormModule, DatabaseModule],
+    };
+  }
+}
