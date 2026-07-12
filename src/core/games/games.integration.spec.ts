@@ -10,21 +10,22 @@ import {
   type AuthenticatedActor,
 } from '#core/permissions/permissions.types';
 import { Migration20260711000000 } from '#root/migrations/Migration20260711000000';
+import { Migration20260712000000 } from '#root/migrations/Migration20260712000000';
 
 import {
   GameAttachmentEntity,
   GameAuthorEntity,
   GameEntity,
-  GameGenreEntity,
   GameLikeEntity,
   GameLinkEntity,
   GameReviewEventEntity,
   GameRevisionEntity,
-  GameRevisionGenreEntity,
+  GameRevisionTagEntity,
+  GameTagEntity,
 } from './entities/games.entity';
-import { GameGenresService } from './game-genres.service';
 import { GameLikesService } from './game-likes.service';
 import { GameReviewService } from './game-review.service';
+import { GameTagsService } from './game-tags.service';
 import { GamesController } from './games.controller';
 import { GamesService } from './games.service';
 import {
@@ -41,8 +42,8 @@ const entities = [
   GameEntity,
   GameRevisionEntity,
   GameAuthorEntity,
-  GameGenreEntity,
-  GameRevisionGenreEntity,
+  GameTagEntity,
+  GameRevisionTagEntity,
   GameLinkEntity,
   GameAttachmentEntity,
   GameLikeEntity,
@@ -98,7 +99,7 @@ run('Games full integration flow', () => {
       debug: process.env.GAMES_INTEGRATION_DEBUG === 'true',
       extensions: [Migrator],
       migrations: {
-        migrationsList: [Migration20260711000000],
+        migrationsList: [Migration20260711000000, Migration20260712000000],
         transactional: true,
         snapshot: false,
       },
@@ -107,19 +108,24 @@ run('Games full integration flow', () => {
 
     const gameRepository = orm.em.getRepository(GameEntity);
     const likeRepository = orm.em.getRepository(GameLikeEntity);
-    const games = new GamesService(orm.em, gameRepository, likeRepository);
+    const tags = new GameTagsService(
+      orm.em,
+      orm.em.getRepository(GameTagEntity),
+      orm.em.getRepository(GameRevisionTagEntity),
+    );
+    const games = new GamesService(
+      orm.em,
+      gameRepository,
+      likeRepository,
+      tags,
+    );
     const review = new GameReviewService(orm.em, gameRepository, games);
     const likes = new GameLikesService(orm.em, gameRepository, likeRepository);
-    const genres = new GameGenresService(
-      orm.em,
-      orm.em.getRepository(GameGenreEntity),
-      orm.em.getRepository(GameRevisionGenreEntity),
-    );
     const permissions = {
       hasPermission: async (actor: AuthenticatedActor) =>
         actor.id === reviewer.id,
     } as unknown as PermissionService;
-    controller = new GamesController(games, review, likes, genres, permissions);
+    controller = new GamesController(games, review, likes, tags, permissions);
   });
 
   afterAll(async () => {
@@ -139,20 +145,11 @@ run('Games full integration flow', () => {
   });
 
   it('covers creation variants, review, publication, likes and republishing', async () => {
-    const action = await controller.createGenre({
-      slug: 'action',
-      name: 'Action',
-    });
-    const puzzle = await controller.createGenre({
-      slug: 'puzzle',
-      name: 'Puzzle',
-    });
-
     const created = await controller.create(owner, {
       title: 'Version One',
       description: '# Initial markdown',
       release_date: '2026-07-11',
-      genre_ids: [action.id, puzzle.id],
+      tags: ['Action', 'Puzzle'],
       authors: [
         {
           type: GameAuthorType.Discord,
@@ -259,7 +256,7 @@ run('Games full integration flow', () => {
       title: 'Text Team Game',
       description: 'Second project',
       release_date: '2026-08-01',
-      genre_ids: [puzzle.id],
+      tags: ['Puzzle'],
       authors: [{ type: GameAuthorType.Text, name: 'No Discord Studio' }],
       links: [],
       attachments: [],
@@ -271,9 +268,13 @@ run('Games full integration flow', () => {
       limit: 20,
       offset: 0,
       sort: GameListSort.PublishedDesc,
-      genre: 'puzzle',
+      tag: 'puzzle',
     });
     expect(catalog.total).toBe(2);
+    expect(await controller.getTags()).toEqual([
+      expect.objectContaining({ name: 'Action', slug: 'action' }),
+      expect.objectContaining({ name: 'Puzzle', slug: 'puzzle' }),
+    ]);
     expect(catalog.items[0].id).toBe(textOnly.id);
     expect(
       (catalog.items as unknown as Array<{ id: string }>).map(

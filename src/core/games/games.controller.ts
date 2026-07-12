@@ -33,23 +33,24 @@ import type { AuthenticatedActor } from '#core/permissions/permissions.types';
 import { Permission } from '#core/permissions/permissions.types';
 import {
   CreateGameDto,
-  CreateGameGenreDto,
+  CreateGameTagDto,
   GameDetailsDto,
   GameEditorDto,
   GameLikeStateDto,
   GameListQueryDto,
   GameListResponseDto,
   GameReviewListQueryDto,
+  GameTagDto,
   MineGamesQueryDto,
   PublishGameDto,
   RequestGameChangesDto,
   TransferGameOwnerDto,
   UpdateGameDto,
-  UpdateGameGenreDto,
+  UpdateGameTagDto,
 } from './dto/games.dto';
-import { GameGenresService } from './game-genres.service';
 import { GameLikesService } from './game-likes.service';
 import { GameReviewService } from './game-review.service';
+import { GameTagsService } from './game-tags.service';
 import { GamesService } from './games.service';
 
 @ApiTags('Games')
@@ -59,7 +60,7 @@ export class GamesController {
     private readonly games: GamesService,
     private readonly review: GameReviewService,
     private readonly likes: GameLikesService,
-    private readonly genres: GameGenresService,
+    private readonly tags: GameTagsService,
     private readonly permissions: PermissionService,
   ) {}
   @Get()
@@ -89,30 +90,33 @@ export class GamesController {
   reviewList(@Query() q: GameReviewListQueryDto) {
     return this.review.list(q);
   }
-  @Get('genres') getGenres() {
-    return this.genres.list();
+  @Get('tags')
+  @ApiOperation({ summary: 'List all game tags for autocomplete' })
+  @ApiOkResponse({ type: [GameTagDto] })
+  getTags() {
+    return this.tags.list();
   }
-  @Post('genres')
+  @Post('tags')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.GamesReview)
   @ApiActorAuth()
-  createGenre(@Body() d: CreateGameGenreDto) {
-    return this.genres.create(d);
+  createTag(@Body() d: CreateGameTagDto) {
+    return this.tags.create(d);
   }
-  @Patch('genres/:id')
+  @Patch('tags/:id')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.GamesReview)
   @ApiActorAuth()
-  updateGenre(@Param('id') id: string, @Body() d: UpdateGameGenreDto) {
-    return this.genres.update(id, d);
+  updateTag(@Param('id') id: string, @Body() d: UpdateGameTagDto) {
+    return this.tags.update(id, d);
   }
-  @Delete('genres/:id')
+  @Delete('tags/:id')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.GamesReview)
   @ApiActorAuth()
   @HttpCode(204)
-  removeGenre(@Param('id') id: string) {
-    return this.genres.remove(id);
+  removeTag(@Param('id') id: string) {
+    return this.tags.remove(id);
   }
   @Get(':id/editor') @UseGuards(ActorAuthGuard) @ApiActorAuth() async editor(
     @Param('id') id: string,

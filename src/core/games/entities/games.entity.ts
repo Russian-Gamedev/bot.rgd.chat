@@ -113,13 +113,13 @@ export class GameRevisionEntity extends BaseEntity {
   authors = new Collection<GameAuthorEntity>(this);
 
   @OneToMany(
-    () => GameRevisionGenreEntity,
+    () => GameRevisionTagEntity,
     (link) => link.revision,
     {
       orphanRemoval: true,
     },
   )
-  genreLinks = new Collection<GameRevisionGenreEntity>(this);
+  tagLinks = new Collection<GameRevisionTagEntity>(this);
 
   @OneToMany(
     () => GameLinkEntity,
@@ -165,8 +165,8 @@ export class GameAuthorEntity {
   position: number;
 }
 
-@Entity({ tableName: 'game_genres' })
-export class GameGenreEntity extends BaseEntity {
+@Entity({ tableName: 'game_tags' })
+export class GameTagEntity extends BaseEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
@@ -177,14 +177,14 @@ export class GameGenreEntity extends BaseEntity {
   name: string;
 
   @OneToMany(
-    () => GameRevisionGenreEntity,
-    (link) => link.genre,
+    () => GameRevisionTagEntity,
+    (link) => link.tag,
   )
-  revisionLinks = new Collection<GameRevisionGenreEntity>(this);
+  revisionLinks = new Collection<GameRevisionTagEntity>(this);
 }
 
-@Entity({ tableName: 'game_revision_genres' })
-export class GameRevisionGenreEntity {
+@Entity({ tableName: 'game_revision_tags' })
+export class GameRevisionTagEntity {
   @ManyToOne(() => GameRevisionEntity, {
     fieldName: 'revision_id',
     primary: true,
@@ -192,12 +192,12 @@ export class GameRevisionGenreEntity {
   })
   revision: GameRevisionEntity;
 
-  @ManyToOne(() => GameGenreEntity, {
-    fieldName: 'genre_id',
+  @ManyToOne(() => GameTagEntity, {
+    fieldName: 'tag_id',
     primary: true,
     deleteRule: 'restrict',
   })
-  genre: GameGenreEntity;
+  tag: GameTagEntity;
 }
 
 @Entity({ tableName: 'game_links' })

@@ -11,7 +11,6 @@ import {
   EntityManager as PostgreSqlEntityManager,
 } from '@mikro-orm/postgresql';
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -28,13 +27,13 @@ import {
   GameAttachmentEntity,
   GameAuthorEntity,
   GameEntity,
-  GameGenreEntity,
   GameLikeEntity,
   GameLinkEntity,
   GameReviewEventEntity,
   GameRevisionEntity,
-  GameRevisionGenreEntity,
+  GameRevisionTagEntity,
 } from './entities/games.entity';
+import { GameTagsService } from './game-tags.service';
 import {
   GameAuthorType,
   GameListSort,
@@ -44,11 +43,11 @@ import {
 
 const GAME_POPULATE = [
   'publishedRevision.authors',
-  'publishedRevision.genreLinks.genre',
+  'publishedRevision.tagLinks.tag',
   'publishedRevision.links',
   'publishedRevision.attachments',
   'workingRevision.authors',
-  'workingRevision.genreLinks.genre',
+  'workingRevision.tagLinks.tag',
   'workingRevision.links',
   'workingRevision.attachments',
 ] as const;
@@ -56,7 +55,7 @@ const EDITOR_POPULATE = [...GAME_POPULATE, 'reviewEvents.revision'] as const;
 
 type PopulatedRevision = Loaded<
   GameRevisionEntity,
-  'authors' | 'genreLinks.genre' | 'links' | 'attachments'
+  'authors' | 'tagLinks.tag' | 'links' | 'attachments'
 >;
 
 @Injectable()
@@ -67,12 +66,12 @@ export class GamesService {
     private readonly games: EntityRepository<GameEntity>,
     @InjectRepository(GameLikeEntity)
     private readonly likes: EntityRepository<GameLikeEntity>,
+    private readonly tags: GameTagsService,
   ) {}
 
-  async list(query: GameListQueryDto) {
+  async list(query: GameListQueryDto, userId?: string) {
     const revisionWhere: FilterQuery<GameRevisionEntity> = {};
-    if (query.genre)
-      revisionWhere.genreLinks = { genre: { slug: query.genre } };
+    if (query.tag) revisionWhere.tagLinks = { tag: { slug: query.tag } };
     if (query.author_id) {
       revisionWhere.authors = { discord_user_id: BigInt(query.author_id) };
     }
@@ -83,15 +82,26 @@ export class GamesService {
         ...(query.release_to ? { $lte: query.release_to } : {}),
       };
     }
-    const [games, total] = await this.games.findAndCount(
-      { publishedRevision: { $ne: null, ...revisionWhere } },
-      {
-        populate: GAME_POPULATE,
-        limit: query.limit,
-        offset: query.offset,
-        orderBy: this.publicOrder(query.sort),
-      },
-    );
+    const where: FilterQuery<GameEntity> = {
+      publishedRevision: { $ne: null, ...revisionWhere },
+    };
+    if (userId) {
+      const discordUserId = BigInt(userId);
+      where.$or = [
+        { owner_id: discordUserId },
+        {
+          publishedRevision: {
+            authors: { discord_user_id: discordUserId },
+          },
+        },
+      ];
+    }
+    const [games, total] = await this.games.findAndCount(where, {
+      populate: GAME_POPULATE,
+      limit: query.limit,
+      offset: query.offset,
+      orderBy: this.publicOrder(query.sort),
+    });
     const counts = await this.likeCounts(games);
     return {
       items: games.map((game) =>
@@ -105,6 +115,10 @@ export class GamesService {
       limit: query.limit,
       offset: query.offset,
     };
+  }
+
+  listByUser(userId: string, query: Omit<GameListQueryDto, 'author_id'>) {
+    return this.list(query, userId);
   }
 
   async getPublic(id: string) {
@@ -259,9 +273,9 @@ export class GamesService {
       if (!revision || revision.status !== GameRevisionStatus.Draft) {
         throw new ConflictException('Only a draft can be submitted.');
       }
-      if (revision.authors.length === 0 || revision.genreLinks.length === 0) {
+      if (revision.authors.length === 0 || revision.tagLinks.length === 0) {
         throw new ConflictException(
-          'A game must have at least one author and one genre before review.',
+          'A game must have at least one author and one tag before review.',
         );
       }
       revision.status = GameRevisionStatus.Review;
@@ -325,10 +339,10 @@ export class GamesService {
       id: game.id,
       title: revision.title,
       release_date: String(revision.release_date).slice(0, 10),
-      genres: revision.genreLinks.getItems().map(({ genre }) => ({
-        id: genre.id,
-        slug: genre.slug,
-        name: genre.name,
+      tags: revision.tagLinks.getItems().map(({ tag }) => ({
+        id: tag.id,
+        slug: tag.slug,
+        name: tag.name,
       })),
       authors: this.authorDtos(revision),
       image:
@@ -405,17 +419,11 @@ export class GamesService {
     dto: UpdateGameDto,
     partial = false,
   ) {
-    if (!partial || dto.genre_ids !== undefined) {
-      const ids = dto.genre_ids ?? [];
-      const genres = ids.length
-        ? await em.find(GameGenreEntity, { id: { $in: ids } })
-        : [];
-      if (genres.length !== new Set(ids).size) {
-        throw new BadRequestException('One or more genres do not exist.');
-      }
-      revision.genreLinks.set(
-        genres.map((genre) =>
-          Object.assign(new GameRevisionGenreEntity(), { revision, genre }),
+    if (!partial || dto.tags !== undefined) {
+      const tags = await this.tags.ensure(dto.tags ?? [], em);
+      revision.tagLinks.set(
+        tags.map((tag) =>
+          Object.assign(new GameRevisionTagEntity(), { revision, tag }),
         ),
       );
     }
@@ -458,11 +466,11 @@ export class GamesService {
     source: PopulatedRevision,
     target: GameRevisionEntity,
   ) {
-    target.genreLinks.set(
-      source.genreLinks.getItems().map(({ genre }) =>
-        Object.assign(new GameRevisionGenreEntity(), {
+    target.tagLinks.set(
+      source.tagLinks.getItems().map(({ tag }) =>
+        Object.assign(new GameRevisionTagEntity(), {
           revision: target,
-          genre,
+          tag,
         }),
       ),
     );

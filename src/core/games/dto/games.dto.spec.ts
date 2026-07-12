@@ -7,7 +7,7 @@ const valid = {
   title: 'Community Game',
   description: '# Description',
   release_date: '2026-07-11',
-  genre_ids: ['019f0000-0000-7000-8000-000000000001'],
+  tags: ['Action'],
   authors: [{ type: 'discord', discord_user_id: '123456789012345678' }],
   links: [{ icon: 'steam', label: 'Steam', link: 'https://example.com/game' }],
   attachments: [{ type: 'image', url: 'https://example.com/image.png' }],

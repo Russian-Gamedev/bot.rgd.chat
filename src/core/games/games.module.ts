@@ -5,16 +5,16 @@ import {
   GameAttachmentEntity,
   GameAuthorEntity,
   GameEntity,
-  GameGenreEntity,
   GameLikeEntity,
   GameLinkEntity,
   GameReviewEventEntity,
   GameRevisionEntity,
-  GameRevisionGenreEntity,
+  GameRevisionTagEntity,
+  GameTagEntity,
 } from './entities/games.entity';
-import { GameGenresService } from './game-genres.service';
 import { GameLikesService } from './game-likes.service';
 import { GameReviewService } from './game-review.service';
+import { GameTagsService } from './game-tags.service';
 import { GamesController } from './games.controller';
 import { GamesService } from './games.service';
 @Module({
@@ -23,8 +23,8 @@ import { GamesService } from './games.service';
       GameEntity,
       GameRevisionEntity,
       GameAuthorEntity,
-      GameGenreEntity,
-      GameRevisionGenreEntity,
+      GameTagEntity,
+      GameRevisionTagEntity,
       GameLinkEntity,
       GameAttachmentEntity,
       GameLikeEntity,
@@ -37,7 +37,8 @@ import { GamesService } from './games.service';
     GamesService,
     GameReviewService,
     GameLikesService,
-    GameGenresService,
+    GameTagsService,
   ],
+  exports: [GamesService],
 })
 export class GamesModule {}

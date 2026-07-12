@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsDateString,
   IsEnum,
@@ -10,8 +11,6 @@ import {
   IsOptional,
   IsString,
   IsUrl,
-  IsUUID,
-  Matches,
   Max,
   MaxLength,
   Min,
@@ -115,10 +114,18 @@ export class CreateGameDto {
   @IsDateString({ strict: true })
   release_date: string;
   @ApiProperty({ type: [String], maxItems: 10 })
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? value.map((tag) => (typeof tag === 'string' ? tag.trim() : tag))
+      : value,
+  )
   @IsArray()
   @ArrayMaxSize(10)
-  @IsUUID('all', { each: true })
-  genre_ids: string[];
+  @ArrayUnique((tag: string) => tag.toLocaleLowerCase('ru-RU'))
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(80, { each: true })
+  tags: string[];
   @ApiProperty({ type: [GameAuthorInputDto], maxItems: 20 })
   @IsArray()
   @ArrayMaxSize(20)
@@ -158,7 +165,7 @@ export class PageQueryDto {
   offset = 0;
 }
 export class GameListQueryDto extends PageQueryDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() genre?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumberString() author_id?: string;
   @ApiPropertyOptional()
   @IsOptional()
@@ -213,24 +220,17 @@ export class RequestGameChangesDto {
 export class TransferGameOwnerDto {
   @ApiProperty() @IsNumberString() owner_id: string;
 }
-export class CreateGameGenreDto {
+export class CreateGameTagDto {
   @ApiProperty()
   @Transform(trim)
   @IsString()
   @MinLength(1)
   @MaxLength(80)
   name: string;
-  @ApiProperty()
-  @Transform(trim)
-  @IsString()
-  @MinLength(1)
-  @MaxLength(64)
-  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  slug: string;
 }
-export class UpdateGameGenreDto extends PartialType(CreateGameGenreDto) {}
+export class UpdateGameTagDto extends PartialType(CreateGameTagDto) {}
 
-export class GameGenreDto {
+export class GameTagDto {
   @ApiProperty() id: string;
   @ApiProperty() slug: string;
   @ApiProperty() name: string;
@@ -257,7 +257,7 @@ export class GameListItemDto {
   @ApiProperty() id: string;
   @ApiProperty() title: string;
   @ApiProperty() release_date: string;
-  @ApiProperty({ type: [GameGenreDto] }) genres: GameGenreDto[];
+  @ApiProperty({ type: [GameTagDto] }) tags: GameTagDto[];
   @ApiProperty({ type: [GameAuthorDto] }) authors: GameAuthorDto[];
   @ApiPropertyOptional({ nullable: true }) image: string | null;
   @ApiProperty() likes_count: number;
