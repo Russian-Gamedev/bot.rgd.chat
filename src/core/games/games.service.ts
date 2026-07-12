@@ -421,6 +421,9 @@ export class GamesService {
   ) {
     if (!partial || dto.tags !== undefined) {
       const tags = await this.tags.ensure(dto.tags ?? [], em);
+      if (revision.id) {
+        await em.nativeDelete(GameRevisionTagEntity, { revision: revision.id });
+      }
       revision.tagLinks.set(
         tags.map((tag) =>
           Object.assign(new GameRevisionTagEntity(), { revision, tag }),
@@ -428,6 +431,9 @@ export class GamesService {
       );
     }
     if (!partial || dto.authors !== undefined) {
+      if (revision.id) {
+        await em.nativeDelete(GameAuthorEntity, { revision: revision.id });
+      }
       revision.authors.set(
         (dto.authors ?? []).map((author, position) =>
           Object.assign(new GameAuthorEntity(), {
@@ -443,6 +449,9 @@ export class GamesService {
       );
     }
     if (!partial || dto.links !== undefined) {
+      if (revision.id) {
+        await em.nativeDelete(GameLinkEntity, { revision: revision.id });
+      }
       revision.links.set(
         (dto.links ?? []).map((link, position) =>
           Object.assign(new GameLinkEntity(), { revision, ...link, position }),
@@ -450,6 +459,9 @@ export class GamesService {
       );
     }
     if (!partial || dto.attachments !== undefined) {
+      if (revision.id) {
+        await em.nativeDelete(GameAttachmentEntity, { revision: revision.id });
+      }
       revision.attachments.set(
         (dto.attachments ?? []).map((attachment, position) =>
           Object.assign(new GameAttachmentEntity(), {
