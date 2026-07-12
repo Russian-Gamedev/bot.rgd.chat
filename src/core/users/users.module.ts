@@ -1,5 +1,6 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Module } from '@nestjs/common';
+import { GamesModule } from '#core/games/games.module';
 import { PermissionsModule } from '#core/permissions/permissions.module';
 import { DiscordProfileSyncService } from './discord-profile-sync.service';
 import { MemberProfileEntity } from './entities/member-profile.entity';
@@ -12,6 +13,7 @@ import { UserService } from './users.service';
 
 @Module({
   imports: [
+    GamesModule,
     MikroOrmModule.forFeature([
       UserProfileEntity,
       MemberProfileEntity,

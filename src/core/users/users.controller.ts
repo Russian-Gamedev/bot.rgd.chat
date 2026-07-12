@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -7,7 +16,13 @@ import {
   ApiOperation,
   ApiParam,
   ApiTags,
+  OmitType,
 } from '@nestjs/swagger';
+import {
+  GameListQueryDto,
+  GameListResponseDto,
+} from '#core/games/dto/games.dto';
+import { GamesService } from '#core/games/games.service';
 import { getActorUserId } from '#core/permissions/actor-user-id';
 import { ApiActorAuth } from '#core/permissions/openapi-auth.decorator';
 import { Actor } from '#core/permissions/permissions.decorator';
@@ -20,12 +35,17 @@ import { PublicUserProfileDto } from './dto/public-user-profile.dto';
 import { PublicProfileService } from './public-profile.service';
 import { UserService } from './users.service';
 
+class UserGamesQueryDto extends OmitType(GameListQueryDto, [
+  'author_id',
+] as const) {}
+
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly userService: UserService,
     private readonly publicProfileService: PublicProfileService,
+    private readonly gamesService: GamesService,
   ) {}
 
   @Get('me')
@@ -67,6 +87,30 @@ export class UsersController {
     const profile = await this.userService.updateProfileInfo(userId, dto);
     await this.publicProfileService.invalidateProfileCache(profile);
     return this.publicProfileService.getCurrentUserProfile(userId, actor);
+  }
+
+  @Get(':id_or_username/games')
+  @ApiOperation({
+    summary: 'Get published games by user',
+    description:
+      'Looks up a user profile by Discord ID or username and returns games owned or authored by that Discord user.',
+  })
+  @ApiParam({
+    name: 'id_or_username',
+    description: 'Discord user ID or username.',
+    example: '123456789012345678',
+  })
+  @ApiOkResponse({ type: GameListResponseDto })
+  @ApiNotFoundResponse({ description: 'User profile was not found.' })
+  async getGames(
+    @Param('id_or_username') lookup: string,
+    @Query() query: UserGamesQueryDto,
+  ) {
+    const profile = await this.userService.lookupProfile(lookup);
+    if (!profile) {
+      throw new NotFoundException('User profile was not found.');
+    }
+    return this.gamesService.listByUser(profile.user_id.toString(), query);
   }
 
   @Get(':id')

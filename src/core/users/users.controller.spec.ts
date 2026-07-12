@@ -4,6 +4,8 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 
 import { BotEntity } from '#core/bots/entities/bot.entity';
+import { GameListQueryDto } from '#core/games/dto/games.dto';
+import type { GamesService } from '#core/games/games.service';
 import { ActorType } from '#core/permissions/permissions.types';
 import type { CurrentUserProfileDto } from './dto/current-user-profile.dto';
 import { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
@@ -69,6 +71,20 @@ describe('UsersController', () => {
     } as unknown as UserService;
   }
 
+  function createGamesService(
+    overrides: Partial<GamesService> = {},
+  ): GamesService {
+    return {
+      listByUser: mock(async () => ({
+        items: [],
+        total: 0,
+        limit: 20,
+        offset: 0,
+      })),
+      ...overrides,
+    } as unknown as GamesService;
+  }
+
   it('returns public profile by id', async () => {
     const expected = createProfileResponse();
     const publicProfileService = createPublicProfileService({
@@ -77,6 +93,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createGamesService(),
     );
 
     const result = await controller.getById('123');
@@ -93,6 +110,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createGamesService(),
     );
 
     const result = await controller.getById('DamirLut');
@@ -112,9 +130,43 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createGamesService(),
     );
 
     await expect(controller.getById('404')).rejects.toThrow(NotFoundException);
+  });
+
+  it('returns published games using the resolved profile id', async () => {
+    const userService = createUserService({
+      lookupProfile: mock(async () => createProfile({ user_id: 456n })),
+    });
+    const gamesService = createGamesService();
+    const controller = new UsersController(
+      userService,
+      createPublicProfileService(),
+      gamesService,
+    );
+    const query = plainToInstance(GameListQueryDto, { limit: 10, offset: 5 });
+
+    const result = await controller.getGames('Alice', query);
+
+    expect(userService.lookupProfile).toHaveBeenCalledWith('Alice');
+    expect(gamesService.listByUser).toHaveBeenCalledWith('456', query);
+    expect(result).toEqual({ items: [], total: 0, limit: 20, offset: 0 });
+  });
+
+  it('returns 404 for games when the user lookup does not resolve', async () => {
+    const gamesService = createGamesService();
+    const controller = new UsersController(
+      createUserService({ lookupProfile: mock(async () => null) }),
+      createPublicProfileService(),
+      gamesService,
+    );
+
+    await expect(
+      controller.getGames('missing', plainToInstance(GameListQueryDto, {})),
+    ).rejects.toThrow(NotFoundException);
+    expect(gamesService.listByUser).not.toHaveBeenCalled();
   });
 
   it('returns current user profile for user actor', async () => {
@@ -127,6 +179,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createGamesService(),
     );
 
     const result = await controller.getMe({
@@ -157,6 +210,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createGamesService(),
     );
 
     const result = await controller.getMe({
@@ -209,7 +263,11 @@ describe('UsersController', () => {
     const publicProfileService = createPublicProfileService({
       getCurrentUserProfile: mock(async () => expected),
     });
-    const controller = new UsersController(userService, publicProfileService);
+    const controller = new UsersController(
+      userService,
+      publicProfileService,
+      createGamesService(),
+    );
 
     const result = await controller.patchMe(
       {
@@ -241,7 +299,11 @@ describe('UsersController', () => {
     const publicProfileService = createPublicProfileService({
       getCurrentUserProfile: mock(async () => expected),
     });
-    const controller = new UsersController(userService, publicProfileService);
+    const controller = new UsersController(
+      userService,
+      publicProfileService,
+      createGamesService(),
+    );
 
     const result = await controller.patchMe(
       {
@@ -272,6 +334,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createGamesService(),
     );
 
     await expect(
@@ -295,7 +358,11 @@ describe('UsersController', () => {
         );
       }),
     });
-    const controller = new UsersController(userService, publicProfileService);
+    const controller = new UsersController(
+      userService,
+      publicProfileService,
+      createGamesService(),
+    );
 
     await expect(
       controller.patchMe(
