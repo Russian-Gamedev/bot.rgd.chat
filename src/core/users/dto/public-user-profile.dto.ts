@@ -82,6 +82,10 @@ export class PublicUserProfileDto {
   maxActiveStreak: number;
 
   @Expose()
+  @ApiProperty({ example: 2 })
+  banCount: number;
+
+  @Expose()
   @ApiProperty({ type: [PublicUserProfileTagDto] })
   @Type(() => PublicUserProfileTagDto)
   tags: PublicUserProfileTagDto[];

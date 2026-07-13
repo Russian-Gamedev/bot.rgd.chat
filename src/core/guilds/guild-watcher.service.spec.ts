@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { AuditLogEvent, Client, Guild } from 'discord.js';
 
 import { GuildEvents } from '#config/guilds';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
+import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { UserService } from '#core/users/users.service';
 
 import { GuildEventService } from './events/guild-events.service';
@@ -59,6 +60,9 @@ function makeGuild(opts: {
 
 const MEMBER_ID = 'member-123';
 const MOD_ID = 'mod-456';
+const DISCORD_GUILD_ID = '333333333333333333';
+const DISCORD_MEMBER_ID = '111111111111111111';
+const DISCORD_MOD_ID = '222222222222222222';
 
 describe('GuildWatcherService', () => {
   let service: GuildWatcherService;
@@ -218,6 +222,99 @@ describe('GuildWatcherService', () => {
 
       expect(result.event).toBe(GuildEvents.MEMBER_BAN);
       expect(result.moderatorId).toBeUndefined();
+    });
+  });
+
+  describe('onMemberLeave', () => {
+    function createMemberProfile(): MemberProfileEntity {
+      const user = new MemberProfileEntity();
+      user.id = 1n;
+      user.guild_id = BigInt(DISCORD_GUILD_ID);
+      user.user_id = BigInt(DISCORD_MEMBER_ID);
+      return user;
+    }
+
+    function createServiceForMemberLeave(user: MemberProfileEntity): {
+      service: GuildWatcherService;
+      userService: UserService;
+      guildSettingsService: GuildSettingsService;
+    } {
+      const userService = {
+        findOrCreateMember: mock(async () => user),
+        leaveGuild: mock(async () => undefined),
+        incrementBanCount: mock(async () => undefined),
+      } as unknown as UserService;
+      const guildSettingsService = {
+        getEventMessageChannel: mock(async () => null),
+      } as unknown as GuildSettingsService;
+
+      return {
+        service: new GuildWatcherService(
+          Object.create(EntityManager.prototype),
+          {} as Client,
+          guildSettingsService,
+          {} as GuildEventService,
+          userService,
+          {
+            saveCurrentRoles: mock(async () => undefined),
+          } as unknown as GuildMemberRolesService,
+          {
+            trackLeave: mock(async () => undefined),
+          } as unknown as GuildInviteService,
+        ),
+        userService,
+        guildSettingsService,
+      };
+    }
+
+    function createMember(guild: Guild) {
+      return {
+        id: DISCORD_MEMBER_ID,
+        displayName: 'Spammer',
+        guild,
+        roles: { cache: new Map() },
+      };
+    }
+
+    it('increments user ban count when member removal is a ban', async () => {
+      const guild = Object.assign(
+        makeGuild({
+          banEntry: {
+            targetId: DISCORD_MEMBER_ID,
+            executorId: DISCORD_MOD_ID,
+            createdTimestamp: Date.now() - 1000,
+          },
+        }),
+        {
+          id: DISCORD_GUILD_ID,
+          name: 'Guild',
+          fetch: async function () {
+            return this;
+          },
+        },
+      ) as Guild;
+      const user = createMemberProfile();
+      const { service, userService } = createServiceForMemberLeave(user);
+
+      await service.handleMemberLeave(createMember(guild) as never);
+
+      expect(userService.incrementBanCount).toHaveBeenCalledWith(user.user_id);
+    });
+
+    it('does not increment user ban count for regular leave', async () => {
+      const guild = Object.assign(makeGuild({}), {
+        id: DISCORD_GUILD_ID,
+        name: 'Guild',
+        fetch: async function () {
+          return this;
+        },
+      }) as Guild;
+      const user = createMemberProfile();
+      const { service, userService } = createServiceForMemberLeave(user);
+
+      await service.handleMemberLeave(createMember(guild) as never);
+
+      expect(userService.incrementBanCount).not.toHaveBeenCalled();
     });
   });
 });
