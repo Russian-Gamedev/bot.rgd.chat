@@ -37,8 +37,15 @@ export interface MahoragaEvidence {
 
 export interface MahoragaSoftbanResult {
   guildId: string;
-  status: 'applied' | 'already_applied' | 'skipped' | 'failed';
+  status: 'applied' | 'failed';
   detail?: string;
+  cleanup?: MahoragaMessageCleanupSummary;
+}
+
+export interface MahoragaMessageCleanupSummary {
+  alreadyDeleted: number;
+  manuallyDeleted: number;
+  failed: number;
 }
 
 export interface MahoragaDetectionSettings {
@@ -48,11 +55,9 @@ export interface MahoragaDetectionSettings {
   linkWindowSeconds: number;
   imageRepeatLimit: number;
   imageWindowSeconds: number;
-  youngAccountMonths: number;
   messageTrackingWindowSeconds: number;
   honeypotMode: MahoragaDetectionMode;
   repeatMode: MahoragaDetectionMode;
-  youngAccountMode: MahoragaDetectionMode;
 }
 
 export interface MahoragaDetection {
@@ -75,6 +80,23 @@ export interface MahoragaRegisterCaseInput {
 export interface MahoragaRegisterCaseResult {
   case: import('./entities/mahoraga-case.entity').MahoragaCaseEntity;
   shouldApplySoftban: boolean;
+  shouldNotifyMonitor: boolean;
+}
+
+export function getMahoragaDetectorMode(
+  settings: MahoragaDetectionSettings,
+  reason: MahoragaReason,
+): MahoragaDetectionMode {
+  switch (reason) {
+    case MahoragaReason.Honeypot:
+      return settings.honeypotMode;
+    case MahoragaReason.TextRepeat:
+    case MahoragaReason.LinkRepeat:
+    case MahoragaReason.ImageRepeat:
+      return settings.repeatMode;
+    default:
+      return MahoragaDetectionMode.On;
+  }
 }
 
 export function createHoneypotEmbed(count: number): EmbedBuilder {

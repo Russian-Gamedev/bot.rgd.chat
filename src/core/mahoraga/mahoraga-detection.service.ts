@@ -14,6 +14,7 @@ import {
 } from '#lib/utils';
 
 import {
+  getMahoragaDetectorMode,
   MahoragaCaseStatus,
   MahoragaDetection,
   MahoragaDetectionMode,
@@ -28,7 +29,6 @@ const LINK_REPEAT_LIMIT = 3;
 const LINK_WINDOW_SECONDS = 60;
 const IMAGE_REPEAT_LIMIT = 2;
 const IMAGE_WINDOW_SECONDS = 600;
-const YOUNG_ACCOUNT_MONTHS = 3;
 const MESSAGE_TRACKING_WINDOW_SECONDS = 600;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -153,11 +153,11 @@ export class MahoragaDetectionService {
     matchedValue: string,
     extra: Partial<MahoragaEvidence> = {},
   ): MahoragaDetection {
-    const detectorMode = this.getDetectorMode(settings, reason);
+    const detectorMode = getMahoragaDetectorMode(settings, reason);
     const status =
       detectorMode === MahoragaDetectionMode.Monitor
         ? MahoragaCaseStatus.Observed
-        : this.getEnforcedStatus(message.author.createdTimestamp, settings);
+        : MahoragaCaseStatus.Active;
 
     return {
       userId: message.author.id,
@@ -177,13 +177,6 @@ export class MahoragaDetectionService {
         ...extra,
       },
     };
-  }
-
-  private getEnforcedStatus(
-    _createdTimestamp: number,
-    _settings: MahoragaDetectionSettings,
-  ): MahoragaCaseStatus {
-    return MahoragaCaseStatus.Active;
   }
 
   private async shouldIgnoreMessage(message: Message): Promise<boolean> {
@@ -248,11 +241,6 @@ export class MahoragaDetectionService {
         GuildSettings.MahoragaMessageTrackingWindowSeconds,
         MESSAGE_TRACKING_WINDOW_SECONDS,
       ),
-      youngAccountMonths: await this.getNumberSetting(
-        guildId,
-        GuildSettings.MahoragaYoungAccountMonths,
-        YOUNG_ACCOUNT_MONTHS,
-      ),
       honeypotMode: await this.getModeSetting(
         guildId,
         GuildSettings.MahoragaHoneypotMode,
@@ -261,11 +249,6 @@ export class MahoragaDetectionService {
       repeatMode: await this.getModeSetting(
         guildId,
         GuildSettings.MahoragaRepeatMode,
-        MahoragaDetectionMode.On,
-      ),
-      youngAccountMode: await this.getModeSetting(
-        guildId,
-        GuildSettings.MahoragaYoungAccountMode,
         MahoragaDetectionMode.On,
       ),
     };
@@ -299,22 +282,6 @@ export class MahoragaDetectionService {
     if (value === MahoragaDetectionMode.Monitor)
       return MahoragaDetectionMode.Monitor;
     return MahoragaDetectionMode.On;
-  }
-
-  private getDetectorMode(
-    settings: MahoragaDetectionSettings,
-    reason: MahoragaReason,
-  ): MahoragaDetectionMode {
-    switch (reason) {
-      case MahoragaReason.Honeypot:
-        return settings.honeypotMode;
-      case MahoragaReason.TextRepeat:
-      case MahoragaReason.LinkRepeat:
-      case MahoragaReason.ImageRepeat:
-        return settings.repeatMode;
-      default:
-        return MahoragaDetectionMode.On;
-    }
   }
 
   private async hitDetector(
@@ -351,14 +318,27 @@ export class MahoragaDetectionService {
     const entries = await this.redis.smembers(
       `mahoraga:messages:${guildId}:${userId}`,
     );
-    return entries.map((entry) => {
-      const [channelId, messageId] = entry.split(':');
+    return entries.flatMap((entry) => {
+      const [channelId, messageId, extra] = entry.split(':');
+      if (!channelId || !messageId || extra !== undefined) return [];
       return { channelId, messageId };
     });
   }
 
   async clearTrackedMessages(guildId: string, userId: string): Promise<void> {
     await this.redis.del(`mahoraga:messages:${guildId}:${userId}`);
+  }
+
+  async removeTrackedMessages(
+    guildId: string,
+    userId: string,
+    entries: Array<{ channelId: string; messageId: string }>,
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    await this.redis.srem(
+      `mahoraga:messages:${guildId}:${userId}`,
+      ...entries.map((entry) => `${entry.channelId}:${entry.messageId}`),
+    );
   }
 
   private async getImageAttachmentHash(

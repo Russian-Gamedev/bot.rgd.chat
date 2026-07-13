@@ -1,4 +1,7 @@
-import type { FilterQuery } from '@mikro-orm/core';
+import {
+  type FilterQuery,
+  UniqueConstraintViolationException,
+} from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import {
@@ -73,6 +76,18 @@ export class MahoragaCaseService {
   async registerCase(
     input: MahoragaRegisterCaseInput,
   ): Promise<MahoragaRegisterCaseResult> {
+    try {
+      return await this.registerCaseOnce(input);
+    } catch (error) {
+      if (!(error instanceof UniqueConstraintViolationException)) throw error;
+      this.em.clear();
+      return this.registerCaseOnce(input);
+    }
+  }
+
+  private async registerCaseOnce(
+    input: MahoragaRegisterCaseInput,
+  ): Promise<MahoragaRegisterCaseResult> {
     const user_id = this.parseDiscordId(input.userId);
     const now = new Date();
     let mahoragaCase = await this.casesRepository.findOne({ user_id });
@@ -82,6 +97,10 @@ export class MahoragaCaseService {
       (!mahoragaCase ||
         mahoragaCase.status === MahoragaCaseStatus.Pardoned ||
         mahoragaCase.status === MahoragaCaseStatus.Observed);
+    const shouldNotifyMonitor =
+      input.status === MahoragaCaseStatus.Observed &&
+      previousStatus !== MahoragaCaseStatus.Observed &&
+      previousStatus !== MahoragaCaseStatus.Active;
 
     if (!mahoragaCase) {
       mahoragaCase = new MahoragaCaseEntity();
@@ -120,7 +139,7 @@ export class MahoragaCaseService {
     }
 
     await this.save(mahoragaCase);
-    return { case: mahoragaCase, shouldApplySoftban };
+    return { case: mahoragaCase, shouldApplySoftban, shouldNotifyMonitor };
   }
 
   async pardonCase(

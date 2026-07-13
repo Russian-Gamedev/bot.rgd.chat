@@ -1,10 +1,10 @@
 # Mahoraga anti-spam
 
-Mahoraga - система мягкого антиспама для Discord-серверов RGD. Она отслеживает подозрительную активность, создаёт единый кейс на пользователя и при необходимости выдаёт softban-роль на всех серверах, где Mahoraga включён.
+Mahoraga - система мягкого антиспама для Discord-серверов RGD. Она отслеживает подозрительную активность, создаёт единый кейс на пользователя и при необходимости применяет временный ban только на сервере, где произошло нарушение.
 
 ## Что делает Mahoraga
 
-Mahoraga реагирует на четыре типа событий:
+Mahoraga реагирует на пять типов событий:
 
 - `honeypot` - сообщение отправлено в honeypot-канал.
 - `text_repeat` - пользователь повторяет одинаковый нормализованный текст.
@@ -16,24 +16,20 @@ Mahoraga реагирует на четыре типа событий:
 
 ## Режимы работы
 
-У каждого типа детектов есть индивидуальный режим работы (`off`, `monitor`, `on`).
+У типов детектов есть режим работы (`off`, `monitor`, `on`).
 
 - `off` - детекты этого типа полностью отключены.
-- `monitor` - Mahoraga только создаёт observed-кейсы и пишет в лог, что было бы сделано.
-- `on` - Mahoraga применяет softban.
+- `monitor` - Mahoraga создаёт `observed`-кейс и пишет один лог о том, что sanction был бы применён.
+- `on` - Mahoraga применяет temporary softban.
 
-Для `mahoraga_young_account_mode` доступны только `off` и `on`. В режиме `on` Mahoraga логирует предупреждение о молодом аккаунте.
-
-Режимы задаются настройками `mahoraga_honeypot_mode`, `mahoraga_repeat_mode` и `mahoraga_young_account_mode`.
-
-Если настройка отсутствует или имеет неизвестное значение, используется `on`.
+Режимы задаются настройками `mahoraga_honeypot_mode` и `mahoraga_repeat_mode`. Если настройка отсутствует или имеет неизвестное значение, используется `on`.
 
 ## Статусы кейса
 
 | Статус | Значение |
 | --- | --- |
 | `observed` | Детект сработал в monitor-режиме. Softban не применяется. |
-| `active` | Активный spammer-кейс. Softban должен быть применён. |
+| `active` | Активный spammer-кейс. Temporary softban был или должен быть применён в source guild. |
 | `pardoned` | Пользователь разбанен через API или slash-команду. |
 
 На пользователя хранится один кейс в таблице `mahoraga_cases`. Повторные срабатывания обновляют кейс, увеличивают `detection_count` и добавляют evidence.
@@ -48,8 +44,6 @@ Mahoraga реагирует на четыре типа событий:
 | `mahoraga_honeypot_channel_id` | string | `null` | Канал-ловушка. Любое сообщение там создаёт детект. |
 | `mahoraga_honeypot_mode` | string | `on` | Режим honeypot: `off`, `monitor`, `on`. |
 | `mahoraga_repeat_mode` | string | `on` | Режим повторов (text/link/image): `off`, `monitor`, `on`. |
-| `mahoraga_young_account_mode` | string | `on` | Режим молодых аккаунтов: `off` (не проверять возраст), `on` (лог предупреждения + softban). |
-| `mahoraga_softban_role_id` | string | `null` | Роль, которая выдаётся при softban. |
 | `mahoraga_log_channel_id` | string | `null` | Канал для логов Mahoraga. |
 | `mahoraga_text_repeat_limit` | number | `3` | Сколько одинаковых текстов нужно для срабатывания. |
 | `mahoraga_text_window_seconds` | number | `30` | Окно повторов текста. |
@@ -57,8 +51,7 @@ Mahoraga реагирует на четыре типа событий:
 | `mahoraga_link_window_seconds` | number | `60` | Окно повторов ссылок. |
 | `mahoraga_image_repeat_limit` | number | `2` | Сколько одинаковых изображений нужно для срабатывания. |
 | `mahoraga_image_window_seconds` | number | `600` | Окно повторов изображений. |
-| `mahoraga_young_account_months` | number | `3` | Аккаунты моложе этого значения получают лог-предупреждение. |
-| `mahoraga_message_tracking_window_seconds` | number | `600` | Окно хранения последних сообщений пользователя для удаления после honeypot или repeat-детекта. |
+| `mahoraga_message_tracking_window_seconds` | number | `600` | Окно хранения последних сообщений пользователя для проверки после temporary ban. |
 
 Числовые настройки меньше `1` считаются невалидными и заменяются default-значением.
 
@@ -78,8 +71,6 @@ mahoraga:detector:link:{guildId}:{userId}:{hash}
 
 При достижении `mahoraga_link_repeat_limit` внутри `mahoraga_link_window_seconds` создаётся кейс с причиной `link_repeat`.
 
-В режиме `on` Mahoraga удаляет сообщение, которое вызвало repeat-детект, и последние отслеженные сообщения пользователя за `mahoraga_message_tracking_window_seconds`. В режиме `monitor` сообщения не удаляются.
-
 ### Повтор изображений
 
 Mahoraga проверяет только image attachments. Файл скачивается, если размер не больше 8 MiB, затем хешируется. Повтор считается через Redis key:
@@ -89,8 +80,6 @@ mahoraga:detector:image:{guildId}:{userId}:{hash}
 ```
 
 При достижении `mahoraga_image_repeat_limit` внутри `mahoraga_image_window_seconds` создаётся кейс с причиной `image_repeat`.
-
-В режиме `on` Mahoraga удаляет сообщение, которое вызвало repeat-детект, и последние отслеженные сообщения пользователя за `mahoraga_message_tracking_window_seconds`. В режиме `monitor` сообщения не удаляются.
 
 ### Повтор текста
 
@@ -102,24 +91,18 @@ mahoraga:detector:text:{guildId}:{userId}:{hash}
 
 При достижении `mahoraga_text_repeat_limit` внутри `mahoraga_text_window_seconds` создаётся кейс с причиной `text_repeat`.
 
-В режиме `on` Mahoraga удаляет сообщение, которое вызвало repeat-детект, и последние отслеженные сообщения пользователя за `mahoraga_message_tracking_window_seconds`. В режиме `monitor` сообщения не удаляются.
-
 ## Softban
 
-Softban - это выдача роли `mahoraga_softban_role_id`.
+Softban - это temporary Discord ban в source guild:
 
-Когда кейс становится `active`, Mahoraga пытается выдать softban-роль пользователю на всех серверах, где включён `mahoraga_enabled`. Возможные результаты по каждому серверу:
+1. `guild.bans.create(userId, { reason, deleteMessageSeconds: 3600 })`.
+2. Через 5 секунд `guild.bans.remove(userId, reason)`.
+3. После unban Mahoraga проверяет Redis-tracked messages для `mahoraga:messages:{guildId}:{userId}`.
+4. Если Discord ban не удалил сообщение, Mahoraga удаляет его вручную.
 
-- `applied` - роль выдана или снята.
-- `already_applied` - роль уже была на пользователе.
-- `skipped` - сервер, роль или участник недоступны.
-- `failed` - Discord API вернул ошибку.
+Sanction применяется только к одному серверу - guild, где произошло нарушение. Если уже `active` пользователь снова триггерит honeypot или repeat-spam detection, Mahoraga снова применяет temporary ban в source guild и после unban проверяет/чистит tracked messages. Новое spam alert при повторном active detection не отправляется.
 
-Если пользователь с активным кейсом заходит на сервер позже, Mahoraga повторно пытается применить softban для этого сервера.
-
-## Молодые аккаунты
-
-При `mahoraga_young_account_mode = on` Mahoraga логирует предупреждение, если аккаунт пользователя младше `mahoraga_young_account_months`. Softban применяется в любом случае. Верификация не предусмотрена.
+Если пользователь с активным кейсом позже заходит на сервер, Mahoraga только пишет уведомление в log channel. Rejoin-ban больше не применяется. `pardoned` кейсы rejoin-уведомления не создают.
 
 ## REST API
 
@@ -169,7 +152,7 @@ Body:
 }
 ```
 
-`guild_id` и `reason` опциональны. Кейс создаётся как `active` с причиной `manual`.
+`guild_id` и `reason` опциональны. Если `guild_id` задан и кейс впервые становится `active`, Mahoraga применяет temporary softban в этом guild.
 
 ### Разбанить пользователя
 
@@ -185,7 +168,7 @@ Body:
 }
 ```
 
-Кейс переводится в `pardoned`, verification token сбрасывается, softban-роль снимается на всех включённых серверах.
+Кейс переводится в `pardoned`.
 
 ### Синхронизировать softban
 
@@ -193,7 +176,7 @@ Body:
 POST /mahoraga/spammers/:user_id/sync-softban
 ```
 
-Повторно применяет softban на всех включённых серверах. Для кейсов `observed` и `pardoned` endpoint возвращает ошибку.
+Повторно применяет temporary softban только в `source_guild_id` кейса. Для кейсов `observed`, `pardoned` и кейсов без `source_guild_id` endpoint возвращает ошибку.
 
 ## Slash-команды
 
@@ -206,25 +189,22 @@ POST /mahoraga/spammers/:user_id/sync-softban
 - `user` - Discord user для удаления из Mahoraga.
 - `reason` - опциональная причина.
 
-Команда вызывает тот же pardon-flow, что и REST endpoint: переводит кейс в `pardoned` и снимает softban-роль на всех включённых серверах.
+Команда вызывает тот же pardon-flow, что и REST endpoint: переводит кейс в `pardoned`.
 
 ## Логи
 
 Если задан `mahoraga_log_channel_id`, Mahoraga пишет туда события:
 
-- detection в `monitor` и `on` режимах;
-- успешный или пропущенный softban;
-- ошибки применения softban;
-- предупреждение о молодом аккаунте;
-- manual softban и unban.
+- первый detection в `monitor` режиме;
+- агрегированный результат temporary softban;
+- rejoin пользователя с активным Mahoraga case;
+- unban/pardon.
 
-Сообщения логов обрезаются до 1900 символов, `allowedMentions` отключён.
+Сообщение temporary softban включает количество затронутых каналов и cleanup counters: сколько сообщений уже удалил Discord ban, сколько удалено вручную и сколько не удалось проверить или удалить.
 
 ## Минимальная настройка сервера
 
-1. Создать softban-роль и настроить ей ограничения прав на сервере.
-2. Записать ID роли в `mahoraga_softban_role_id`.
-3. Включить `mahoraga_enabled`.
-4. Опционально задать `mahoraga_log_channel_id`.
-5. Опционально создать honeypot-канал и записать его ID в `mahoraga_honeypot_channel_id`.
-6. После проверки логов переключить `mahoraga_honeypot_mode` и `mahoraga_repeat_mode` на `on`.
+1. Включить `mahoraga_enabled`.
+2. Опционально задать `mahoraga_log_channel_id`.
+3. Опционально создать honeypot-канал и записать его ID в `mahoraga_honeypot_channel_id`.
+4. После проверки логов переключить `mahoraga_honeypot_mode` и `mahoraga_repeat_mode` на `on`.

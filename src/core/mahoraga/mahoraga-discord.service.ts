@@ -4,8 +4,14 @@ import { Client, EmbedBuilder, GuildMember } from 'discord.js';
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 
-import { MahoragaSoftbanResult } from './mahoraga.types';
+import {
+  MahoragaMessageCleanupSummary,
+  MahoragaSoftbanResult,
+} from './mahoraga.types';
 import { MahoragaCaseService } from './mahoraga-case.service';
+
+const DELETE_MESSAGE_SECONDS = 60 * 60;
+const TEMPORARY_BAN_DURATION_MS = 5_000;
 
 @Injectable()
 export class MahoragaDiscordService {
@@ -17,25 +23,10 @@ export class MahoragaDiscordService {
     private readonly caseService: MahoragaCaseService,
   ) {}
 
-  async applySoftbanToAllGuilds(
-    userId: string,
-  ): Promise<MahoragaSoftbanResult[]> {
-    this.caseService.parseDiscordId(userId);
-
-    const guildIds = await this.guildSettings.getGuildsWithEnabledFeature(
-      GuildSettings.MahoragaEnabled,
-    );
-
-    const results: MahoragaSoftbanResult[] = [];
-    for (const guildId of guildIds) {
-      results.push(await this.applySoftbanToGuild(userId, guildId));
-    }
-    return results;
-  }
-
   async applySoftbanToGuild(
     userId: string,
     guildId: string,
+    reason = 'Mahoraga softban',
   ): Promise<MahoragaSoftbanResult> {
     this.caseService.parseDiscordId(userId);
     this.caseService.parseDiscordId(guildId);
@@ -46,93 +37,109 @@ export class MahoragaDiscordService {
       false,
     );
     if (!enabled) {
-      return { guildId, status: 'skipped', detail: 'mahoraga disabled' };
-    }
-
-    const roleId = await this.guildSettings.getSetting<string>(
-      guildId,
-      GuildSettings.MahoragaSoftbanRoleId,
-      null,
-    );
-    if (!roleId) {
-      await this.logEvent(
-        guildId,
-        new EmbedBuilder()
-          .setColor(0xf1c40f)
-          .setTitle('Softban Skipped')
-          .setDescription('Softban role is not configured.')
-          .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
-          .setTimestamp(),
-      );
-      return { guildId, status: 'skipped', detail: 'missing softban role' };
+      return { guildId, status: 'failed', detail: 'mahoraga disabled' };
     }
 
     try {
       const guild = await this.discord.guilds.fetch(guildId);
-      const member = await guild.members.fetch(userId).catch(() => null);
-      if (!member) {
-        return { guildId, status: 'skipped', detail: 'member not found' };
+      try {
+        await guild.bans.create(userId, {
+          reason,
+          deleteMessageSeconds: DELETE_MESSAGE_SECONDS,
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return { guildId, status: 'failed', detail: `ban failed: ${detail}` };
       }
 
-      const role = await guild.roles.fetch(roleId).catch(() => null);
-      if (!role) {
-        await this.logEvent(
+      await this.waitForTemporaryBanDuration();
+
+      try {
+        await guild.bans.remove(userId, `${reason}: temporary ban expired`);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return {
           guildId,
-          new EmbedBuilder()
-            .setColor(0xf1c40f)
-            .setTitle('Softban Skipped')
-            .setDescription(`Role <@&${roleId}> was not found.`)
-            .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
-            .setTimestamp(),
-        );
-        return { guildId, status: 'skipped', detail: 'role not found' };
+          status: 'failed',
+          detail: `unban failed: ${detail}`,
+        };
       }
 
-      if (member.roles.cache.has(role.id)) {
-        return { guildId, status: 'already_applied' };
-      }
-
-      await member.roles.add(role, 'Mahoraga softban');
-      await this.logEvent(
-        guildId,
-        new EmbedBuilder()
-          .setColor(0x2ecc71)
-          .setTitle('Softban Applied')
-          .addFields(
-            { name: 'User', value: `<@${userId}>`, inline: true },
-            { name: 'Role', value: `<@&${roleId}>`, inline: true },
-          )
-          .setTimestamp(),
-      );
       return { guildId, status: 'applied' };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to apply softban in guild ${guildId}:`, error);
-      await this.logEvent(
-        guildId,
-        new EmbedBuilder()
-          .setColor(0xe74c3c)
-          .setTitle('Softban Failed')
-          .setDescription(detail)
-          .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
-          .setTimestamp(),
-      );
       return { guildId, status: 'failed', detail };
     }
   }
 
-  async removeSoftbanFromAllGuilds(
-    userId: string,
-  ): Promise<MahoragaSoftbanResult[]> {
-    const guildIds = await this.guildSettings.getGuildsWithEnabledFeature(
-      GuildSettings.MahoragaEnabled,
-    );
+  async verifyAndDeleteUserMessages(
+    guildId: string,
+    entries: Array<{ channelId: string; messageId: string }>,
+  ): Promise<{
+    summary: MahoragaMessageCleanupSummary;
+    resolvedEntries: Array<{ channelId: string; messageId: string }>;
+  }> {
+    const summary: MahoragaMessageCleanupSummary = {
+      alreadyDeleted: 0,
+      manuallyDeleted: 0,
+      failed: 0,
+    };
+    const resolvedEntries: Array<{ channelId: string; messageId: string }> = [];
 
-    const results: MahoragaSoftbanResult[] = [];
-    for (const guildId of guildIds) {
-      results.push(await this.removeSoftbanFromGuild(userId, guildId));
+    if (entries.length === 0) return { summary, resolvedEntries };
+
+    let guild;
+    try {
+      guild = await this.discord.guilds.fetch(guildId);
+    } catch (error) {
+      this.logger.warn(
+        `Could not fetch guild ${guildId} for Mahoraga cleanup: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      summary.failed = entries.length;
+      return { summary, resolvedEntries };
     }
-    return results;
+
+    for (const entry of entries) {
+      try {
+        const channel = await guild.channels
+          .fetch(entry.channelId)
+          .catch(() => null);
+        if (!channel) {
+          summary.alreadyDeleted += 1;
+          resolvedEntries.push(entry);
+          continue;
+        }
+        if (!channel.isTextBased()) {
+          summary.failed += 1;
+          continue;
+        }
+
+        const message = await channel.messages
+          .fetch(entry.messageId)
+          .catch(() => null);
+        if (!message) {
+          summary.alreadyDeleted += 1;
+          resolvedEntries.push(entry);
+          continue;
+        }
+
+        await message.delete();
+        summary.manuallyDeleted += 1;
+        resolvedEntries.push(entry);
+      } catch (error) {
+        this.logger.warn(
+          `Could not delete Mahoraga message ${entry.messageId} in guild ${guildId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        summary.failed += 1;
+      }
+    }
+
+    return { summary, resolvedEntries };
   }
 
   async deleteUserMessages(
@@ -161,7 +168,19 @@ export class MahoragaDiscordService {
       member.id,
     );
     if (!mahoragaCase) return;
-    await this.applySoftbanToGuild(member.id, member.guild.id);
+
+    await this.logEvent(
+      member.guild.id,
+      new EmbedBuilder()
+        .setColor(0xf1c40f)
+        .setTitle('Mahoraga Rejoin')
+        .setDescription('User with an active Mahoraga case joined the guild.')
+        .addFields(
+          { name: 'User', value: `<@${member.id}>`, inline: true },
+          { name: 'Reason', value: mahoragaCase.reason, inline: true },
+        )
+        .setTimestamp(),
+    );
   }
 
   async logEvent(guildId: string, embed: EmbedBuilder): Promise<void> {
@@ -189,44 +208,7 @@ export class MahoragaDiscordService {
     }
   }
 
-  private async removeSoftbanFromGuild(
-    userId: string,
-    guildId: string,
-  ): Promise<MahoragaSoftbanResult> {
-    const roleId = await this.guildSettings.getSetting<string>(
-      guildId,
-      GuildSettings.MahoragaSoftbanRoleId,
-      null,
-    );
-    if (!roleId) {
-      return { guildId, status: 'skipped', detail: 'missing softban role' };
-    }
-
-    try {
-      const guild = await this.discord.guilds.fetch(guildId);
-      const member = await guild.members.fetch(userId).catch(() => null);
-      if (!member) {
-        return { guildId, status: 'skipped', detail: 'member not found' };
-      }
-
-      if (!member.roles.cache.has(roleId)) {
-        return { guildId, status: 'skipped', detail: 'role not applied' };
-      }
-
-      await member.roles.remove(roleId, 'Mahoraga unban');
-      await this.logEvent(
-        guildId,
-        new EmbedBuilder()
-          .setColor(0x9b59b6)
-          .setTitle('Softban Removed')
-          .addFields({ name: 'User', value: `<@${userId}>`, inline: true })
-          .setTimestamp(),
-      );
-      return { guildId, status: 'applied', detail: 'removed' };
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to remove softban in guild ${guildId}:`, error);
-      return { guildId, status: 'failed', detail };
-    }
+  private waitForTemporaryBanDuration(): Promise<void> {
+    return Bun.sleep(TEMPORARY_BAN_DURATION_MS);
   }
 }

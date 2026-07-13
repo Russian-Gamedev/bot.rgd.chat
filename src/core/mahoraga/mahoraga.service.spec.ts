@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Client, GuildMember, Message, PermissionsBitField } from 'discord.js';
 import Redis from 'ioredis';
@@ -20,11 +21,9 @@ import { MahoragaDiscordService } from './mahoraga-discord.service';
 
 const USER_ID = '111111111111111111';
 const GUILD_ID = '222222222222222222';
-const SECOND_GUILD_ID = '222222222222222223';
 const CHANNEL_ID = '333333333333333333';
 const HONEYPOT_CHANNEL_ID = '333333333333333334';
 const MESSAGE_ID = '444444444444444444';
-const ROLE_ID = '555555555555555555';
 
 function createRepository(getStored: () => MahoragaCaseEntity | null) {
   return {
@@ -80,38 +79,37 @@ describe('MahoragaService', () => {
   let storedCase: MahoragaCaseEntity | null;
   let service: MahoragaService;
   let settings: Partial<Record<GuildSettings, unknown>>;
-  let roleAdd: ReturnType<typeof mock>;
-  let roleRemove: ReturnType<typeof mock>;
+  let banCreate: ReturnType<typeof mock>;
+  let banRemove: ReturnType<typeof mock>;
   let logSend: ReturnType<typeof mock>;
   let fetchedMessageDelete: ReturnType<typeof mock>;
+  let emClear: ReturnType<typeof mock>;
+  let emFlush: ReturnType<typeof mock>;
   let redisStorage: Map<string, number>;
   let redisSetStorage: Map<string, Set<string>>;
-  let hasSoftbanRole: boolean;
   let metrics: MetricsService;
 
   beforeEach(() => {
     storedCase = null;
     redisStorage = new Map();
     redisSetStorage = new Map();
-    roleAdd = mock(async () => undefined);
-    roleRemove = mock(async () => undefined);
+    banCreate = mock(async () => undefined);
+    banRemove = mock(async () => undefined);
     logSend = mock(async () => undefined);
     fetchedMessageDelete = mock(async () => undefined);
-    hasSoftbanRole = false;
+    emClear = mock(() => undefined);
+    emFlush = mock(async () => undefined);
 
     settings = {
       [GuildSettings.MahoragaEnabled]: true,
       [GuildSettings.MahoragaHoneypotMode]: MahoragaDetectionMode.On,
       [GuildSettings.MahoragaRepeatMode]: MahoragaDetectionMode.On,
-      [GuildSettings.MahoragaYoungAccountMode]: MahoragaDetectionMode.Off,
-      [GuildSettings.MahoragaSoftbanRoleId]: ROLE_ID,
       [GuildSettings.MahoragaHoneypotChannelId]: HONEYPOT_CHANNEL_ID,
       [GuildSettings.MahoragaLogChannelId]: CHANNEL_ID,
       [GuildSettings.MahoragaTextRepeatLimit]: 3,
       [GuildSettings.MahoragaTextWindowSeconds]: 30,
       [GuildSettings.MahoragaLinkRepeatLimit]: 3,
       [GuildSettings.MahoragaLinkWindowSeconds]: 60,
-      [GuildSettings.MahoragaYoungAccountMonths]: 3,
     };
 
     const repository = createRepository(() => storedCase);
@@ -120,7 +118,8 @@ describe('MahoragaService', () => {
         storedCase = entity;
         return em;
       }),
-      flush: mock(async () => undefined),
+      flush: emFlush,
+      clear: emClear,
     } as unknown as EntityManager;
     const redis = {
       incr: mock(async (key: string) => {
@@ -143,33 +142,29 @@ describe('MahoragaService', () => {
         redisSetStorage.delete(key);
         return existed ? 1 : 0;
       }),
+      srem: mock(async (key: string, ...values: string[]) => {
+        const set = redisSetStorage.get(key);
+        if (!set) return 0;
+        let removed = 0;
+        for (const value of values) {
+          if (set.delete(value)) removed += 1;
+        }
+        if (set.size === 0) redisSetStorage.delete(key);
+        return removed;
+      }),
     } as unknown as Redis;
     const guildSettings = {
       getSetting: mock(async (_guildId, key, defaultValue) => {
         return settings[key as GuildSettings] ?? defaultValue;
       }),
-      getGuildsWithEnabledFeature: mock(async () => [
-        GUILD_ID,
-        SECOND_GUILD_ID,
-      ]),
     } as unknown as GuildSettingsService;
     const discord = {
       guilds: {
         fetch: mock(async (guildId: string) => ({
           id: guildId,
-          members: {
-            fetch: mock(async () => ({
-              roles: {
-                cache: {
-                  has: mock(() => hasSoftbanRole),
-                },
-                add: roleAdd,
-                remove: roleRemove,
-              },
-            })),
-          },
-          roles: {
-            fetch: mock(async () => ({ id: ROLE_ID })),
+          bans: {
+            create: banCreate,
+            remove: banRemove,
           },
           channels: {
             fetch: mock(async () => ({
@@ -198,6 +193,11 @@ describe('MahoragaService', () => {
       guildSettings,
       caseService,
     );
+    (
+      discordService as unknown as {
+        waitForTemporaryBanDuration: () => Promise<void>;
+      }
+    ).waitForTemporaryBanDuration = mock(async () => undefined);
     metrics = {
       recordMahoragaDetection: mock(() => undefined),
     } as unknown as MetricsService;
@@ -227,7 +227,7 @@ describe('MahoragaService', () => {
 
     expect(result?.status).toBe(MahoragaCaseStatus.Observed);
     expect(result?.reason).toBe(MahoragaReason.Honeypot);
-    expect(roleAdd).not.toHaveBeenCalled();
+    expect(banCreate).not.toHaveBeenCalled();
     expect(
       logSend.mock.calls.some(([payload]) =>
         JSON.stringify(payload).includes('Softban would be applied'),
@@ -243,7 +243,7 @@ describe('MahoragaService', () => {
       createMessage({ channelId: HONEYPOT_CHANNEL_ID }),
     );
     expect(storedCase?.status).toBe(MahoragaCaseStatus.Observed);
-    expect(roleAdd).not.toHaveBeenCalled();
+    expect(banCreate).not.toHaveBeenCalled();
 
     settings[GuildSettings.MahoragaHoneypotMode] = MahoragaDetectionMode.On;
 
@@ -252,7 +252,8 @@ describe('MahoragaService', () => {
     );
 
     expect(result?.status).toBe(MahoragaCaseStatus.Active);
-    expect(roleAdd).toHaveBeenCalledTimes(2);
+    expect(banCreate).toHaveBeenCalledTimes(1);
+    expect(banRemove).toHaveBeenCalledTimes(1);
   });
 
   it('does not apply softban for observed cases on member join', async () => {
@@ -268,7 +269,28 @@ describe('MahoragaService', () => {
       guild: { id: GUILD_ID },
     } as GuildMember);
 
-    expect(roleAdd).not.toHaveBeenCalled();
+    expect(banCreate).not.toHaveBeenCalled();
+  });
+
+  it('logs active Mahoraga users on member join without banning them', async () => {
+    const mahoragaCase = new MahoragaCaseEntity();
+    mahoragaCase.user_id = BigInt(USER_ID);
+    mahoragaCase.status = MahoragaCaseStatus.Active;
+    mahoragaCase.reason = MahoragaReason.Honeypot;
+    storedCase = mahoragaCase;
+
+    await service.handleMemberJoin({
+      id: USER_ID,
+      user: { bot: false },
+      guild: { id: GUILD_ID },
+    } as GuildMember);
+
+    expect(banCreate).not.toHaveBeenCalled();
+    expect(
+      logSend.mock.calls.some(([payload]) =>
+        JSON.stringify(payload).includes('Mahoraga Rejoin'),
+      ),
+    ).toBe(true);
   });
 
   it('creates an active case from honeypot messages and applies softban', async () => {
@@ -279,7 +301,12 @@ describe('MahoragaService', () => {
     expect(result?.status).toBe(MahoragaCaseStatus.Active);
     expect(result?.reason).toBe(MahoragaReason.Honeypot);
     expect(result?.source_guild_id).toBe(BigInt(GUILD_ID));
-    expect(roleAdd).toHaveBeenCalledTimes(2);
+    expect(banCreate).toHaveBeenCalledTimes(1);
+    expect(banCreate).toHaveBeenCalledWith(USER_ID, {
+      reason: `Mahoraga ${MahoragaReason.Honeypot}`,
+      deleteMessageSeconds: 3600,
+    });
+    expect(banRemove).toHaveBeenCalledTimes(1);
     expect(metrics.recordMahoragaDetection).toHaveBeenCalledWith({
       guildId: GUILD_ID,
       reason: MahoragaReason.Honeypot,
@@ -288,9 +315,55 @@ describe('MahoragaService', () => {
     });
   });
 
-  it('logs attention for young accounts with softban when youngAccountMode is on', async () => {
-    settings[GuildSettings.MahoragaYoungAccountMode] = MahoragaDetectionMode.On;
+  it('retries case registration when concurrent insert wins the unique user constraint', async () => {
+    let flushCalls = 0;
+    emFlush.mockImplementation(async () => {
+      flushCalls += 1;
+      if (flushCalls === 1) {
+        storedCase = new MahoragaCaseEntity();
+        storedCase.user_id = BigInt(USER_ID);
+        storedCase.status = MahoragaCaseStatus.Active;
+        storedCase.reason = MahoragaReason.Honeypot;
+        throw new UniqueConstraintViolationException(new Error('duplicate'));
+      }
+    });
 
+    const result = await service.inspectMessage(
+      createMessage({ channelId: HONEYPOT_CHANNEL_ID }),
+    );
+
+    expect(result?.status).toBe(MahoragaCaseStatus.Active);
+    expect(emClear).toHaveBeenCalledTimes(1);
+    expect(emFlush).toHaveBeenCalledTimes(2);
+  });
+
+  it('reapplies softban and cleans tracked messages for repeat honeypot detections on active cases', async () => {
+    await service.inspectMessage(
+      createMessage({
+        id: '444444444444444481',
+        channelId: HONEYPOT_CHANNEL_ID,
+      }),
+    );
+
+    const messageDelete = mock(async () => undefined);
+    await service.inspectMessage(
+      createMessage({
+        id: '444444444444444482',
+        channelId: HONEYPOT_CHANNEL_ID,
+        delete: messageDelete,
+      }),
+    );
+
+    expect(banCreate).toHaveBeenCalledTimes(2);
+    expect(banRemove).toHaveBeenCalledTimes(2);
+    expect(messageDelete).not.toHaveBeenCalled();
+    expect(fetchedMessageDelete).toHaveBeenCalledTimes(2);
+    expect(
+      redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+    ).toBe(false);
+  });
+
+  it('does not log young account warnings', async () => {
     const result = await service.inspectMessage(
       createMessage({
         channelId: HONEYPOT_CHANNEL_ID,
@@ -303,12 +376,12 @@ describe('MahoragaService', () => {
     );
 
     expect(result?.status).toBe(MahoragaCaseStatus.Active);
-    expect(roleAdd).toHaveBeenCalledTimes(2);
+    expect(banCreate).toHaveBeenCalledTimes(1);
     expect(
       logSend.mock.calls.some(([payload]) =>
         JSON.stringify(payload).includes('Young Account Warning'),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('creates one case when repeated links reach the configured threshold', async () => {
@@ -327,10 +400,11 @@ describe('MahoragaService', () => {
 
     await service.inspectMessage(message);
     expect(storedCase?.detection_count).toBe(2);
-    expect(roleAdd).toHaveBeenCalledTimes(2);
+    expect(banCreate).toHaveBeenCalledTimes(2);
+    expect(banRemove).toHaveBeenCalledTimes(2);
   });
 
-  it('deletes tracked messages when repeated links reach the threshold in enforcement mode', async () => {
+  it('verifies tracked messages after temporary ban when repeated links reach the threshold', async () => {
     settings[GuildSettings.MahoragaTextRepeatLimit] = 99;
 
     const messageDelete = mock(async () => undefined);
@@ -356,11 +430,36 @@ describe('MahoragaService', () => {
     );
 
     expect(result?.reason).toBe(MahoragaReason.LinkRepeat);
-    expect(messageDelete).toHaveBeenCalledTimes(1);
+    expect(messageDelete).not.toHaveBeenCalled();
+    expect(banCreate).toHaveBeenCalledTimes(1);
+    expect(banRemove).toHaveBeenCalledTimes(1);
     expect(fetchedMessageDelete).toHaveBeenCalledTimes(3);
     expect(
       redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
     ).toBe(false);
+  });
+
+  it('ignores malformed Redis message entries during cleanup', async () => {
+    settings[GuildSettings.MahoragaTextRepeatLimit] = 99;
+
+    const content = 'check https://example.com/spam?a=1&b=2';
+    await service.inspectMessage(
+      createMessage({ id: '444444444444444491', content }),
+    );
+    redisSetStorage
+      .get(`mahoraga:messages:${GUILD_ID}:${USER_ID}`)!
+      .add('malformed-entry');
+    await service.inspectMessage(
+      createMessage({ id: '444444444444444492', content }),
+    );
+    await service.inspectMessage(
+      createMessage({ id: '444444444444444493', content }),
+    );
+
+    expect(fetchedMessageDelete).toHaveBeenCalledTimes(3);
+    expect(
+      redisSetStorage.get(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+    ).toEqual(new Set(['malformed-entry']));
   });
 
   it('does not delete tracked messages for repeated text in monitor mode', async () => {
@@ -393,6 +492,57 @@ describe('MahoragaService', () => {
     ).toBe(true);
   });
 
+  it('clears tracked messages when a case is pardoned', async () => {
+    await service.inspectMessage(
+      createMessage({
+        id: '444444444444444501',
+        channelId: HONEYPOT_CHANNEL_ID,
+      }),
+    );
+    redisSetStorage.set(
+      `mahoraga:messages:${GUILD_ID}:${USER_ID}`,
+      new Set([`${CHANNEL_ID}:444444444444444502`]),
+    );
+
+    await service.pardonCase(USER_ID, USER_ID, 'appeal accepted');
+
+    expect(
+      redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+    ).toBe(false);
+    expect(metrics.recordMahoragaDetection).toHaveBeenCalledWith({
+      guildId: GUILD_ID,
+      reason: MahoragaReason.Honeypot,
+      mode: MahoragaDetectionMode.Off,
+      status: MahoragaCaseStatus.Pardoned,
+    });
+  });
+
+  it('logs monitor detections only on the first observed case', async () => {
+    settings[GuildSettings.MahoragaRepeatMode] = MahoragaDetectionMode.Monitor;
+    settings[GuildSettings.MahoragaTextRepeatLimit] = 2;
+
+    const content = 'same monitor spam text';
+
+    expect(
+      await service.inspectMessage(
+        createMessage({ id: '444444444444444471', content }),
+      ),
+    ).toBeNull();
+
+    await service.inspectMessage(
+      createMessage({ id: '444444444444444472', content }),
+    );
+    await service.inspectMessage(
+      createMessage({ id: '444444444444444473', content }),
+    );
+
+    const monitorLogs = logSend.mock.calls.filter(([payload]) =>
+      JSON.stringify(payload).includes('Mahoraga Monitor'),
+    );
+    expect(monitorLogs).toHaveLength(1);
+    expect(banCreate).not.toHaveBeenCalled();
+  });
+
   it('creates a case when repeated image hashes reach the threshold', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(
@@ -420,7 +570,7 @@ describe('MahoragaService', () => {
     }
   });
 
-  it('deletes tracked messages when repeated image hashes reach the threshold in enforcement mode', async () => {
+  it('verifies tracked messages after temporary ban when repeated image hashes reach the threshold', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(
       async () => new Response(new Uint8Array([1, 2, 3, 4])),
@@ -454,7 +604,9 @@ describe('MahoragaService', () => {
       );
 
       expect(result?.reason).toBe(MahoragaReason.ImageRepeat);
-      expect(messageDelete).toHaveBeenCalledTimes(1);
+      expect(messageDelete).not.toHaveBeenCalled();
+      expect(banCreate).toHaveBeenCalledTimes(1);
+      expect(banRemove).toHaveBeenCalledTimes(1);
       expect(fetchedMessageDelete).toHaveBeenCalledTimes(2);
       expect(
         redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),

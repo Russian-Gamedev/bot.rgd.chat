@@ -68,7 +68,7 @@ export class MahoragaController {
 
   @Post('spammers/:user_id/unban')
   @RequirePermissions(Permission.MahoragaManage)
-  @ApiOperation({ summary: 'Pardon Mahoraga case and remove softban roles' })
+  @ApiOperation({ summary: 'Pardon Mahoraga case' })
   async unban(
     @Param('user_id') userId: string,
     @Body() dto: MahoragaUnbanDto,
@@ -81,16 +81,15 @@ export class MahoragaController {
     );
     return {
       case: MahoragaCaseResponseDto.fromEntity(result.case),
-      results: result.results,
     };
   }
 
   @Post('spammers/:user_id/sync-softban')
   @RequirePermissions(Permission.MahoragaManage)
-  @ApiOperation({ summary: 'Apply softban role to this user in all guilds' })
+  @ApiOperation({ summary: 'Apply temporary Mahoraga ban in source guild' })
   async syncSoftban(@Param('user_id') userId: string) {
     return {
-      results: await this.mahoragaService.syncSoftban(userId),
+      result: await this.mahoragaService.syncSoftban(userId),
     };
   }
 
