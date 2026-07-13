@@ -17,9 +17,9 @@ import {
 import { MahoragaCaseEntity } from './entities/mahoraga-case.entity';
 import {
   createHoneypotEmbed,
+  getMahoragaDetectorMode,
   MahoragaCaseStatus,
   MahoragaDetectionMode,
-  MahoragaDetectionSettings,
   MahoragaReason,
   MahoragaSoftbanResult,
 } from './mahoraga.types';
@@ -51,10 +51,10 @@ export class MahoragaService {
     });
 
     if (detection.reason === MahoragaReason.Honeypot && result.case) {
-      await this.handleHoneypotDetection(message, detection.guildId);
+      await this.updateHoneypotEmbed(message, detection.guildId);
     }
 
-    const detectorMode = this.getDetectorMode(
+    const detectorMode = getMahoragaDetectorMode(
       detection.settings,
       detection.reason,
     );
@@ -66,45 +66,45 @@ export class MahoragaService {
         detectorMode,
         result.case?.status ?? detection.status,
       );
-      await this.discordService.logEvent(
-        detection.guildId,
-        new EmbedBuilder()
-          .setColor(0x3498db)
-          .setTitle('Mahoraga Monitor')
-          .setDescription('Softban would be applied')
-          .addFields(
-            { name: 'User', value: `<@${detection.userId}>`, inline: true },
-            { name: 'Reason', value: detection.reason, inline: true },
-            {
-              name: 'Channel',
-              value: `<#${detection.channelId}>`,
-              inline: true,
-            },
-          )
-          .setTimestamp(),
-      );
+      if (result.shouldNotifyMonitor) {
+        await this.discordService.logEvent(
+          detection.guildId,
+          new EmbedBuilder()
+            .setColor(0x3498db)
+            .setTitle('Mahoraga Monitor')
+            .setDescription('Softban would be applied')
+            .addFields(
+              { name: 'User', value: `<@${detection.userId}>`, inline: true },
+              { name: 'Reason', value: detection.reason, inline: true },
+              {
+                name: 'Channel',
+                value: `<#${detection.channelId}>`,
+                inline: true,
+              },
+            )
+            .setTimestamp(),
+        );
+      }
       return result.case;
     }
 
-    if (this.isRepeatReason(detection.reason)) {
+    const shouldApplySanction = this.shouldApplySanction(
+      detection.reason,
+      result,
+    );
+
+    if (
+      this.shouldCleanupRepeatDetection(detection.reason, shouldApplySanction)
+    ) {
       await this.deleteTrackedUserMessages(message, detection.guildId);
     }
 
-    await this.discordService.logEvent(
-      detection.guildId,
-      new EmbedBuilder()
-        .setColor(0xff8800)
-        .setTitle('Mahoraga Detection')
-        .addFields(
-          { name: 'User', value: `<@${detection.userId}>`, inline: true },
-          { name: 'Reason', value: detection.reason, inline: true },
-          { name: 'Channel', value: `<#${detection.channelId}>`, inline: true },
-        )
-        .setTimestamp(),
-    );
-
-    if (result.shouldApplySoftban) {
-      await this.discordService.applySoftbanToAllGuilds(detection.userId);
+    if (shouldApplySanction) {
+      await this.applySoftbanWithCleanup(
+        detection.userId,
+        detection.guildId,
+        detection.reason,
+      );
     }
 
     this.recordDetectionMetric(
@@ -113,24 +113,6 @@ export class MahoragaService {
       detectorMode,
       result.case?.status ?? detection.status,
     );
-
-    const cutoff =
-      Date.now() - detection.settings.youngAccountMonths * 30 * 86_400_000;
-    if (
-      message.author.createdTimestamp >= cutoff &&
-      detection.settings.youngAccountMode === MahoragaDetectionMode.On
-    ) {
-      await this.discordService.logEvent(
-        detection.guildId,
-        new EmbedBuilder()
-          .setColor(0xf39c12)
-          .setTitle('Young Account Warning')
-          .setDescription(
-            `Account <@${detection.userId}> is less than ${detection.settings.youngAccountMonths} months old.`,
-          )
-          .setTimestamp(),
-      );
-    }
 
     return result.case;
   }
@@ -149,12 +131,10 @@ export class MahoragaService {
     });
   }
 
-  private async handleHoneypotDetection(
+  private async updateHoneypotEmbed(
     message: Message,
     guildId: string,
   ): Promise<void> {
-    await this.deleteTrackedUserMessages(message, guildId);
-
     try {
       const messageId = await this.guildSettings.getSetting<string>(
         guildId,
@@ -219,28 +199,121 @@ export class MahoragaService {
     }
   }
 
-  private isRepeatReason(reason: MahoragaReason): boolean {
+  private shouldCleanupRepeatDetection(
+    reason: MahoragaReason,
+    shouldApplySanction: boolean,
+  ): boolean {
+    if (shouldApplySanction) return false;
     return (
+      reason === MahoragaReason.Honeypot ||
       reason === MahoragaReason.TextRepeat ||
       reason === MahoragaReason.LinkRepeat ||
       reason === MahoragaReason.ImageRepeat
     );
   }
 
-  private getDetectorMode(
-    settings: MahoragaDetectionSettings,
+  private shouldApplySanction(
     reason: MahoragaReason,
-  ): MahoragaDetectionMode {
-    switch (reason) {
-      case MahoragaReason.Honeypot:
-        return settings.honeypotMode;
-      case MahoragaReason.TextRepeat:
-      case MahoragaReason.LinkRepeat:
-      case MahoragaReason.ImageRepeat:
-        return settings.repeatMode;
-      default:
-        return MahoragaDetectionMode.On;
+    result: {
+      case: MahoragaCaseEntity;
+      shouldApplySoftban: boolean;
+    },
+  ): boolean {
+    if (result.shouldApplySoftban) return true;
+    if (result.case.status !== MahoragaCaseStatus.Active) return false;
+    return (
+      reason === MahoragaReason.Honeypot ||
+      reason === MahoragaReason.TextRepeat ||
+      reason === MahoragaReason.LinkRepeat ||
+      reason === MahoragaReason.ImageRepeat
+    );
+  }
+
+  private async applySoftbanWithCleanup(
+    userId: string,
+    guildId: string,
+    reason: MahoragaReason,
+  ): Promise<MahoragaSoftbanResult> {
+    const trackedMessages = await this.detectionService.getTrackedMessages(
+      guildId,
+      userId,
+    );
+    const channelCount = new Set(
+      trackedMessages.map((entry) => entry.channelId),
+    ).size;
+    const result = await this.discordService.applySoftbanToGuild(
+      userId,
+      guildId,
+      `Mahoraga ${reason}`,
+    );
+
+    if (result.status === 'applied') {
+      const cleanup = await this.discordService.verifyAndDeleteUserMessages(
+        guildId,
+        trackedMessages,
+      );
+      result.cleanup = cleanup.summary;
+      await this.detectionService.removeTrackedMessages(
+        guildId,
+        userId,
+        cleanup.resolvedEntries,
+      );
     }
+
+    await this.discordService.logEvent(
+      guildId,
+      this.createSoftbanResultEmbed(userId, reason, channelCount, result),
+    );
+    return result;
+  }
+
+  private createSoftbanResultEmbed(
+    userId: string,
+    reason: MahoragaReason,
+    channelCount: number,
+    result: MahoragaSoftbanResult,
+  ): EmbedBuilder {
+    const applied = result.status === 'applied';
+    const embed = new EmbedBuilder()
+      .setColor(applied ? 0xe67e22 : 0xe74c3c)
+      .setTitle(applied ? 'Mahoraga Softban' : 'Mahoraga Softban Failed')
+      .setDescription(
+        applied
+          ? this.getSoftbanDescription(userId, reason, channelCount)
+          : `Could not temporarily ban <@${userId}>.`,
+      )
+      .addFields(
+        { name: 'User', value: `<@${userId}>`, inline: true },
+        { name: 'Reason', value: reason, inline: true },
+        { name: 'Channels', value: String(channelCount), inline: true },
+      )
+      .setTimestamp();
+
+    if (result.cleanup) {
+      embed.addFields({
+        name: 'Cleanup',
+        value: [
+          `Already deleted: ${result.cleanup.alreadyDeleted}`,
+          `Manually deleted: ${result.cleanup.manuallyDeleted}`,
+          `Failed: ${result.cleanup.failed}`,
+        ].join('\n'),
+      });
+    }
+    if (result.detail) {
+      embed.addFields({ name: 'Detail', value: result.detail.slice(0, 1024) });
+    }
+    return embed;
+  }
+
+  private getSoftbanDescription(
+    userId: string,
+    reason: MahoragaReason,
+    channelCount: number,
+  ): string {
+    if (reason === MahoragaReason.Manual) {
+      return `<@${userId}> was temporarily banned by Mahoraga manual action.`;
+    }
+    return `<@${userId}> was temporarily banned for spam in ${channelCount} channels.`;
   }
 
   listCases(query: MahoragaListQueryDto): Promise<MahoragaCaseEntity[]> {
@@ -273,33 +346,19 @@ export class MahoragaService {
       },
     });
 
-    if (result.shouldApplySoftban) {
-      await this.discordService.applySoftbanToAllGuilds(userId);
+    if (result.shouldApplySoftban && guildId) {
+      await this.applySoftbanWithCleanup(
+        userId,
+        guildId,
+        MahoragaReason.Manual,
+      );
     }
     this.metrics?.recordMahoragaDetection({
       guildId,
       reason: MahoragaReason.Manual,
       mode: MahoragaDetectionMode.On,
-      status: 'manual',
+      status: result.case.status,
     });
-
-    if (guildId) {
-      await this.discordService.logEvent(
-        guildId,
-        new EmbedBuilder()
-          .setColor(0x992d22)
-          .setTitle('Manual Softban')
-          .addFields(
-            { name: 'User', value: `<@${userId}>`, inline: true },
-            {
-              name: 'Actor',
-              value: actorId ? `<@${actorId}>` : 'API',
-              inline: true,
-            },
-          )
-          .setTimestamp(),
-      );
-    }
 
     return result.case;
   }
@@ -310,17 +369,18 @@ export class MahoragaService {
     reason?: string,
   ): Promise<{
     case: MahoragaCaseEntity;
-    results: MahoragaSoftbanResult[];
   }> {
     const mahoragaCase = await this.caseService.pardonCase(
       userId,
       actorId,
       reason,
     );
-    const results =
-      await this.discordService.removeSoftbanFromAllGuilds(userId);
 
     const guildId = mahoragaCase.source_guild_id?.toString();
+    if (guildId) {
+      await this.detectionService.clearTrackedMessages(guildId, userId);
+    }
+
     this.metrics?.recordMahoragaDetection({
       guildId,
       reason: mahoragaCase.reason,
@@ -345,10 +405,10 @@ export class MahoragaService {
       );
     }
 
-    return { case: mahoragaCase, results };
+    return { case: mahoragaCase };
   }
 
-  async syncSoftban(userId: string): Promise<MahoragaSoftbanResult[]> {
+  async syncSoftban(userId: string): Promise<MahoragaSoftbanResult> {
     const mahoragaCase = await this.caseService.getCaseByUserId(userId);
     if (
       mahoragaCase.status === MahoragaCaseStatus.Pardoned ||
@@ -359,14 +419,23 @@ export class MahoragaService {
       );
     }
 
-    const results = await this.discordService.applySoftbanToAllGuilds(userId);
+    const guildId = mahoragaCase.source_guild_id?.toString();
+    if (!guildId) {
+      throw new BadRequestException('Cannot sync softban without source guild');
+    }
+
+    const result = await this.applySoftbanWithCleanup(
+      userId,
+      guildId,
+      mahoragaCase.reason,
+    );
     this.metrics?.recordMahoragaDetection({
-      guildId: mahoragaCase.source_guild_id,
+      guildId,
       reason: mahoragaCase.reason,
       mode: MahoragaDetectionMode.On,
-      status: 'sync',
+      status: mahoragaCase.status,
     });
-    return results;
+    return result;
   }
 
   handleMemberJoin(member: GuildMember): Promise<void> {

@@ -11,10 +11,8 @@ export enum GuildSettings {
   MahoragaEnabled = 'mahoraga_enabled',
   MahoragaHoneypotMode = 'mahoraga_honeypot_mode',
   MahoragaRepeatMode = 'mahoraga_repeat_mode',
-  MahoragaYoungAccountMode = 'mahoraga_young_account_mode',
   MahoragaHoneypotChannelId = 'mahoraga_honeypot_channel_id',
   MahoragaHoneypotMessageId = 'mahoraga_honeypot_message_id',
-  MahoragaSoftbanRoleId = 'mahoraga_softban_role_id',
   MahoragaLogChannelId = 'mahoraga_log_channel_id',
   MahoragaTextRepeatLimit = 'mahoraga_text_repeat_limit',
   MahoragaTextWindowSeconds = 'mahoraga_text_window_seconds',
@@ -22,7 +20,6 @@ export enum GuildSettings {
   MahoragaLinkWindowSeconds = 'mahoraga_link_window_seconds',
   MahoragaImageRepeatLimit = 'mahoraga_image_repeat_limit',
   MahoragaImageWindowSeconds = 'mahoraga_image_window_seconds',
-  MahoragaYoungAccountMonths = 'mahoraga_young_account_months',
   MahoragaMessageTrackingWindowSeconds = 'mahoraga_message_tracking_window_seconds',
 }
 

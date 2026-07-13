@@ -23,7 +23,7 @@ export class MahoragaWatcher {
     try {
       await this.mahoragaService.handleMemberJoin(member);
     } catch (error) {
-      this.logger.error('Failed to apply Mahoraga softban on join:', error);
+      this.logger.error('Failed to inspect Mahoraga member join:', error);
     }
   }
 }

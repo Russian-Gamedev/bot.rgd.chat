@@ -15,7 +15,7 @@ import { MahoragaService } from '../mahoraga.service';
 class MahoragaUnbanCommandDto {
   @UserOption({
     name: 'user',
-    description: 'Discord user to remove from Mahoraga softban',
+    description: 'Discord user to pardon in Mahoraga',
     required: true,
   })
   user: User;
@@ -42,7 +42,7 @@ export class MahoragaCommand {
 
   @Subcommand({
     name: 'unban',
-    description: 'Remove a user from Mahoraga softban',
+    description: 'Pardon a user in Mahoraga',
   })
   async unban(
     @Context() [interaction]: SlashCommandContext,
@@ -51,16 +51,13 @@ export class MahoragaCommand {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
-      const result = await this.mahoragaService.pardonCase(
+      await this.mahoragaService.pardonCase(
         dto.user.id,
         interaction.user.id,
         dto.reason,
       );
-      const removed = result.results.filter(
-        (entry) => entry.status === 'applied',
-      ).length;
       await interaction.editReply({
-        content: `<@${dto.user.id}> удалён из Mahoraga. Softban снят на ${removed} серверах.`,
+        content: `<@${dto.user.id}> удалён из Mahoraga.`,
       });
     } catch (error) {
       if (error instanceof NotFoundException) {
