@@ -59,6 +59,7 @@ export class GameReviewService {
         const current = game.workingRevision ?? game.publishedRevision;
         return {
           id: game.id,
+          slug: game.slug,
           owner_id: game.owner_id.toString(),
           revision_id: current?.id,
           version: current?.version,

@@ -15,9 +15,12 @@ const valid = {
 
 describe('games DTO validation', () => {
   it('accepts a valid game payload', async () => {
-    expect(await validate(plainToInstance(CreateGameDto, valid))).toHaveLength(
-      0,
-    );
+    const dto = plainToInstance(CreateGameDto, {
+      ...valid,
+      slug: ' Custom Game URL ',
+    });
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.slug).toBe('custom-game-url');
   });
 
   it('rejects more than five links and non-HTTPS URLs', async () => {
@@ -41,5 +44,29 @@ describe('games DTO validation', () => {
     });
     const errors = await validate(dto);
     expect(errors.some((error) => error.property === 'authors')).toBe(true);
+  });
+
+  it('requires at least one image attachment', async () => {
+    const missing = plainToInstance(CreateGameDto, {
+      ...valid,
+      attachments: undefined,
+    });
+    const videoOnly = plainToInstance(CreateGameDto, {
+      ...valid,
+      attachments: [
+        { type: 'external_video', url: 'https://example.com/video' },
+      ],
+    });
+
+    expect(
+      (await validate(missing)).some(
+        (error) => error.property === 'attachments',
+      ),
+    ).toBe(true);
+    expect(
+      (await validate(videoOnly)).some(
+        (error) => error.property === 'attachments',
+      ),
+    ).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import {
   type Loaded,
   LockMode,
   raw,
+  UniqueConstraintViolationException,
 } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import {
@@ -11,6 +12,7 @@ import {
   EntityManager as PostgreSqlEntityManager,
 } from '@mikro-orm/postgresql';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -34,7 +36,9 @@ import {
   GameRevisionTagEntity,
 } from './entities/games.entity';
 import { GameTagsService } from './game-tags.service';
+import { createGameSlug, normalizeGameSlug } from './games.slug';
 import {
+  GameAttachmentType,
   GameAuthorType,
   GameListSort,
   GameReviewAction,
@@ -121,9 +125,12 @@ export class GamesService {
     return this.list(query, userId);
   }
 
-  async getPublic(id: string) {
+  async getPublic(idOrSlug: string) {
+    const lookup = isUuid(idOrSlug)
+      ? { id: idOrSlug }
+      : { slug: idOrSlug.toLocaleLowerCase('ru-RU') };
     const game = await this.games.findOne(
-      { id, publishedRevision: { $ne: null } },
+      { ...lookup, publishedRevision: { $ne: null } },
       { populate: GAME_POPULATE },
     );
     if (!game?.publishedRevision)
@@ -136,26 +143,34 @@ export class GamesService {
   }
 
   async create(ownerId: string, dto: CreateGameDto) {
-    return this.em.transactional(async (em) => {
-      const game = Object.assign(new GameEntity(), {
-        owner_id: BigInt(ownerId),
+    this.assertImageAttachmentInput(dto.attachments, true);
+    try {
+      return await this.em.transactional(async (em) => {
+        const slug = normalizeGameSlug(dto.slug ?? createGameSlug(dto.title));
+        await this.assertSlugAvailable(em, slug);
+        const game = Object.assign(new GameEntity(), {
+          owner_id: BigInt(ownerId),
+          slug,
+        });
+        const revision = Object.assign(new GameRevisionEntity(), {
+          game,
+          version: 1,
+          status: GameRevisionStatus.Draft,
+          title: dto.title,
+          description: dto.description,
+          release_date: dto.release_date,
+          created_by: BigInt(ownerId),
+        });
+        game.revisions.add(revision);
+        game.workingRevision = revision;
+        await this.applyChildren(em, revision, dto);
+        em.persist(game);
+        await em.flush();
+        return this.editorDto(game, revision as PopulatedRevision, [], 0);
       });
-      const revision = Object.assign(new GameRevisionEntity(), {
-        game,
-        version: 1,
-        status: GameRevisionStatus.Draft,
-        title: dto.title,
-        description: dto.description,
-        release_date: dto.release_date,
-        created_by: BigInt(ownerId),
-      });
-      game.revisions.add(revision);
-      game.workingRevision = revision;
-      await this.applyChildren(em, revision, dto);
-      em.persist(game);
-      await em.flush();
-      return this.editorDto(game, revision as PopulatedRevision, [], 0);
-    });
+    } catch (error) {
+      this.rethrowSlugConflict(error);
+    }
   }
 
   async listMine(ownerId: string, query: MineGamesQueryDto) {
@@ -180,6 +195,7 @@ export class GamesService {
         const revision = game.workingRevision ?? game.publishedRevision;
         return {
           id: game.id,
+          slug: game.slug,
           owner_id: game.owner_id.toString(),
           revision_id: revision?.id,
           title: revision?.title,
@@ -222,43 +238,54 @@ export class GamesService {
   }
 
   async update(id: string, ownerId: string, dto: UpdateGameDto) {
-    return this.em.transactional(async (em) => {
-      const game = await em.findOne(GameEntity, id, {
-        populate: EDITOR_POPULATE,
-        lockMode: LockMode.PESSIMISTIC_WRITE,
-      });
-      if (!game) throw new NotFoundException('Game not found.');
-      this.assertOwner(game, ownerId, false);
-      let revision = game.workingRevision as PopulatedRevision | null;
-      if (!revision) {
-        if (!game.publishedRevision) {
-          throw new ConflictException('Game has no revision to edit.');
+    this.assertImageAttachmentInput(dto.attachments, false);
+    try {
+      return await this.em.transactional(async (em) => {
+        const game = await em.findOne(GameEntity, id, {
+          populate: EDITOR_POPULATE,
+          lockMode: LockMode.PESSIMISTIC_WRITE,
+        });
+        if (!game) throw new NotFoundException('Game not found.');
+        this.assertOwner(game, ownerId, false);
+        if (dto.slug !== undefined) {
+          const slug = normalizeGameSlug(dto.slug);
+          await this.assertSlugAvailable(em, slug, game.id);
+          game.slug = slug;
         }
-        const published = game.publishedRevision as PopulatedRevision;
-        revision = Object.assign(new GameRevisionEntity(), {
-          game,
-          version: published.version + 1,
-          status: GameRevisionStatus.Draft,
-          title: published.title,
-          description: published.description,
-          release_date: published.release_date,
-          created_by: BigInt(ownerId),
-        }) as unknown as PopulatedRevision;
-        game.revisions.add(revision);
-        game.workingRevision = revision;
-        await this.cloneChildren(published, revision);
-      }
-      if (revision.status === GameRevisionStatus.Review) {
-        throw new ConflictException('Game is currently under review.');
-      }
-      if (dto.title !== undefined) revision.title = dto.title;
-      if (dto.description !== undefined) revision.description = dto.description;
-      if (dto.release_date !== undefined)
-        revision.release_date = dto.release_date;
-      await this.applyChildren(em, revision, dto, true);
-      await em.flush();
-      return this.getEditor(id, ownerId, false, em);
-    });
+        let revision = game.workingRevision as PopulatedRevision | null;
+        if (!revision) {
+          if (!game.publishedRevision) {
+            throw new ConflictException('Game has no revision to edit.');
+          }
+          const published = game.publishedRevision as PopulatedRevision;
+          revision = Object.assign(new GameRevisionEntity(), {
+            game,
+            version: published.version + 1,
+            status: GameRevisionStatus.Draft,
+            title: published.title,
+            description: published.description,
+            release_date: published.release_date,
+            created_by: BigInt(ownerId),
+          }) as unknown as PopulatedRevision;
+          game.revisions.add(revision);
+          game.workingRevision = revision;
+          await this.cloneChildren(published, revision);
+        }
+        if (revision.status === GameRevisionStatus.Review) {
+          throw new ConflictException('Game is currently under review.');
+        }
+        if (dto.title !== undefined) revision.title = dto.title;
+        if (dto.description !== undefined)
+          revision.description = dto.description;
+        if (dto.release_date !== undefined)
+          revision.release_date = dto.release_date;
+        await this.applyChildren(em, revision, dto, true);
+        await em.flush();
+        return this.getEditor(id, ownerId, false, em);
+      });
+    } catch (error) {
+      this.rethrowSlugConflict(error);
+    }
   }
 
   async submit(id: string, ownerId: string) {
@@ -276,6 +303,15 @@ export class GamesService {
       if (revision.authors.length === 0 || revision.tagLinks.length === 0) {
         throw new ConflictException(
           'A game must have at least one author and one tag before review.',
+        );
+      }
+      if (
+        !revision.attachments
+          .getItems()
+          .some((attachment) => attachment.type === GameAttachmentType.Image)
+      ) {
+        throw new ConflictException(
+          'A game must have at least one image attachment before review.',
         );
       }
       revision.status = GameRevisionStatus.Review;
@@ -337,6 +373,7 @@ export class GamesService {
   ) {
     return {
       id: game.id,
+      slug: game.slug,
       title: revision.title,
       release_date: String(revision.release_date).slice(0, 10),
       tags: revision.tagLinks.getItems().map(({ tag }) => ({
@@ -459,11 +496,12 @@ export class GamesService {
       );
     }
     if (!partial || dto.attachments !== undefined) {
+      const attachments = dto.attachments ?? [];
       if (revision.id) {
         await em.nativeDelete(GameAttachmentEntity, { revision: revision.id });
       }
       revision.attachments.set(
-        (dto.attachments ?? []).map((attachment, position) =>
+        attachments.map((attachment, position) =>
           Object.assign(new GameAttachmentEntity(), {
             revision,
             ...attachment,
@@ -525,4 +563,50 @@ export class GamesService {
       throw new ForbiddenException('Only the owner can access this game.');
     }
   }
+
+  private assertImageAttachmentInput(
+    attachments: UpdateGameDto['attachments'],
+    required: boolean,
+  ) {
+    if (!required && attachments === undefined) return;
+    if (
+      !(attachments ?? []).some(
+        (attachment) => attachment.type === GameAttachmentType.Image,
+      )
+    ) {
+      throw new BadRequestException(
+        'At least one image attachment is required.',
+      );
+    }
+  }
+
+  private async assertSlugAvailable(
+    em: EntityManager,
+    slug: string,
+    currentGameId?: string,
+  ) {
+    const existing = await em.findOne(GameEntity, {
+      slug,
+      ...(currentGameId ? { id: { $ne: currentGameId } } : {}),
+    });
+    if (existing) {
+      throw new ConflictException('Game slug is already in use.');
+    }
+  }
+
+  private rethrowSlugConflict(error: unknown): never {
+    if (
+      error instanceof UniqueConstraintViolationException &&
+      error.message.includes('games_slug_unique')
+    ) {
+      throw new ConflictException('Game slug is already in use.');
+    }
+    throw error;
+  }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

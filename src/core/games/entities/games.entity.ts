@@ -27,6 +27,9 @@ export class GameEntity extends BaseEntity {
   @Property({ type: 'bigint' })
   owner_id: bigint;
 
+  @Property({ length: 160, unique: true })
+  slug: string;
+
   @ManyToOne(() => GameRevisionEntity, {
     fieldName: 'published_revision_id',
     nullable: true,

@@ -16,6 +16,7 @@ import {
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
 import { getActorUserId } from '#core/permissions/actor-user-id';
@@ -191,10 +192,14 @@ export class GamesController {
   unlike(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
     return this.likes.unlike(id, getActorUserId(a));
   }
-  @Get(':id') @ApiOkResponse({ type: GameDetailsDto }) get(
-    @Param('id') id: string,
-  ) {
-    return this.games.getPublic(id);
+  @Get(':id_or_slug')
+  @ApiParam({
+    name: 'id_or_slug',
+    description: 'Game UUID or editable public slug.',
+  })
+  @ApiOkResponse({ type: GameDetailsDto })
+  get(@Param('id_or_slug') idOrSlug: string) {
+    return this.games.getPublic(idOrSlug);
   }
   @Patch(':id') @UseGuards(ActorAuthGuard) @ApiActorAuth() update(
     @Param('id') id: string,

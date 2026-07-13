@@ -125,6 +125,7 @@ describe('Games full integration flow', () => {
 
     expect(created.status).toBe(GameRevisionStatus.Draft);
     expect(created.version).toBe(1);
+    expect(created.slug).toBe('version-one');
     expect(created.authors).toHaveLength(2);
     expect(created.attachments).toHaveLength(2);
     await expect(controller.get(created.id)).rejects.toThrow();
@@ -154,6 +155,7 @@ describe('Games full integration flow', () => {
     });
 
     const published = await controller.get(created.id);
+    expect((await controller.get(created.slug)).id).toBe(created.id);
     expect(published.title).toBe('Published Version');
     expect(published.authors).toEqual([
       { type: GameAuthorType.Discord, discord_user_id: owner.id },
@@ -179,14 +181,25 @@ describe('Games full integration flow', () => {
       likes_count: 0,
     });
 
+    await expect(
+      controller.update(created.id, owner, { attachments: [] }),
+    ).rejects.toThrow('At least one image attachment is required.');
     const draftV2 = await controller.update(created.id, owner, {
       title: 'Version Two',
+      slug: 'version-two-custom',
       authors: [{ type: GameAuthorType.Text, name: 'New Team' }],
-      attachments: [],
+      attachments: [
+        {
+          type: GameAttachmentType.Image,
+          url: 'https://example.com/version-two.png',
+        },
+      ],
     });
     expect(draftV2.version).toBe(2);
+    expect(draftV2.slug).toBe('version-two-custom');
     expect(draftV2.has_published_version).toBe(true);
     expect((await controller.get(created.id)).title).toBe('Published Version');
+    expect((await controller.get('version-two-custom')).id).toBe(created.id);
 
     await controller.submit(created.id, owner);
     await controller.publish(created.id, reviewer, {});
@@ -195,7 +208,12 @@ describe('Games full integration flow', () => {
     expect(republished.authors).toEqual([
       { type: GameAuthorType.Text, name: 'New Team' },
     ]);
-    expect(republished.attachments).toEqual([]);
+    expect(republished.attachments).toEqual([
+      {
+        type: GameAttachmentType.Image,
+        url: 'https://example.com/version-two.png',
+      },
+    ]);
 
     const textOnly = await controller.create(owner, {
       title: 'Text Team Game',
@@ -204,7 +222,12 @@ describe('Games full integration flow', () => {
       tags: ['Puzzle'],
       authors: [{ type: GameAuthorType.Text, name: 'No Discord Studio' }],
       links: [],
-      attachments: [],
+      attachments: [
+        {
+          type: GameAttachmentType.Image,
+          url: 'https://example.com/text-team.png',
+        },
+      ],
     });
     await controller.submit(textOnly.id, owner);
     await controller.publish(textOnly.id, reviewer, {});

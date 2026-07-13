@@ -11,6 +11,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -22,6 +23,7 @@ import {
   ValidatorConstraint,
   type ValidatorConstraintInterface,
 } from 'class-validator';
+import { normalizeGameSlug } from '../games.slug';
 import {
   GameAttachmentType,
   GameAuthorType,
@@ -52,6 +54,26 @@ class GameAuthorShapeConstraint implements ValidatorConstraintInterface {
 
   defaultMessage() {
     return 'discord authors require only discord_user_id; text authors require only name';
+  }
+}
+
+@ValidatorConstraint({ name: 'gameHasImageAttachment' })
+class GameHasImageAttachmentConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown) {
+    return (
+      Array.isArray(value) &&
+      value.some(
+        (attachment) =>
+          attachment &&
+          typeof attachment === 'object' &&
+          'type' in attachment &&
+          attachment.type === GameAttachmentType.Image,
+      )
+    );
+  }
+
+  defaultMessage() {
+    return 'At least one image attachment is required.';
   }
 }
 
@@ -109,6 +131,19 @@ export class CreateGameDto {
   @MinLength(1)
   @MaxLength(120)
   title: string;
+  @ApiPropertyOptional({
+    description: 'Editable public URL slug. Defaults to a slug from title.',
+    example: 'my-community-game',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? normalizeGameSlug(value) : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  @Matches(/^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u)
+  slug?: string;
   @ApiProperty() @IsString() @MaxLength(20_000) description: string;
   @ApiProperty({ format: 'date' })
   @IsDateString({ strict: true })
@@ -139,13 +174,13 @@ export class CreateGameDto {
   @ValidateNested({ each: true })
   @Type(() => GameLinkInputDto)
   links?: GameLinkInputDto[];
-  @ApiPropertyOptional({ type: [GameAttachmentInputDto], maxItems: 20 })
-  @IsOptional()
+  @ApiProperty({ type: [GameAttachmentInputDto], minItems: 1, maxItems: 20 })
   @IsArray()
   @ArrayMaxSize(20)
+  @Validate(GameHasImageAttachmentConstraint)
   @ValidateNested({ each: true })
   @Type(() => GameAttachmentInputDto)
-  attachments?: GameAttachmentInputDto[];
+  attachments: GameAttachmentInputDto[];
 }
 export class UpdateGameDto extends PartialType(CreateGameDto) {}
 
@@ -255,6 +290,7 @@ export class GameLikeStateDto {
 }
 export class GameListItemDto {
   @ApiProperty() id: string;
+  @ApiProperty() slug: string;
   @ApiProperty() title: string;
   @ApiProperty() release_date: string;
   @ApiProperty({ type: [GameTagDto] }) tags: GameTagDto[];
