@@ -2018,6 +2018,22 @@
           "enumItems": [],
           "mappedType": "integer"
         },
+        "ban_count": {
+          "name": "ban_count",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "0",
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
         "voice_time": {
           "name": "voice_time",
           "type": "bigint",
@@ -2409,12 +2425,7 @@
           "scale": null,
           "default": "'active'",
           "comment": null,
-          "enumItems": [
-            "observed",
-            "pending_verification",
-            "active",
-            "pardoned"
-          ],
+          "enumItems": ["observed", "active", "pardoned"],
           "mappedType": "enum"
         },
         "reason": {
@@ -2567,38 +2578,6 @@
           "enumItems": [],
           "mappedType": "datetime"
         },
-        "verification_token": {
-          "name": "verification_token",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "verification_expires_at": {
-          "name": "verification_expires_at",
-          "type": "timestamptz",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": 6,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "datetime"
-        },
         "pardoned_at": {
           "name": "pardoned_at",
           "type": "timestamptz",
@@ -2682,14 +2661,6 @@
           "unique": true
         },
         {
-          "keyName": "mahoraga_cases_verification_token_unique",
-          "columnNames": ["verification_token"],
-          "composite": false,
-          "constraint": true,
-          "primary": false,
-          "unique": true
-        },
-        {
           "keyName": "mahoraga_cases_pkey",
           "columnNames": ["id"],
           "composite": false,
@@ -2701,8 +2672,8 @@
       "checks": [
         {
           "name": "mahoraga_cases_status_check",
-          "expression": "\"status\" in ('observed', 'pending_verification', 'active', 'pardoned')",
-          "definition": "check (\"status\" in ('observed', 'pending_verification', 'active', 'pardoned'))",
+          "expression": "\"status\" in ('observed', 'active', 'pardoned')",
+          "definition": "check (\"status\" in ('observed', 'active', 'pardoned'))",
           "columnName": "status"
         },
         {

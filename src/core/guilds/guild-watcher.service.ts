@@ -92,6 +92,10 @@ export class GuildWatcherService {
   @On('guildMemberRemove')
   @EnsureRequestContext()
   async onMemberLeave(@Context() [member]: ContextOf<'guildMemberRemove'>) {
+    await this.handleMemberLeave(member);
+  }
+
+  async handleMemberLeave(member: ContextOf<'guildMemberRemove'>[0]) {
     this.logger.log(
       `Member ${member.displayName} left guild ${member.guild.name}`,
     );
@@ -106,25 +110,28 @@ export class GuildWatcherService {
     await this.userService.leaveGuild(user);
     await this.guildInviteService.trackLeave(user);
 
-    const roles = member.roles.cache;
-
-    if (roles.size === 0) return;
-
-    this.logger.log(
-      `Saving roles for user ${member.displayName} in guild ${member.guild.name}`,
-    );
-    await this.guildMemberRolesService.saveCurrentRoles(user, roles);
-
-    const channel = await this.guildSettingsService.getEventMessageChannel(
-      guild.id,
-    );
-    if (!channel) return;
-
     const { event, moderatorId } = await this.detectLeaveReason(
       guild,
       member.id,
     );
     this.metrics?.recordGuildEvent({ guildId: guild.id, event });
+    if (event === GuildEvents.MEMBER_BAN) {
+      await this.userService.incrementBanCount(user.user_id);
+    }
+
+    const roles = member.roles.cache;
+
+    if (roles.size > 0) {
+      this.logger.log(
+        `Saving roles for user ${member.displayName} in guild ${member.guild.name}`,
+      );
+      await this.guildMemberRolesService.saveCurrentRoles(user, roles);
+    }
+
+    const channel = await this.guildSettingsService.getEventMessageChannel(
+      guild.id,
+    );
+    if (!channel) return;
 
     const userStr = `[<@${member.id}>] **${member.displayName}**`;
     const moderatorStr = moderatorId ? `<@${moderatorId}>` : 'неизвестный';

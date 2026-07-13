@@ -151,6 +151,14 @@ export class UserService {
     );
   }
 
+  async incrementBanCount(userId: DiscordID): Promise<void> {
+    await this.findOrCreateProfile(userId);
+    await this.userRepository.nativeUpdate(
+      { user_id: BigInt(userId) },
+      { banCount: raw('ban_count + 1') },
+    );
+  }
+
   async leaveGuild(user: MemberProfileEntity): Promise<void> {
     user.leftAt = new Date();
     user.isLeftGuild = true;

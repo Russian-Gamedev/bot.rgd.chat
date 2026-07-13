@@ -62,6 +62,9 @@ export class UserProfileEntity extends BaseEntity {
   @Property({ type: 'integer', default: 0 })
   experience = 0;
 
+  @Property({ fieldName: 'ban_count', type: 'integer', default: 0 })
+  banCount = 0;
+
   @Property({
     fieldName: 'last_active_at',
     type: 'timestamptz',

@@ -47,6 +47,7 @@ describe('UsersController', () => {
       lastActiveAt: new Date('2026-06-13T00:00:00.000Z'),
       activeStreak: 3,
       maxActiveStreak: 5,
+      banCount: 0,
       tags: [],
       ...overrides,
     } as PublicUserProfileDto;
@@ -420,5 +421,6 @@ function createProfile(
   profile.lastActiveAt = new Date('2026-06-13T00:00:00.000Z');
   profile.activeStreak = 3;
   profile.maxActiveStreak = 5;
+  profile.banCount = 0;
   return Object.assign(profile, overrides);
 }

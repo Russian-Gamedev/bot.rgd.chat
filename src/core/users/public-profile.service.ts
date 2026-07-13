@@ -17,7 +17,7 @@ import { UserService } from './users.service';
 
 const USER_RESPONSE_CACHE_TTL_SECONDS = 60;
 const USER_RESPONSE_CACHE_MISS = '-';
-const USER_RESPONSE_CACHE_VERSION = 'v5';
+const USER_RESPONSE_CACHE_VERSION = 'v6';
 
 @Injectable()
 export class PublicProfileService {
