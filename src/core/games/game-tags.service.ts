@@ -21,11 +21,12 @@ export class GameTagsService {
   ) {}
 
   async list() {
-    return this.tags.findAll({ orderBy: { name: 'asc' } });
+    const tags = await this.tags.findAll({ orderBy: { name: 'asc' } });
+    return tags.map(tagDto);
   }
 
   async create(dto: CreateGameTagDto) {
-    return (await this.ensure([dto.name], this.em))[0];
+    return tagDto((await this.ensure([dto.name], this.em))[0]);
   }
 
   async update(id: string, dto: UpdateGameTagDto) {
@@ -36,7 +37,7 @@ export class GameTagsService {
       tag.slug = createTagSlug(tag.name);
     }
     await this.em.flush();
-    return tag;
+    return tagDto(tag);
   }
 
   async remove(id: string) {
@@ -73,6 +74,10 @@ export class GameTagsService {
     const bySlug = new Map(stored.map((tag) => [tag.slug, tag]));
     return values.map(({ slug }) => bySlug.get(slug) as GameTagEntity);
   }
+}
+
+function tagDto({ id, name, slug }: GameTagEntity) {
+  return { id, name, slug };
 }
 
 function normalizeTagName(value: string): string {
