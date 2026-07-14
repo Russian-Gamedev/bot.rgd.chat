@@ -165,7 +165,7 @@ export class TarotCommand {
         },
       );
 
-    return interaction.editReply({ embeds: [embed] });
+    return interaction.editReply({ embeds: [embed], content: '' });
   }
 
   private async interpret(draw: TarotDraw): Promise<TarotInterpretation> {
