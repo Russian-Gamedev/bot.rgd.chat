@@ -36,10 +36,11 @@ export class MahoragaCaseService {
     reason: MahoragaReason,
     guildId: string,
   ): Promise<number> {
-    return this.casesRepository.count({
-      reason,
-      source_guild_id: this.parseDiscordId(guildId),
-    });
+    const rows = await this.em.execute<[{ total: string }]>(
+      'SELECT COALESCE(SUM(detection_count), 0)::int as total FROM mahoraga_cases WHERE reason = $1 AND source_guild_id = $2',
+      [reason, this.parseDiscordId(guildId).toString()],
+    );
+    return Number(rows[0]?.total) || 0;
   }
 
   async listCases(query: MahoragaListQueryDto): Promise<MahoragaCaseEntity[]> {

@@ -82,6 +82,14 @@ export class EnvironmentVariables {
   @IsString()
   @ValidateIf((o) => o.NODE_ENV === Environment.Production && o.METRICS_ENABLED)
   METRICS_TOKEN?: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_BASE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_ACCESS_TOKEN?: string;
 }
 
 function parseOptionalBoolean(value: unknown, defaultValue: boolean): boolean {
