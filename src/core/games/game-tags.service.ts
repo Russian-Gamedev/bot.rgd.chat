@@ -1,53 +1,20 @@
 import type { EntityManager as CoreEntityManager } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { EntityRepository } from '@mikro-orm/postgresql';
+import { Injectable } from '@nestjs/common';
 
-import type { CreateGameTagDto, UpdateGameTagDto } from './dto/games.dto';
-import { GameRevisionTagEntity, GameTagEntity } from './entities/games.entity';
+import { GameTagEntity } from './entities/games.entity';
 
 @Injectable()
 export class GameTagsService {
   constructor(
-    private readonly em: EntityManager,
     @InjectRepository(GameTagEntity)
     private readonly tags: EntityRepository<GameTagEntity>,
-    @InjectRepository(GameRevisionTagEntity)
-    private readonly revisionTags: EntityRepository<GameRevisionTagEntity>,
   ) {}
 
   async list() {
     const tags = await this.tags.findAll({ orderBy: { name: 'asc' } });
     return tags.map(tagDto);
-  }
-
-  async create(dto: CreateGameTagDto) {
-    return tagDto((await this.ensure([dto.name], this.em))[0]);
-  }
-
-  async update(id: string, dto: UpdateGameTagDto) {
-    const tag = await this.tags.findOne(id);
-    if (!tag) throw new NotFoundException('Tag not found.');
-    if (dto.name !== undefined) {
-      tag.name = normalizeTagName(dto.name);
-      tag.slug = createTagSlug(tag.name);
-    }
-    await this.em.flush();
-    return tagDto(tag);
-  }
-
-  async remove(id: string) {
-    const tag = await this.tags.findOne(id);
-    if (!tag) throw new NotFoundException('Tag not found.');
-    if (await this.revisionTags.count({ tag })) {
-      throw new ConflictException('Tag is used by a game.');
-    }
-    this.em.remove(tag);
-    await this.em.flush();
   }
 
   async ensure(
@@ -76,8 +43,8 @@ export class GameTagsService {
   }
 }
 
-function tagDto({ id, name, slug }: GameTagEntity) {
-  return { id, name, slug };
+function tagDto({ name, slug }: GameTagEntity) {
+  return { name, slug };
 }
 
 function normalizeTagName(value: string): string {
