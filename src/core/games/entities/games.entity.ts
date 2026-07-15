@@ -97,6 +97,12 @@ export class GameRevisionEntity extends BaseEntity {
   @Property({ type: 'date', index: true })
   release_date: string;
 
+  @Property({ length: 100, nullable: true })
+  promo: string | null = null;
+
+  @Property({ type: 'boolean', default: false })
+  hide_owner = false;
+
   @Property({ type: 'bigint' })
   created_by: bigint;
 
@@ -163,6 +169,9 @@ export class GameAuthorEntity {
 
   @Property({ length: 120, nullable: true })
   name: string | null = null;
+
+  @Property({ length: 80 })
+  role: string;
 
   @Property({ type: 'smallint' })
   position: number;
