@@ -48,6 +48,10 @@ export class MahoragaDetectionService {
     const guildId = message.guildId!;
     const settings = await this.getDetectionSettings(guildId);
 
+    if (!(await this.markMessageProcessed(guildId, message.id, settings))) {
+      return null;
+    }
+
     await this.trackMessage(
       guildId,
       message.author.id,
@@ -296,6 +300,27 @@ export class MahoragaDetectionService {
       value,
     )}`;
     return hitFixedWindowThreshold(this.redis, key, limit, windowSeconds);
+  }
+
+  private async markMessageProcessed(
+    guildId: string,
+    messageId: string,
+    settings: MahoragaDetectionSettings,
+  ): Promise<boolean> {
+    const ttl = Math.max(
+      settings.textWindowSeconds,
+      settings.linkWindowSeconds,
+      settings.imageWindowSeconds,
+      settings.messageTrackingWindowSeconds,
+    );
+    const result = await this.redis.set(
+      `mahoraga:processed-message:${guildId}:${messageId}`,
+      '1',
+      'EX',
+      ttl,
+      'NX',
+    );
+    return result === 'OK';
   }
 
   private async trackMessage(

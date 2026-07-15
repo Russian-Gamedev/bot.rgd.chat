@@ -87,12 +87,14 @@ describe('MahoragaService', () => {
   let emFlush: ReturnType<typeof mock>;
   let redisStorage: Map<string, number>;
   let redisSetStorage: Map<string, Set<string>>;
+  let processedMessages: Set<string>;
   let metrics: MetricsService;
 
   beforeEach(() => {
     storedCase = null;
     redisStorage = new Map();
     redisSetStorage = new Map();
+    processedMessages = new Set();
     banCreate = mock(async () => undefined);
     banRemove = mock(async () => undefined);
     logSend = mock(async () => undefined);
@@ -122,6 +124,11 @@ describe('MahoragaService', () => {
       clear: emClear,
     } as unknown as EntityManager;
     const redis = {
+      set: mock(async (key: string) => {
+        if (processedMessages.has(key)) return null;
+        processedMessages.add(key);
+        return 'OK';
+      }),
       incr: mock(async (key: string) => {
         const next = (redisStorage.get(key) ?? 0) + 1;
         redisStorage.set(key, next);
@@ -248,7 +255,10 @@ describe('MahoragaService', () => {
     settings[GuildSettings.MahoragaHoneypotMode] = MahoragaDetectionMode.On;
 
     const result = await service.inspectMessage(
-      createMessage({ channelId: HONEYPOT_CHANNEL_ID }),
+      createMessage({
+        id: '444444444444444445',
+        channelId: HONEYPOT_CHANNEL_ID,
+      }),
     );
 
     expect(result?.status).toBe(MahoragaCaseStatus.Active);
@@ -387,18 +397,28 @@ describe('MahoragaService', () => {
   it('creates one case when repeated links reach the configured threshold', async () => {
     settings[GuildSettings.MahoragaTextRepeatLimit] = 99;
 
-    const message = createMessage({
-      content: 'check https://example.com/spam?a=1&b=2',
-    });
+    const content = 'check https://example.com/spam?a=1&b=2';
 
-    expect(await service.inspectMessage(message)).toBeNull();
-    expect(await service.inspectMessage(message)).toBeNull();
+    expect(
+      await service.inspectMessage(
+        createMessage({ id: '444444444444444411', content }),
+      ),
+    ).toBeNull();
+    expect(
+      await service.inspectMessage(
+        createMessage({ id: '444444444444444412', content }),
+      ),
+    ).toBeNull();
 
-    const result = await service.inspectMessage(message);
+    const result = await service.inspectMessage(
+      createMessage({ id: '444444444444444413', content }),
+    );
     expect(result?.reason).toBe(MahoragaReason.LinkRepeat);
     expect(result?.matched_value).toBe('example.com/spam?a=1&b=2');
 
-    await service.inspectMessage(message);
+    await service.inspectMessage(
+      createMessage({ id: '444444444444444414', content }),
+    );
     expect(storedCase?.detection_count).toBe(2);
     expect(banCreate).toHaveBeenCalledTimes(2);
     expect(banRemove).toHaveBeenCalledTimes(2);
@@ -555,14 +575,23 @@ describe('MahoragaService', () => {
         name: 'spam.png',
         url: 'https://cdn.example.com/spam.png',
       };
-      const message = createMessage({
-        content: '',
-        attachments: new Map([['attachment', attachment]]),
-      });
+      expect(
+        await service.inspectMessage(
+          createMessage({
+            id: '444444444444444421',
+            content: '',
+            attachments: new Map([['attachment', attachment]]),
+          }),
+        ),
+      ).toBeNull();
 
-      expect(await service.inspectMessage(message)).toBeNull();
-
-      const result = await service.inspectMessage(message);
+      const result = await service.inspectMessage(
+        createMessage({
+          id: '444444444444444422',
+          content: '',
+          attachments: new Map([['attachment', attachment]]),
+        }),
+      );
       expect(result?.reason).toBe(MahoragaReason.ImageRepeat);
       expect(result?.matched_value).toHaveLength(64);
     } finally {
@@ -611,6 +640,91 @@ describe('MahoragaService', () => {
       expect(
         redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
       ).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('processes the same Discord message only once', async () => {
+    settings[GuildSettings.MahoragaTextRepeatLimit] = 2;
+    const message = createMessage({ content: 'duplicate gateway event' });
+
+    const [first, duplicate] = await Promise.all([
+      service.inspectMessage(message),
+      service.inspectMessage(message),
+    ]);
+
+    expect(first).toBeNull();
+    expect(duplicate).toBeNull();
+    expect([...redisStorage.values()]).toEqual([1]);
+    expect(storedCase).toBeNull();
+    expect(banCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not treat ten different images in one message as image repeats', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async (input) => {
+      const index = Number(String(input).match(/art-(\d+)\.png/)?.[1]);
+      return new Response(new Uint8Array([index]));
+    }) as unknown as typeof fetch;
+
+    try {
+      const attachments = new Map(
+        Array.from({ length: 10 }, (_, index) => [
+          `attachment-${index}`,
+          {
+            contentType: 'image/png',
+            name: `art-${index}.png`,
+            url: `https://cdn.example.com/art-${index}.png`,
+          },
+        ]),
+      );
+
+      const result = await service.inspectMessage(
+        createMessage({ content: '', attachments }),
+      );
+
+      expect(result).toBeNull();
+      expect(
+        [...redisStorage.keys()].filter((key) =>
+          key.startsWith('mahoraga:detector:image:'),
+        ),
+      ).toHaveLength(10);
+      expect(storedCase).toBeNull();
+      expect(banCreate).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('does not count the same image twice when the message id is duplicated', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock(
+      async () => new Response(new Uint8Array([1, 2, 3, 4])),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const message = createMessage({
+        content: '',
+        attachments: new Map([
+          [
+            'attachment',
+            {
+              contentType: 'image/png',
+              name: 'spam.png',
+              url: 'https://cdn.example.com/spam.png',
+            },
+          ],
+        ]),
+      });
+
+      expect(await service.inspectMessage(message)).toBeNull();
+      expect(await service.inspectMessage(message)).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect([...redisStorage.values()]).toEqual([1]);
+      expect(storedCase).toBeNull();
+      expect(banCreate).not.toHaveBeenCalled();
     } finally {
       globalThis.fetch = originalFetch;
     }

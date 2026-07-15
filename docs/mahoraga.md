@@ -57,6 +57,14 @@ Mahoraga реагирует на пять типов событий:
 
 ## Detection logic
 
+Перед проверками Mahoraga атомарно отмечает Discord-сообщение в Redis:
+
+```text
+mahoraga:processed-message:{guildId}:{messageId}
+```
+
+Одно сообщение обрабатывается только один раз, даже если событие `messageCreate` было доставлено повторно или одновременно попало в несколько процессов. TTL ключа равен максимальному из настроенных окон text/link/image/message tracking.
+
 ### Honeypot
 
 Если `mahoraga_honeypot_channel_id` задан и сообщение пришло в этот канал, Mahoraga сразу создаёт detection с причиной `honeypot`.
