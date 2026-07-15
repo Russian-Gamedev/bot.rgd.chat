@@ -24,6 +24,7 @@ const GUILD_ID = '222222222222222222';
 const CHANNEL_ID = '333333333333333333';
 const HONEYPOT_CHANNEL_ID = '333333333333333334';
 const MESSAGE_ID = '444444444444444444';
+const ACTIVE_ROLE_ID = '555555555555555555';
 
 function createRepository(getStored: () => MahoragaCaseEntity | null) {
   return {
@@ -63,11 +64,13 @@ function createMessage(overrides: Record<string, unknown> = {}): Message {
     attachments: new Map(),
     member: {
       permissions: new PermissionsBitField(0n),
+      roles: { cache: new Map() },
     },
     guild: {
       members: {
         fetch: mock(async () => ({
           permissions: new PermissionsBitField(0n),
+          roles: { cache: new Map() },
         })),
       },
     },
@@ -728,5 +731,59 @@ describe('MahoragaService', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('skips repeat checks and message tracking for members with the active role', async () => {
+    settings[GuildSettings.ActiveRoleId] = ACTIVE_ROLE_ID;
+
+    const result = await service.inspectMessage(
+      createMessage({
+        content: 'https://example.com/spam',
+        attachments: new Map([
+          [
+            'attachment',
+            {
+              contentType: 'image/png',
+              name: 'spam.png',
+              url: 'https://cdn.example.com/spam.png',
+            },
+          ],
+        ]),
+        member: {
+          permissions: new PermissionsBitField(0n),
+          roles: { cache: new Map([[ACTIVE_ROLE_ID, {}]]) },
+        },
+      }),
+    );
+
+    expect(result).toBeNull();
+    expect(redisStorage.size).toBe(0);
+    expect(
+      redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+    ).toBe(false);
+    expect(storedCase).toBeNull();
+    expect(banCreate).not.toHaveBeenCalled();
+  });
+
+  it('still detects honeypot messages from members with the active role', async () => {
+    settings[GuildSettings.ActiveRoleId] = ACTIVE_ROLE_ID;
+
+    const result = await service.inspectMessage(
+      createMessage({
+        channelId: HONEYPOT_CHANNEL_ID,
+        member: {
+          permissions: new PermissionsBitField(0n),
+          roles: { cache: new Map([[ACTIVE_ROLE_ID, {}]]) },
+        },
+      }),
+    );
+
+    expect(result?.reason).toBe(MahoragaReason.Honeypot);
+    expect(
+      redisSetStorage.has(`mahoraga:messages:${GUILD_ID}:${USER_ID}`),
+    ).toBe(false);
+    expect(fetchedMessageDelete).toHaveBeenCalledTimes(1);
+    expect(banCreate).toHaveBeenCalledTimes(1);
+    expect(banRemove).toHaveBeenCalledTimes(1);
   });
 });

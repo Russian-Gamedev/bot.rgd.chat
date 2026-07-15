@@ -69,6 +69,12 @@ mahoraga:processed-message:{guildId}:{messageId}
 
 Если `mahoraga_honeypot_channel_id` задан и сообщение пришло в этот канал, Mahoraga сразу создаёт detection с причиной `honeypot`.
 
+### Роль актива
+
+Вне honeypot пользователь с ролью из guild setting `active_role_id` полностью пропускает проверки `text_repeat`, `link_repeat` и `image_repeat`. Его сообщение также не добавляется в список tracked messages Mahoraga.
+
+Honeypot имеет приоритет над этим исключением: сообщение пользователя с ролью актива в honeypot обрабатывается в обычном режиме.
+
 ### Повтор ссылок
 
 Из текста извлекаются URL, нормализуются и считаются через Redis fixed-window counter:

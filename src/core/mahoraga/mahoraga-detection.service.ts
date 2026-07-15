@@ -52,14 +52,6 @@ export class MahoragaDetectionService {
       return null;
     }
 
-    await this.trackMessage(
-      guildId,
-      message.author.id,
-      message.channelId,
-      message.id,
-      settings.messageTrackingWindowSeconds,
-    );
-
     const honeypotChannelId = await this.guildSettings.getSetting<string>(
       guildId,
       GuildSettings.MahoragaHoneypotChannelId,
@@ -70,6 +62,13 @@ export class MahoragaDetectionService {
       honeypotChannelId &&
       message.channelId === honeypotChannelId
     ) {
+      await this.trackMessage(
+        guildId,
+        message.author.id,
+        message.channelId,
+        message.id,
+        settings.messageTrackingWindowSeconds,
+      );
       return this.buildDetection(
         message,
         settings,
@@ -77,6 +76,16 @@ export class MahoragaDetectionService {
         'honeypot channel',
       );
     }
+
+    if (await this.hasActiveRole(message, guildId)) return null;
+
+    await this.trackMessage(
+      guildId,
+      message.author.id,
+      message.channelId,
+      message.id,
+      settings.messageTrackingWindowSeconds,
+    );
 
     if (settings.repeatMode !== MahoragaDetectionMode.Off) {
       for (const url of extractNormalizedUrls(message.content)) {
@@ -321,6 +330,23 @@ export class MahoragaDetectionService {
       'NX',
     );
     return result === 'OK';
+  }
+
+  private async hasActiveRole(
+    message: Message,
+    guildId: string,
+  ): Promise<boolean> {
+    const activeRoleId = await this.guildSettings.getSetting<string>(
+      guildId,
+      GuildSettings.ActiveRoleId,
+      null,
+    );
+    if (!activeRoleId) return false;
+
+    const member =
+      message.member ??
+      (await message.guild?.members.fetch(message.author.id).catch(() => null));
+    return member?.roles.cache.has(activeRoleId) ?? false;
   }
 
   private async trackMessage(
