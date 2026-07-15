@@ -28,6 +28,7 @@ import {
   GameAttachmentType,
   GameAuthorType,
   GameListSort,
+  GameReviewAction,
   GameRevisionStatus,
 } from '../games.types';
 
@@ -255,18 +256,7 @@ export class RequestGameChangesDto {
 export class TransferGameOwnerDto {
   @ApiProperty() @IsNumberString() owner_id: string;
 }
-export class CreateGameTagDto {
-  @ApiProperty()
-  @Transform(trim)
-  @IsString()
-  @MinLength(1)
-  @MaxLength(80)
-  name: string;
-}
-export class UpdateGameTagDto extends PartialType(CreateGameTagDto) {}
-
-export class GameTagDto {
-  @ApiProperty() id: string;
+export class GamePublicTagDto {
   @ApiProperty() slug: string;
   @ApiProperty() name: string;
 }
@@ -293,9 +283,9 @@ export class GameListItemDto {
   @ApiProperty() slug: string;
   @ApiProperty() title: string;
   @ApiProperty() release_date: string;
-  @ApiProperty({ type: [GameTagDto] }) tags: GameTagDto[];
+  @ApiProperty({ type: [GamePublicTagDto] }) tags: GamePublicTagDto[];
   @ApiProperty({ type: [GameAuthorDto] }) authors: GameAuthorDto[];
-  @ApiPropertyOptional({ nullable: true }) image: string | null;
+  @ApiPropertyOptional({ nullable: true }) thumbnail: string | null;
   @ApiProperty() likes_count: number;
   @ApiProperty() published_at: Date;
 }
@@ -305,17 +295,50 @@ export class GameListResponseDto {
   @ApiProperty() limit: number;
   @ApiProperty() offset: number;
 }
-export class GameDetailsDto extends GameListItemDto {
-  @ApiProperty() description: string;
+export class GameCreditsDto {
   @ApiProperty() owner_id: string;
-  @ApiProperty({ type: [GameLinkDto] }) links: GameLinkDto[];
+  @ApiProperty({ type: [GameAuthorDto] }) authors: GameAuthorDto[];
+}
+export class GameResourcesDto {
   @ApiProperty({ type: [GameAttachmentDto] }) attachments: GameAttachmentDto[];
+  @ApiProperty({ type: [GameLinkDto] }) links: GameLinkDto[];
+}
+export class GameMetadataDto {
+  @ApiProperty({ format: 'date' }) release_date: string;
+  @ApiPropertyOptional({ nullable: true }) published_at: Date | null;
   @ApiProperty() updated_at: Date;
 }
-export class GameEditorDto extends GameDetailsDto {
+export class GameStatsDto {
+  @ApiProperty() likes_count: number;
+}
+export class GameDetailsDto {
+  @ApiProperty() id: string;
+  @ApiProperty() slug: string;
+  @ApiProperty() title: string;
+  @ApiProperty() description: string;
+  @ApiPropertyOptional({ nullable: true }) thumbnail: string | null;
+  @ApiProperty({ type: [GamePublicTagDto] }) tags: GamePublicTagDto[];
+  @ApiProperty({ type: GameCreditsDto }) credits: GameCreditsDto;
+  @ApiProperty({ type: GameResourcesDto }) resources: GameResourcesDto;
+  @ApiProperty({ type: GameMetadataDto }) metadata: GameMetadataDto;
+  @ApiProperty({ type: GameStatsDto }) stats: GameStatsDto;
+}
+export class GameReviewEventDto {
+  @ApiProperty() id: string;
+  @ApiProperty() revision_id: string;
+  @ApiProperty({ enum: GameReviewAction }) action: GameReviewAction;
+  @ApiProperty() actor_id: string;
+  @ApiPropertyOptional({ nullable: true }) comment: string | null;
+  @ApiProperty() created_at: Date;
+}
+export class GameWorkflowDto {
   @ApiProperty({ enum: GameRevisionStatus }) status: GameRevisionStatus;
   @ApiProperty() version: number;
   @ApiProperty() has_published_version: boolean;
   @ApiPropertyOptional({ nullable: true }) published_version: number | null;
-  @ApiProperty({ type: [Object] }) review_events: unknown[];
+  @ApiProperty({ type: [GameReviewEventDto] })
+  review_events: GameReviewEventDto[];
+}
+export class GameEditorDto extends GameDetailsDto {
+  @ApiProperty({ type: GameWorkflowDto }) workflow: GameWorkflowDto;
 }
