@@ -34,20 +34,18 @@ import type { AuthenticatedActor } from '#core/permissions/permissions.types';
 import { Permission } from '#core/permissions/permissions.types';
 import {
   CreateGameDto,
-  CreateGameTagDto,
   GameDetailsDto,
   GameEditorDto,
   GameLikeStateDto,
   GameListQueryDto,
   GameListResponseDto,
+  GamePublicTagDto,
   GameReviewListQueryDto,
-  GameTagDto,
   MineGamesQueryDto,
   PublishGameDto,
   RequestGameChangesDto,
   TransferGameOwnerDto,
   UpdateGameDto,
-  UpdateGameTagDto,
 } from './dto/games.dto';
 import { GameLikesService } from './game-likes.service';
 import { GameReviewService } from './game-review.service';
@@ -93,36 +91,15 @@ export class GamesController {
   }
   @Get('tags')
   @ApiOperation({ summary: 'List all game tags for autocomplete' })
-  @ApiOkResponse({ type: [GameTagDto] })
+  @ApiOkResponse({ type: [GamePublicTagDto] })
   getTags() {
     return this.tags.list();
   }
-  @Post('tags')
-  @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
+  @Get(':id/editor')
+  @UseGuards(ActorAuthGuard)
   @ApiActorAuth()
-  createTag(@Body() d: CreateGameTagDto) {
-    return this.tags.create(d);
-  }
-  @Patch('tags/:id')
-  @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
-  @ApiActorAuth()
-  updateTag(@Param('id') id: string, @Body() d: UpdateGameTagDto) {
-    return this.tags.update(id, d);
-  }
-  @Delete('tags/:id')
-  @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
-  @ApiActorAuth()
-  @HttpCode(204)
-  removeTag(@Param('id') id: string) {
-    return this.tags.remove(id);
-  }
-  @Get(':id/editor') @UseGuards(ActorAuthGuard) @ApiActorAuth() async editor(
-    @Param('id') id: string,
-    @Actor() a: AuthenticatedActor,
-  ) {
+  @ApiOkResponse({ type: GameEditorDto })
+  async editor(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
     return this.games.getEditor(
       id,
       getActorUserId(a),
@@ -133,6 +110,7 @@ export class GamesController {
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.GamesReview)
   @ApiActorAuth()
+  @ApiOkResponse({ type: GameEditorDto })
   reviewOne(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
     return this.games.getEditor(id, getActorUserId(a), true);
   }
@@ -140,6 +118,7 @@ export class GamesController {
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.GamesReview)
   @ApiActorAuth()
+  @ApiOkResponse({ type: GameEditorDto })
   publish(
     @Param('id') id: string,
     @Actor() a: AuthenticatedActor,
@@ -151,6 +130,7 @@ export class GamesController {
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.GamesReview)
   @ApiActorAuth()
+  @ApiOkResponse({ type: GameEditorDto })
   changes(
     @Param('id') id: string,
     @Actor() a: AuthenticatedActor,
@@ -162,13 +142,15 @@ export class GamesController {
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.GamesReview)
   @ApiActorAuth()
+  @ApiOkResponse({ type: GameEditorDto })
   owner(@Param('id') id: string, @Body() d: TransferGameOwnerDto) {
     return this.review.transferOwner(id, d.owner_id);
   }
-  @Post(':id/submit-review') @UseGuards(ActorAuthGuard) @ApiActorAuth() submit(
-    @Param('id') id: string,
-    @Actor() a: AuthenticatedActor,
-  ) {
+  @Post(':id/submit-review')
+  @UseGuards(ActorAuthGuard)
+  @ApiActorAuth()
+  @ApiOkResponse({ type: GameEditorDto })
+  submit(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
     return this.games.submit(id, getActorUserId(a));
   }
   @Get(':id/like')
@@ -201,7 +183,11 @@ export class GamesController {
   get(@Param('id_or_slug') idOrSlug: string) {
     return this.games.getPublic(idOrSlug);
   }
-  @Patch(':id') @UseGuards(ActorAuthGuard) @ApiActorAuth() update(
+  @Patch(':id')
+  @UseGuards(ActorAuthGuard)
+  @ApiActorAuth()
+  @ApiOkResponse({ type: GameEditorDto })
+  update(
     @Param('id') id: string,
     @Actor() a: AuthenticatedActor,
     @Body() d: UpdateGameDto,
