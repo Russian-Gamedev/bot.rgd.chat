@@ -9,9 +9,11 @@ import {
 import { MikroORM } from '@mikro-orm/core';
 import { Test } from '@nestjs/testing';
 import Redis from 'ioredis';
+import OpenAI from 'openai';
 import { pgliteOrmConfig } from '#common/mikro-orm.pglite.config';
 import { RedisConnectionService } from '#common/redis.module';
 import { DiscordModule } from '#core/discord/discord.module';
+import { GameAttachmentEntity } from '#core/games/entities/games.entity';
 import { GamesController } from '#core/games/games.controller';
 import {
   GameAttachmentType,
@@ -67,6 +69,8 @@ describe('Games full integration flow', () => {
       .useValue(mockRedis)
       .overrideProvider(RedisConnectionService)
       .useValue(new RedisConnectionService(mockRedis as unknown as Redis))
+      .overrideProvider(OpenAI)
+      .useValue({})
       .overrideModule(DiscordModule)
       .useModule(class {})
       .overrideProvider(PermissionService)
@@ -80,6 +84,16 @@ describe('Games full integration flow', () => {
     await orm.schema.refresh();
 
     controller = moduleRef.get(GamesController);
+
+    expect(
+      (controller as unknown as Record<string, unknown>).createTag,
+    ).toBeUndefined();
+    expect(
+      (controller as unknown as Record<string, unknown>).updateTag,
+    ).toBeUndefined();
+    expect(
+      (controller as unknown as Record<string, unknown>).removeTag,
+    ).toBeUndefined();
   });
 
   beforeEach(async () => {
@@ -88,7 +102,7 @@ describe('Games full integration flow', () => {
   });
 
   afterAll(async () => {
-    await orm.close(true);
+    await orm?.close(true);
   });
 
   it('covers creation variants, review, publication, likes and republishing', async () => {
@@ -123,17 +137,43 @@ describe('Games full integration flow', () => {
       ],
     });
 
-    expect(created.status).toBe(GameRevisionStatus.Draft);
-    expect(created.version).toBe(1);
+    expect(created.workflow.status).toBe(GameRevisionStatus.Draft);
+    expect(created.workflow.version).toBe(1);
     expect(created.slug).toBe('version-one');
-    expect(created.authors).toHaveLength(2);
-    expect(created.attachments).toHaveLength(2);
+    expect(created.credits.authors).toHaveLength(2);
+    expect(created.resources.attachments).toHaveLength(2);
+    expect(created.metadata.published_at).toBeNull();
+    expect(created.tags.every((tag) => !('id' in tag))).toBe(true);
     await expect(controller.get(created.id)).rejects.toThrow();
 
     await controller.update(created.id, owner, {
       description: '# Ready for review',
     });
     await controller.submit(created.id, owner);
+    const editorUnderReview = await controller.editor(created.id, owner);
+    expect(await controller.reviewOne(created.id, reviewer)).toEqual(
+      editorUnderReview,
+    );
+    expect(editorUnderReview.workflow.status).toBe(GameRevisionStatus.Review);
+    expect(editorUnderReview.resources.attachments).toHaveLength(2);
+    expect(editorUnderReview.credits.owner_id).toBe(owner.id);
+    expect(editorUnderReview.stats.likes_count).toBe(0);
+    for (const oldField of [
+      'image',
+      'authors',
+      'owner_id',
+      'attachments',
+      'links',
+      'release_date',
+      'published_at',
+      'updated_at',
+      'likes_count',
+      'status',
+      'version',
+      'review_events',
+    ]) {
+      expect(oldField in editorUnderReview).toBe(false);
+    }
     expect(
       (await controller.reviewList({ limit: 20, offset: 0 })).items,
     ).toHaveLength(1);
@@ -141,9 +181,9 @@ describe('Games full integration flow', () => {
     const returned = await controller.changes(created.id, reviewer, {
       comment: 'Please improve the title.',
     });
-    expect(returned.status).toBe(GameRevisionStatus.Draft);
+    expect(returned.workflow.status).toBe(GameRevisionStatus.Draft);
     expect(
-      returned.review_events.map(
+      returned.workflow.review_events.map(
         (event) => (event as unknown as { action: string }).action,
       ),
     ).toEqual(['submitted', 'changes_requested']);
@@ -155,18 +195,43 @@ describe('Games full integration flow', () => {
     });
 
     const published = await controller.get(created.id);
-    expect((await controller.get(created.slug)).id).toBe(created.id);
+    expect(await controller.get(created.slug)).toEqual(published);
     expect(published.title).toBe('Published Version');
-    expect(published.authors).toEqual([
+    expect(published.thumbnail).toBe('https://example.com/cover.png');
+    expect(published.credits.authors).toEqual([
       { type: GameAuthorType.Discord, discord_user_id: owner.id },
       { type: GameAuthorType.Text, name: 'External Team' },
     ]);
-    expect(published.links[0].link).toBe('https://example.com/game');
+    expect(published.credits.owner_id).toBe(owner.id);
+    expect(published.resources.links[0].link).toBe('https://example.com/game');
     expect(
-      published.attachments.map(
+      published.resources.attachments.map(
         (item) => (item as unknown as { type: string }).type,
       ),
     ).toEqual(['image', 'external_video']);
+    expect(published.metadata.release_date).toBe('2026-07-11');
+    expect(published.stats.likes_count).toBe(0);
+    expect(published.tags.every((tag) => !('id' in tag))).toBe(true);
+    for (const oldField of [
+      'image',
+      'authors',
+      'owner_id',
+      'attachments',
+      'links',
+      'release_date',
+      'published_at',
+      'updated_at',
+      'likes_count',
+    ]) {
+      expect(oldField in published).toBe(false);
+    }
+
+    await orm.em.nativeDelete(GameAttachmentEntity, {
+      revision: { game: created.id },
+      type: GameAttachmentType.Image,
+    });
+    orm.em.clear();
+    expect((await controller.get(created.id)).thumbnail).toBeNull();
 
     expect(await controller.like(created.id, fan)).toEqual({
       liked: true,
@@ -195,9 +260,9 @@ describe('Games full integration flow', () => {
         },
       ],
     });
-    expect(draftV2.version).toBe(2);
+    expect(draftV2.workflow.version).toBe(2);
     expect(draftV2.slug).toBe('version-two-custom');
-    expect(draftV2.has_published_version).toBe(true);
+    expect(draftV2.workflow.has_published_version).toBe(true);
     expect((await controller.get(created.id)).title).toBe('Published Version');
     expect((await controller.get('version-two-custom')).id).toBe(created.id);
 
@@ -205,10 +270,10 @@ describe('Games full integration flow', () => {
     await controller.publish(created.id, reviewer, {});
     const republished = await controller.get(created.id);
     expect(republished.title).toBe('Version Two');
-    expect(republished.authors).toEqual([
+    expect(republished.credits.authors).toEqual([
       { type: GameAuthorType.Text, name: 'New Team' },
     ]);
-    expect(republished.attachments).toEqual([
+    expect(republished.resources.attachments).toEqual([
       {
         type: GameAttachmentType.Image,
         url: 'https://example.com/version-two.png',
@@ -240,10 +305,15 @@ describe('Games full integration flow', () => {
     });
     expect(catalog.total).toBe(2);
     expect(await controller.getTags()).toEqual([
-      expect.objectContaining({ name: 'Action', slug: 'action' }),
-      expect.objectContaining({ name: 'Puzzle', slug: 'puzzle' }),
+      { name: 'Action', slug: 'action' },
+      { name: 'Puzzle', slug: 'puzzle' },
     ]);
     expect(catalog.items[0].id).toBe(textOnly.id);
+    expect(catalog.items[0].thumbnail).toBe(
+      'https://example.com/text-team.png',
+    );
+    expect(catalog.items[0].tags.every((tag) => !('id' in tag))).toBe(true);
+    expect('image' in catalog.items[0]).toBe(false);
     expect(
       (catalog.items as unknown as Array<{ id: string }>).map(
         (game) => game.id,
