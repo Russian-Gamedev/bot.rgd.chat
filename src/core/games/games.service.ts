@@ -376,17 +376,9 @@ export class GamesService {
       slug: game.slug,
       title: revision.title,
       release_date: String(revision.release_date).slice(0, 10),
-      tags: revision.tagLinks.getItems().map(({ tag }) => ({
-        id: tag.id,
-        slug: tag.slug,
-        name: tag.name,
-      })),
+      tags: this.publicTagDtos(revision),
       authors: this.authorDtos(revision),
-      image:
-        revision.attachments
-          .getItems()
-          .sort((a, b) => a.position - b.position)
-          .find((attachment) => attachment.type === 'image')?.url ?? null,
+      thumbnail: this.thumbnail(revision),
       likes_count: counts.get(game.id) ?? 0,
       published_at: revision.published_at,
     };
@@ -398,18 +390,26 @@ export class GamesService {
     likes: number,
   ) {
     return {
-      ...this.listItem(game, revision, new Map([[game.id, likes]])),
+      id: game.id,
+      slug: game.slug,
+      title: revision.title,
       description: revision.description,
-      owner_id: game.owner_id.toString(),
-      links: revision.links
-        .getItems()
-        .sort((a, b) => a.position - b.position)
-        .map(({ icon, label, link }) => ({ icon, label, link })),
-      attachments: revision.attachments
-        .getItems()
-        .sort((a, b) => a.position - b.position)
-        .map(({ type, url }) => ({ type, url })),
-      updated_at: revision.updatedAt,
+      thumbnail: this.thumbnail(revision),
+      tags: this.publicTagDtos(revision),
+      credits: {
+        owner_id: game.owner_id.toString(),
+        authors: this.authorDtos(revision),
+      },
+      resources: {
+        attachments: this.attachmentDtos(revision),
+        links: this.linkDtos(revision),
+      },
+      metadata: {
+        release_date: String(revision.release_date).slice(0, 10),
+        published_at: revision.published_at,
+        updated_at: revision.updatedAt,
+      },
+      stats: { likes_count: likes },
     };
   }
 
@@ -421,18 +421,20 @@ export class GamesService {
   ) {
     return {
       ...this.details(game, revision, likes),
-      status: revision.status,
-      version: revision.version,
-      has_published_version: Boolean(game.publishedRevision),
-      published_version: game.publishedRevision?.version ?? null,
-      review_events: events.map((event) => ({
-        id: event.id,
-        revision_id: event.revision.id,
-        action: event.action,
-        actor_id: event.actor_id.toString(),
-        comment: event.comment,
-        created_at: event.created_at,
-      })),
+      workflow: {
+        status: revision.status,
+        version: revision.version,
+        has_published_version: Boolean(game.publishedRevision),
+        published_version: game.publishedRevision?.version ?? null,
+        review_events: events.map((event) => ({
+          id: event.id,
+          revision_id: event.revision.id,
+          action: event.action,
+          actor_id: event.actor_id.toString(),
+          comment: event.comment,
+          created_at: event.created_at,
+        })),
+      },
     };
   }
 
@@ -448,6 +450,37 @@ export class GamesService {
             }
           : { type: author.type, name: author.name },
       );
+  }
+
+  private publicTagDtos(revision: PopulatedRevision) {
+    return revision.tagLinks.getItems().map(({ tag }) => ({
+      slug: tag.slug,
+      name: tag.name,
+    }));
+  }
+
+  private thumbnail(revision: PopulatedRevision) {
+    return (
+      revision.attachments
+        .getItems()
+        .sort((a, b) => a.position - b.position)
+        .find((attachment) => attachment.type === GameAttachmentType.Image)
+        ?.url ?? null
+    );
+  }
+
+  private attachmentDtos(revision: PopulatedRevision) {
+    return revision.attachments
+      .getItems()
+      .sort((a, b) => a.position - b.position)
+      .map(({ type, url }) => ({ type, url }));
+  }
+
+  private linkDtos(revision: PopulatedRevision) {
+    return revision.links
+      .getItems()
+      .sort((a, b) => a.position - b.position)
+      .map(({ icon, label, link }) => ({ icon, label, link }));
   }
 
   private async applyChildren(
