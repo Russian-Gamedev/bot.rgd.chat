@@ -92,7 +92,10 @@ export class GamesService {
     if (userId) {
       const discordUserId = BigInt(userId);
       where.$or = [
-        { owner_id: discordUserId },
+        {
+          owner_id: discordUserId,
+          publishedRevision: { hide_owner: false },
+        },
         {
           publishedRevision: {
             authors: { discord_user_id: discordUserId },
@@ -159,6 +162,8 @@ export class GamesService {
           title: dto.title,
           description: dto.description,
           release_date: dto.release_date,
+          promo: dto.promo ?? null,
+          hide_owner: dto.hide_owner ?? false,
           created_by: BigInt(ownerId),
         });
         game.revisions.add(revision);
@@ -265,6 +270,8 @@ export class GamesService {
             title: published.title,
             description: published.description,
             release_date: published.release_date,
+            promo: published.promo,
+            hide_owner: published.hide_owner,
             created_by: BigInt(ownerId),
           }) as unknown as PopulatedRevision;
           game.revisions.add(revision);
@@ -279,6 +286,8 @@ export class GamesService {
           revision.description = dto.description;
         if (dto.release_date !== undefined)
           revision.release_date = dto.release_date;
+        if (dto.promo !== undefined) revision.promo = dto.promo;
+        if (dto.hide_owner !== undefined) revision.hide_owner = dto.hide_owner;
         await this.applyChildren(em, revision, dto, true);
         await em.flush();
         return this.getEditor(id, ownerId, false, em);
@@ -388,6 +397,7 @@ export class GamesService {
     game: GameEntity,
     revision: PopulatedRevision,
     likes: number,
+    exposeOwner = false,
   ) {
     return {
       id: game.id,
@@ -397,7 +407,9 @@ export class GamesService {
       thumbnail: this.thumbnail(revision),
       tags: this.publicTagDtos(revision),
       credits: {
-        owner_id: game.owner_id.toString(),
+        owner_id:
+          exposeOwner || !revision.hide_owner ? game.owner_id.toString() : null,
+        hide_owner: revision.hide_owner,
         authors: this.authorDtos(revision),
       },
       resources: {
@@ -406,6 +418,7 @@ export class GamesService {
       },
       metadata: {
         release_date: String(revision.release_date).slice(0, 10),
+        promo: revision.promo,
         published_at: revision.published_at,
         updated_at: revision.updatedAt,
       },
@@ -420,7 +433,7 @@ export class GamesService {
     likes: number,
   ) {
     return {
-      ...this.details(game, revision, likes),
+      ...this.details(game, revision, likes, true),
       workflow: {
         status: revision.status,
         version: revision.version,
@@ -447,8 +460,9 @@ export class GamesService {
           ? {
               type: author.type,
               discord_user_id: author.discord_user_id?.toString(),
+              role: author.role,
             }
-          : { type: author.type, name: author.name },
+          : { type: author.type, name: author.name, role: author.role },
       );
   }
 
@@ -513,6 +527,7 @@ export class GamesService {
               ? BigInt(author.discord_user_id)
               : null,
             name: author.name ?? null,
+            role: author.role,
             position,
           }),
         ),
@@ -564,6 +579,7 @@ export class GamesService {
           type: author.type,
           discord_user_id: author.discord_user_id,
           name: author.name,
+          role: author.role,
           position: author.position,
         }),
       ),

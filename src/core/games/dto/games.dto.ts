@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -94,6 +95,12 @@ export class GameAuthorInputDto {
   @MinLength(1)
   @MaxLength(120)
   name?: string;
+  @ApiProperty({ example: 'Программист' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  role: string;
 }
 
 export class GameLinkInputDto {
@@ -149,6 +156,21 @@ export class CreateGameDto {
   @ApiProperty({ format: 'date' })
   @IsDateString({ strict: true })
   release_date: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    maxLength: 100,
+    example: 'Скоро релиз!',
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  promo?: string | null;
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  hide_owner?: boolean;
   @ApiProperty({ type: [String], maxItems: 10 })
   @Transform(({ value }) =>
     Array.isArray(value)
@@ -264,6 +286,7 @@ export class GameAuthorDto {
   @ApiProperty({ enum: GameAuthorType }) type: GameAuthorType;
   @ApiPropertyOptional() discord_user_id?: string;
   @ApiPropertyOptional() name?: string;
+  @ApiProperty() role: string;
 }
 export class GameAttachmentDto {
   @ApiProperty({ enum: GameAttachmentType }) type: GameAttachmentType;
@@ -296,7 +319,8 @@ export class GameListResponseDto {
   @ApiProperty() offset: number;
 }
 export class GameCreditsDto {
-  @ApiProperty() owner_id: string;
+  @ApiPropertyOptional({ nullable: true }) owner_id: string | null;
+  @ApiProperty() hide_owner: boolean;
   @ApiProperty({ type: [GameAuthorDto] }) authors: GameAuthorDto[];
 }
 export class GameResourcesDto {
@@ -305,6 +329,7 @@ export class GameResourcesDto {
 }
 export class GameMetadataDto {
   @ApiProperty({ format: 'date' }) release_date: string;
+  @ApiPropertyOptional({ nullable: true, maxLength: 100 }) promo: string | null;
   @ApiPropertyOptional({ nullable: true }) published_at: Date | null;
   @ApiProperty() updated_at: Date;
 }
