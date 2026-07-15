@@ -15,6 +15,7 @@ import { RedisConnectionService } from '#common/redis.module';
 import { DiscordModule } from '#core/discord/discord.module';
 import { GameAttachmentEntity } from '#core/games/entities/games.entity';
 import { GamesController } from '#core/games/games.controller';
+import { GamesService } from '#core/games/games.service';
 import {
   GameAttachmentType,
   GameAuthorType,
@@ -32,6 +33,7 @@ import { ensureUuidv7Function } from './helpers/pglite-setup';
 describe('Games full integration flow', () => {
   let orm: MikroORM;
   let controller: GamesController;
+  let gamesService: GamesService;
 
   const owner: AuthenticatedActor = {
     type: ActorType.User,
@@ -84,6 +86,7 @@ describe('Games full integration flow', () => {
     await orm.schema.refresh();
 
     controller = moduleRef.get(GamesController);
+    gamesService = moduleRef.get(GamesService);
 
     expect(
       (controller as unknown as Record<string, unknown>).createTag,
@@ -110,13 +113,20 @@ describe('Games full integration flow', () => {
       title: 'Version One',
       description: '# Initial markdown',
       release_date: '2026-07-11',
+      promo: 'Скоро релиз!',
+      hide_owner: true,
       tags: ['Action', 'Puzzle'],
       authors: [
         {
           type: GameAuthorType.Discord,
           discord_user_id: owner.id,
+          role: 'Программист',
         },
-        { type: GameAuthorType.Text, name: 'External Team' },
+        {
+          type: GameAuthorType.Text,
+          name: 'External Team',
+          role: 'Художник',
+        },
       ],
       links: [
         {
@@ -143,6 +153,7 @@ describe('Games full integration flow', () => {
     expect(created.credits.authors).toHaveLength(2);
     expect(created.resources.attachments).toHaveLength(2);
     expect(created.metadata.published_at).toBeNull();
+    expect(created.metadata.promo).toBe('Скоро релиз!');
     expect(created.tags.every((tag) => !('id' in tag))).toBe(true);
     await expect(controller.get(created.id)).rejects.toThrow();
 
@@ -157,6 +168,7 @@ describe('Games full integration flow', () => {
     expect(editorUnderReview.workflow.status).toBe(GameRevisionStatus.Review);
     expect(editorUnderReview.resources.attachments).toHaveLength(2);
     expect(editorUnderReview.credits.owner_id).toBe(owner.id);
+    expect(editorUnderReview.credits.hide_owner).toBe(true);
     expect(editorUnderReview.stats.likes_count).toBe(0);
     for (const oldField of [
       'image',
@@ -199,10 +211,19 @@ describe('Games full integration flow', () => {
     expect(published.title).toBe('Published Version');
     expect(published.thumbnail).toBe('https://example.com/cover.png');
     expect(published.credits.authors).toEqual([
-      { type: GameAuthorType.Discord, discord_user_id: owner.id },
-      { type: GameAuthorType.Text, name: 'External Team' },
+      {
+        type: GameAuthorType.Discord,
+        discord_user_id: owner.id,
+        role: 'Программист',
+      },
+      {
+        type: GameAuthorType.Text,
+        name: 'External Team',
+        role: 'Художник',
+      },
     ]);
-    expect(published.credits.owner_id).toBe(owner.id);
+    expect(published.credits.owner_id).toBeNull();
+    expect(published.credits.hide_owner).toBe(true);
     expect(published.resources.links[0].link).toBe('https://example.com/game');
     expect(
       published.resources.attachments.map(
@@ -210,6 +231,7 @@ describe('Games full integration flow', () => {
       ),
     ).toEqual(['image', 'external_video']);
     expect(published.metadata.release_date).toBe('2026-07-11');
+    expect(published.metadata.promo).toBe('Скоро релиз!');
     expect(published.stats.likes_count).toBe(0);
     expect(published.tags.every((tag) => !('id' in tag))).toBe(true);
     for (const oldField of [
@@ -252,7 +274,15 @@ describe('Games full integration flow', () => {
     const draftV2 = await controller.update(created.id, owner, {
       title: 'Version Two',
       slug: 'version-two-custom',
-      authors: [{ type: GameAuthorType.Text, name: 'New Team' }],
+      promo: 'Релиз уже состоялся!',
+      hide_owner: false,
+      authors: [
+        {
+          type: GameAuthorType.Text,
+          name: 'New Team',
+          role: 'Разработчик',
+        },
+      ],
       attachments: [
         {
           type: GameAttachmentType.Image,
@@ -264,6 +294,9 @@ describe('Games full integration flow', () => {
     expect(draftV2.slug).toBe('version-two-custom');
     expect(draftV2.workflow.has_published_version).toBe(true);
     expect((await controller.get(created.id)).title).toBe('Published Version');
+    expect((await controller.get(created.id)).metadata.promo).toBe(
+      'Скоро релиз!',
+    );
     expect((await controller.get('version-two-custom')).id).toBe(created.id);
 
     await controller.submit(created.id, owner);
@@ -271,8 +304,15 @@ describe('Games full integration flow', () => {
     const republished = await controller.get(created.id);
     expect(republished.title).toBe('Version Two');
     expect(republished.credits.authors).toEqual([
-      { type: GameAuthorType.Text, name: 'New Team' },
+      {
+        type: GameAuthorType.Text,
+        name: 'New Team',
+        role: 'Разработчик',
+      },
     ]);
+    expect(republished.credits.owner_id).toBe(owner.id);
+    expect(republished.credits.hide_owner).toBe(false);
+    expect(republished.metadata.promo).toBe('Релиз уже состоялся!');
     expect(republished.resources.attachments).toEqual([
       {
         type: GameAttachmentType.Image,
@@ -284,8 +324,15 @@ describe('Games full integration flow', () => {
       title: 'Text Team Game',
       description: 'Second project',
       release_date: '2026-08-01',
+      hide_owner: true,
       tags: ['Puzzle'],
-      authors: [{ type: GameAuthorType.Text, name: 'No Discord Studio' }],
+      authors: [
+        {
+          type: GameAuthorType.Text,
+          name: 'No Discord Studio',
+          role: 'Команда разработки',
+        },
+      ],
       links: [],
       attachments: [
         {
@@ -319,6 +366,16 @@ describe('Games full integration flow', () => {
         (game) => game.id,
       ),
     ).toContain(textOnly.id);
+
+    const profileGames = await gamesService.listByUser(owner.id, {
+      limit: 20,
+      offset: 0,
+      sort: GameListSort.PublishedDesc,
+    });
+    expect(profileGames.items.map((game) => game.id)).toContain(created.id);
+    expect(profileGames.items.map((game) => game.id)).not.toContain(
+      textOnly.id,
+    );
 
     await controller.remove(textOnly.id, reviewer);
     await expect(controller.get(textOnly.id)).rejects.toThrow();
