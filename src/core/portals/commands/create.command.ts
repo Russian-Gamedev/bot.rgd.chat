@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ChannelType, MessageFlags } from 'discord.js';
+import { ChannelType, Client, MessageFlags } from 'discord.js';
 import { Context, Options, type SlashCommandContext, Subcommand } from 'necord';
 
 import { CreatePortalDto } from '../dto/create-portal.dto';
@@ -13,6 +13,7 @@ export class CreatePortalCommand {
   constructor(
     private readonly portalsService: PortalsService,
     private readonly config: ConfigService,
+    private readonly client: Client,
   ) {}
 
   @Subcommand({
@@ -44,15 +45,7 @@ export class CreatePortalCommand {
       return;
     }
 
-    if (!dto.target_channel.isTextBased()) {
-      await interaction.reply({
-        content: 'Целевой канал должен быть текстовым.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    if (sourceChannel.id === dto.target_channel.id) {
+    if (dto.target_channel === sourceChannel.id) {
       await interaction.reply({
         content: 'Нельзя создать портал между одним и тем же каналом.',
         flags: MessageFlags.Ephemeral,
@@ -63,9 +56,19 @@ export class CreatePortalCommand {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
+      const targetChannel = await this.client.channels.fetch(
+        dto.target_channel,
+      );
+      if (!targetChannel?.isTextBased()) {
+        await interaction.editReply({
+          content: 'Целевой канал не найден или не является текстовым.',
+        });
+        return;
+      }
+
       const portal = await this.portalsService.createPortal(
         sourceChannel,
-        dto.target_channel,
+        targetChannel,
         BigInt(interaction.user.id),
       );
 

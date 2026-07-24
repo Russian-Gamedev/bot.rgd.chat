@@ -1,11 +1,10 @@
-import type { Channel } from 'discord.js';
-import { ChannelOption } from 'necord';
+import { StringOption } from 'necord';
 
 export class CreatePortalDto {
-  @ChannelOption({
+  @StringOption({
     name: 'target_channel',
-    description: 'Целевой канал для связывания',
+    description: 'ID целевого канала для связывания',
     required: true,
   })
-  target_channel: Channel;
+  target_channel: string;
 }
