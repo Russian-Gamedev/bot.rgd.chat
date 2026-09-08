@@ -30,6 +30,7 @@ export enum GuildEvents {
   MEMBER_BAN = 'member_ban',
   MEMBER_KICK = 'member_kick',
   MEMBER_SET_NAME = 'member_set_name',
+  ACTIVITY_RAFFLE = 'activity_raffle',
 }
 
 export const GuildEventsParameters: Record<GuildEvents, string[]> = {
@@ -39,4 +40,5 @@ export const GuildEventsParameters: Record<GuildEvents, string[]> = {
   [GuildEvents.MEMBER_BAN]: ['user', 'moderator'],
   [GuildEvents.MEMBER_KICK]: ['user', 'moderator'],
   [GuildEvents.MEMBER_SET_NAME]: ['user', 'nickname'],
+  [GuildEvents.ACTIVITY_RAFFLE]: ['user', 'money'],
 };

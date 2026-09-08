@@ -2,6 +2,9 @@ import { describe, expect, it, mock } from 'bun:test';
 import type { EntityManager } from '@mikro-orm/core';
 import type { Client, Guild } from 'discord.js';
 
+import { EmojiCoin } from '#config/emojies';
+import { GuildEvents } from '#config/guilds';
+import type { GuildEventService } from '#core/guilds/events/guild-events.service';
 import type { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import type { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 import type { UserService } from '#core/users/users.service';
@@ -27,6 +30,7 @@ function createService(
     channelId?: string | null;
     postMessages?: boolean;
     stats?: unknown[];
+    eventTemplate?: string | null;
   } = {},
 ) {
   const activityService = {
@@ -35,7 +39,17 @@ function createService(
   } as unknown as ActivityService;
   const userService = {
     getNewUsers: mock(async () => []),
+    findOrCreateMember: mock(async (_guildId: bigint, userId: bigint) => ({
+      user_id: userId,
+      guild_id: _guildId,
+    })),
   } as unknown as UserService;
+  const walletService = {
+    credit: mock(async () => ({})),
+  } as unknown as WalletService;
+  const guildEventService = {
+    getRandom: mock(async () => options.eventTemplate ?? null),
+  } as unknown as GuildEventService;
   const guildSettings = {
     asBoolean: mock((value) => value === true || value === 'true'),
     getSetting: mock(async (_guildId, key, defaultValue) => {
@@ -60,16 +74,20 @@ function createService(
     {} as Client,
     activityService,
     userService,
-    {} as WalletService,
+    walletService,
     guildSettings,
     {} as GuildMemberRolesService,
+    guildEventService,
   );
 
   return {
     activityService,
     guild,
+    guildEventService,
     guildSettings,
     service: service as unknown as PrivateActivityJobService,
+    userService,
+    walletService,
   };
 }
 
@@ -129,5 +147,103 @@ describe('ActivityJobService', () => {
       service.postActivitySummarySafely(guild, ActivityPeriod.Day),
     ).resolves.toBeUndefined();
     expect(send).toHaveBeenCalled();
+  });
+
+  it('raffles coins among active users after publishing the summary', async () => {
+    const send = mock(async () => undefined);
+    const { guild, service, userService, walletService } = createService({
+      channel: {
+        isSendable: () => true,
+        send,
+      },
+      channelId: '1127255167096586252',
+      postMessages: true,
+      stats: [
+        {
+          guild_id: 1127255165548888196n,
+          message_score: 5,
+          reaction_count: 0,
+          user_id: 42n,
+          voice_seconds: 0,
+        },
+      ],
+    });
+
+    await service.postActivitySummary(guild, ActivityPeriod.Day);
+
+    expect(walletService.credit).toHaveBeenCalledWith(
+      42n,
+      10_000n,
+      'activity-raffle',
+      {
+        guildId: 1127255165548888196n,
+        metadata: { period: ActivityPeriod.Day },
+      },
+    );
+    expect(userService.findOrCreateMember).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(2);
+    const [winnerMessage] = send.mock.calls[1] as unknown as [string];
+    expect(winnerMessage.replace(/\u00A0/g, ' ')).toBe(
+      `<@42> выиграл 10 000 ${EmojiCoin.Animated}`,
+    );
+  });
+
+  it('sends the random event template for the raffle announcement', async () => {
+    const send = mock(async () => undefined);
+    const { guild, guildEventService, service } = createService({
+      channel: {
+        isSendable: () => true,
+        send,
+      },
+      channelId: '1127255167096586252',
+      postMessages: true,
+      eventTemplate: '<@42> забирает все монеты!',
+      stats: [
+        {
+          guild_id: 1127255165548888196n,
+          message_score: 5,
+          reaction_count: 0,
+          user_id: 42n,
+          voice_seconds: 0,
+        },
+      ],
+    });
+
+    await service.postActivitySummary(guild, ActivityPeriod.Week);
+
+    expect(guildEventService.getRandom).toHaveBeenCalledWith(
+      GuildEvents.ACTIVITY_RAFFLE,
+      { user: '<@42>', money: expect.stringContaining('100') },
+    );
+    const [winnerMessage] = send.mock.calls[1] as unknown as [string];
+    expect(winnerMessage).toBe('<@42> забирает все монеты!');
+  });
+
+  it('does not raffle when the summary was not published', async () => {
+    const send = mock(async () => {
+      throw new Error('missing access');
+    });
+    const { guild, service, walletService } = createService({
+      channel: {
+        isSendable: () => true,
+        send,
+      },
+      channelId: '1127255167096586252',
+      postMessages: true,
+      stats: [
+        {
+          guild_id: 1127255165548888196n,
+          message_score: 5,
+          reaction_count: 0,
+          user_id: 42n,
+          voice_seconds: 0,
+        },
+      ],
+    });
+
+    await service.postActivitySummary(guild, ActivityPeriod.Month);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(walletService.credit).not.toHaveBeenCalled();
   });
 });

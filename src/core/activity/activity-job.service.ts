@@ -7,23 +7,32 @@ import {
   EmbedBuilder,
   Guild,
   InteractionContextType,
+  type SendableChannels,
 } from 'discord.js';
 import { Context, SlashCommand, type SlashCommandContext } from 'necord';
 
 import { MetricsService } from '#common/metrics/metrics.service';
 import { Colors } from '#config/constants';
-import { GuildSettings } from '#config/guilds';
+import { EmojiCoin } from '#config/emojies';
+import { GuildEvents, GuildSettings } from '#config/guilds';
+import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
-import { formatTime, pickRandom, pluralize } from '#lib/utils';
+import { formatCoins, formatTime, pickRandom, pluralize } from '#lib/utils';
 import { ActivityService, ActivityStats } from './activity.service';
 import {
   ActivityPeriod,
   getActivityPeriodRange,
   moscowDateKeyToStartDate,
 } from './activity-period';
+
+const ACTIVITY_RAFFLE_PRIZES: Record<ActivityPeriod, bigint> = {
+  [ActivityPeriod.Day]: 10_000n,
+  [ActivityPeriod.Week]: 100_000n,
+  [ActivityPeriod.Month]: 1_000_000n,
+};
 
 @Injectable()
 export class ActivityJobService {
@@ -37,6 +46,7 @@ export class ActivityJobService {
     private readonly walletService: WalletService,
     private readonly guildSettings: GuildSettingsService,
     private readonly guildMemberRolesService: GuildMemberRolesService,
+    private readonly guildEventService: GuildEventService,
     @Optional() private readonly metrics?: MetricsService,
   ) {}
 
@@ -342,12 +352,63 @@ export class ActivityJobService {
 
     const embed = await this.buildEmbed(activities, period, BigInt(guild.id));
 
-    await channel.send({ embeds: [embed] }).catch((err) => {
+    const sent = await channel
+      .send({ embeds: [embed] })
+      .then(() => true)
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Failed to send activity summary for guild ${guild.id} and period ${period}: ${message}`,
+        );
+        return false;
+      });
+
+    if (!sent) return;
+
+    await this.raffleActivityCoins(guild, channel, activities, period).catch(
+      (err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `Failed to raffle activity coins for guild ${guild.id} and period ${period}: ${message}`,
+        );
+      },
+    );
+  }
+
+  private async raffleActivityCoins(
+    guild: Guild,
+    channel: SendableChannels,
+    activities: ActivityStats[],
+    period: ActivityPeriod,
+  ) {
+    const winner = pickRandom(activities);
+    const prize = ACTIVITY_RAFFLE_PRIZES[period];
+    const userStr = `<@${winner.user_id}>`;
+    const money = `${formatCoins(prize)} ${EmojiCoin.Animated}`;
+
+    try {
+      const user = await this.userService.findOrCreateMember(
+        BigInt(guild.id),
+        winner.user_id,
+      );
+      await this.walletService.credit(user.user_id, prize, 'activity-raffle', {
+        guildId: user.guild_id,
+        metadata: { period },
+      });
+    } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `Failed to send activity summary for guild ${guild.id} and period ${period}: ${message}`,
+        `Failed to credit raffle prize to user ${winner.user_id} in guild ${guild.id}: ${message}`,
       );
-    });
+      return;
+    }
+
+    const message = await this.guildEventService.getRandom(
+      GuildEvents.ACTIVITY_RAFFLE,
+      { user: userStr, money },
+    );
+
+    await channel.send(message ?? `${userStr} выиграл ${money}`);
   }
 
   private async buildEmbed(

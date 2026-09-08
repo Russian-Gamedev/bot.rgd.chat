@@ -2,6 +2,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Module } from '@nestjs/common';
 
 import { RedisModule } from '#common/redis.module';
+import { GuildEventsModule } from '#core/guilds/events/guild-events.module';
 import { GuildMemberRolesModule } from '#core/guilds/roles/guild-member-roles.module';
 import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
@@ -24,6 +25,7 @@ import { UserActivityTotalEntity } from './entities/user-activity-total.entity';
       MemberProfileEntity,
     ]),
     RedisModule,
+    GuildEventsModule,
     GuildMemberRolesModule,
     GuildSettingsModule,
     UserModule,
