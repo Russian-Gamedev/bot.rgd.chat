@@ -1,4 +1,4 @@
-const URL_REGEX = /\b(?:https?:\/\/|www\.)[^\s<>()]+/gi;
+export const URL_REGEX = /\b(?:https?:\/\/|www\.)[^\s<>()]+/gi;
 const TRAILING_URL_PUNCTUATION = /[),.!?;:]+$/;
 
 /** Normalizes a URL for repeat detection; returns null for invalid input. */

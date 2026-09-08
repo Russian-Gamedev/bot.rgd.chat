@@ -22,6 +22,7 @@ import { NicknameModule } from '#core/nickname/nickname.module';
 import { PortalsModule } from '#core/portals/portals.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
 import { UserModule } from '#core/users/users.module';
+import { UtilsModule } from '#core/utils/utils.module';
 import { WalletModule } from '#core/wallet/wallet.module';
 
 import { AppController } from './app.controller';
@@ -50,6 +51,7 @@ import { AppController } from './app.controller';
     FunModule,
     NicknameModule,
     PortalsModule,
+    UtilsModule,
   ],
   controllers: [AppController],
   providers: [ScheduleLoggerService],
