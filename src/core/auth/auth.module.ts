@@ -16,7 +16,7 @@ import { JwtStrategy } from './jwt.strategy';
 @Module({
   imports: [
     MikroOrmModule.forFeature([AuthEntity]),
-    PassportModule,
+    PassportModule.register({}),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

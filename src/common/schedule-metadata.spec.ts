@@ -1,11 +1,12 @@
 import 'reflect-metadata';
 import { describe, expect, it } from 'bun:test';
-import {
-  SCHEDULE_CRON_OPTIONS,
-  SCHEDULE_INTERVAL_OPTIONS,
-  SCHEDULER_NAME,
-} from '@nestjs/schedule/dist/schedule.constants';
 import { Listener } from 'necord';
+
+// Metadata keys written by the @Cron/@Interval decorators in @nestjs/schedule.
+// The package no longer exposes them as importable constants.
+const SCHEDULER_NAME = 'SCHEDULER_NAME';
+const SCHEDULE_CRON_OPTIONS = 'SCHEDULE_CRON_OPTIONS';
+const SCHEDULE_INTERVAL_OPTIONS = 'SCHEDULE_INTERVAL_OPTIONS';
 
 import { ActivityJobService } from '#core/activity/activity-job.service';
 import { ActivityWatchService } from '#core/activity/activity-watch.service';
