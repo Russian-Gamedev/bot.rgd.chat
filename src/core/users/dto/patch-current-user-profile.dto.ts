@@ -1,4 +1,3 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -21,14 +20,12 @@ import {
 } from '../constants/public-profile.constants';
 
 export class PatchPublicProfileLinkDto {
-  @ApiPropertyOptional({ example: 'GitHub' })
   @Transform(trimString)
   @IsString()
   @MinLength(1)
   @MaxLength(MAX_PUBLIC_PROFILE_LINK_LABEL_LENGTH)
   label: string;
 
-  @ApiPropertyOptional({ example: 'github' })
   @Transform(trimString)
   @IsString()
   @MinLength(1)
@@ -36,7 +33,6 @@ export class PatchPublicProfileLinkDto {
   @Matches(/^[a-z0-9_-]+$/i)
   icon: string;
 
-  @ApiPropertyOptional({ example: 'https://github.com/alice' })
   @Transform(trimString)
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(MAX_PUBLIC_PROFILE_LINK_URL_LENGTH)
@@ -44,14 +40,12 @@ export class PatchPublicProfileLinkDto {
 }
 
 export class PatchPublicProfileInfoDto {
-  @ApiPropertyOptional({ nullable: true, example: 'Game developer.' })
   @Transform(emptyStringToNull)
   @IsOptional()
   @IsString()
   @MaxLength(MAX_PUBLIC_PROFILE_ABOUT_LENGTH)
   about?: string | null;
 
-  @ApiPropertyOptional({ type: [PatchPublicProfileLinkDto] })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_PUBLIC_PROFILE_LINKS)
@@ -61,23 +55,17 @@ export class PatchPublicProfileInfoDto {
 }
 
 export class PatchCurrentUserProfileDto {
-  @ApiPropertyOptional({
-    nullable: true,
-    example: 'https://example.com/banner-alt.png',
-  })
   @Transform(emptyStringToNull)
   @IsOptional()
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(MAX_PUBLIC_PROFILE_LINK_URL_LENGTH)
   bannerAlt?: string | null;
 
-  @ApiPropertyOptional({ nullable: true, example: '2000-01-02T00:00:00.000Z' })
   @Transform(nullableDate)
   @IsOptional()
   @IsDate()
   birthDate?: Date | null;
 
-  @ApiPropertyOptional({ type: PatchPublicProfileInfoDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => PatchPublicProfileInfoDto)

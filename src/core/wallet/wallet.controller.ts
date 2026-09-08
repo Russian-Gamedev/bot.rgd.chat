@@ -7,16 +7,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBody,
-  ApiOkResponse,
-  ApiOperation,
-  ApiParam,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
 import { getActorUserId } from '#core/permissions/actor-user-id';
-import { ApiActorAuth } from '#core/permissions/openapi-auth.decorator';
 import {
   Actor,
   RequirePermissions,
@@ -31,16 +22,10 @@ import {
   CreditDebitDto,
   GuildQueryDto,
   TransferDto,
-  UserWalletBalanceResponseDto,
-  WalletBalanceResponseDto,
   WalletHistoryQueryDto,
-  WalletOperationResponseDto,
-  WalletTransactionDto,
-  WalletTransferResponseDto,
 } from './dto/wallet.dto';
 import { WalletService } from './wallet.service';
 
-@ApiTags('Wallet')
 @Controller('wallet')
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
@@ -48,13 +33,6 @@ export class WalletController {
   @Get('balance')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.WalletReadOwn)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Get own wallet balance',
-    description:
-      'User or bot endpoint. For bots, reads the wallet of the linked Discord bot user. Requires `wallet:read:own` permission.',
-  })
-  @ApiOkResponse({ type: WalletBalanceResponseDto })
   async getOwnBalance(@Actor() actor: AuthenticatedActor) {
     const userId = getActorUserId(actor);
     const balance = await this.walletService.getBalance(userId);
@@ -64,13 +42,6 @@ export class WalletController {
   @Get('history')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.WalletReadOwn)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Get own wallet transaction history',
-    description:
-      'User or bot endpoint. For bots, reads the transaction history of the linked Discord bot user. Requires `wallet:read:own` permission.',
-  })
-  @ApiOkResponse({ type: [WalletTransactionDto] })
   async getOwnHistory(
     @Actor() actor: AuthenticatedActor,
     @Query() query: WalletHistoryQueryDto,
@@ -93,14 +64,6 @@ export class WalletController {
   @Get('/balance/:userId')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.WalletManage)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Get user wallet balance',
-    description:
-      'User or bot endpoint. Requires `wallet:manage` permission for the requested target user.',
-  })
-  @ApiParam({ name: 'userId', description: 'Discord User ID.' })
-  @ApiOkResponse({ type: UserWalletBalanceResponseDto })
   async getUserBalance(@Param('userId') userId: string) {
     const balance = await this.walletService.getBalance(userId);
     return {
@@ -112,15 +75,6 @@ export class WalletController {
   @Get('history/:userId')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.WalletManage)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Get user wallet transaction history',
-    description:
-      'User or bot endpoint. Requires `wallet:manage` permission for the requested target user.',
-  })
-  @ApiParam({ name: 'userId', description: 'Discord User ID.' })
-  @ApiQuery({ name: 'guild_id', description: 'Discord Guild ID.' })
-  @ApiOkResponse({ type: [WalletTransactionDto] })
   async getUserHistory(
     @Param('userId') userId: string,
     @Query() query: GuildQueryDto & WalletHistoryQueryDto,
@@ -146,13 +100,6 @@ export class WalletController {
   @Post('credit')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.WalletManage)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Credit coins to a user',
-    description: 'User or bot endpoint. Requires `wallet:manage` permission.',
-  })
-  @ApiBody({ type: CreditDebitDto })
-  @ApiOkResponse({ type: WalletOperationResponseDto })
   async creditUser(@Body() dto: CreditDebitDto) {
     const tx = await this.walletService.credit(
       dto.user_id,
@@ -169,13 +116,6 @@ export class WalletController {
   @Post('debit')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.WalletManage)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Debit coins from a user',
-    description: 'User or bot endpoint. Requires `wallet:manage` permission.',
-  })
-  @ApiBody({ type: CreditDebitDto })
-  @ApiOkResponse({ type: WalletOperationResponseDto })
   async debitUser(@Body() dto: CreditDebitDto) {
     const tx = await this.walletService.debit(
       dto.user_id,
@@ -192,13 +132,6 @@ export class WalletController {
   @Post('transfer')
   @UseGuards(PermissionGuard)
   @RequirePermissions(Permission.WalletManage)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Transfer coins between users',
-    description: 'User or bot endpoint. Requires `wallet:manage` permission.',
-  })
-  @ApiBody({ type: TransferDto })
-  @ApiOkResponse({ type: WalletTransferResponseDto })
   async transferBetweenUsers(@Body() dto: TransferDto) {
     const [debitTx, creditTx] = await this.walletService.transfer(
       dto.from_user_id,
