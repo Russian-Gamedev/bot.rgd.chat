@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import {
   ConsoleLogger,
   INestApplication,
@@ -27,14 +26,6 @@ type ShutdownSignal = (typeof SHUTDOWN_SIGNALS)[number];
 type ShutdownApplication = INestApplication & {
   close(signal?: ShutdownSignal): Promise<void>;
 };
-
-async function getSwaggerCustom() {
-  const assetsDir = path.resolve('./assets/swagger');
-  const customCss = await Bun.file(path.join(assetsDir, 'custom.css')).text();
-  const customJs = await Bun.file(path.join(assetsDir, 'custom.js')).text();
-
-  return { customCss, customJs };
-}
 
 function registerProcessShutdownHandlers(
   app: ShutdownApplication,
@@ -142,10 +133,7 @@ async function main() {
 
   const document = SwaggerModule.createDocument(app, documentBuilder);
 
-  const { customCss, customJs } = await getSwaggerCustom();
   SwaggerModule.setup('docs', app, document, {
-    customCss,
-    customJs,
     customfavIcon: '/favicon.ico',
     customSiteTitle: 'RGD Bot API Docs',
   });
