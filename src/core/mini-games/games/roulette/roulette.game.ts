@@ -41,13 +41,13 @@ import { cast, formatCoins } from '#lib/utils';
 import type { DiscordID } from '#root/lib/types';
 import type { RouletteColor } from './roulette.types';
 import {
-  payoutFor,
   pocketColor,
   ROULETTE_EMOJI,
   ROULETTE_LABELS,
   ROULETTE_PAYOUTS,
   resolveFinalFrame,
   rollPocket,
+  settleBet,
   spinFrame,
 } from './roulette.utils';
 
@@ -220,12 +220,14 @@ export class RouletteGame {
       finalGrid = final.grid;
       await messenger.edit({ embeds: [embed.setDescription(finalGrid)] });
 
+      const { payout } = settleBet(color, rolled, bet);
       return {
-        payout: payoutFor(rolled, bet),
+        payout,
         details: {
           pocket,
           color: rolled,
-          multiplier: Number(ROULETTE_PAYOUTS[rolled]),
+          pick: color,
+          multiplier: payout > 0n ? Number(ROULETTE_PAYOUTS[rolled]) : 0,
         },
       };
     };

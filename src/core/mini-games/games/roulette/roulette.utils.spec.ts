@@ -9,6 +9,7 @@ import {
   ROULETTE_PAYOUTS,
   resolveFinalFrame,
   rollPocket,
+  settleBet,
   spinFrame,
 } from './roulette.utils';
 
@@ -45,6 +46,39 @@ describe('roulette wheel', () => {
       expect(payoutFor('red', 100n)).toBe(200n);
       expect(payoutFor('black', 100n)).toBe(200n);
       expect(payoutFor('green', 100n)).toBe(3600n);
+    });
+  });
+
+  describe('settleBet', () => {
+    it('pays only when the pick matches the rolled color', () => {
+      expect(settleBet('red', 'red', 100n)).toEqual({
+        won: true,
+        payout: 200n,
+      });
+      expect(settleBet('green', 'green', 100n)).toEqual({
+        won: true,
+        payout: 3600n,
+      });
+    });
+
+    it('never pays a mismatched roll', () => {
+      expect(settleBet('red', 'black', 100n)).toEqual({
+        won: false,
+        payout: 0n,
+      });
+      expect(settleBet('black', 'red', 100n)).toEqual({
+        won: false,
+        payout: 0n,
+      });
+      // the expensive one: rolling green must not pay a red/black pick
+      expect(settleBet('red', 'green', 100n)).toEqual({
+        won: false,
+        payout: 0n,
+      });
+      expect(settleBet('green', 'black', 100n)).toEqual({
+        won: false,
+        payout: 0n,
+      });
     });
   });
 

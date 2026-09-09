@@ -41,6 +41,16 @@ export function payoutFor(color: RouletteColor, bet: bigint): bigint {
   return ROULETTE_PAYOUTS[color] * bet;
 }
 
+/** Settles a color bet: pays out only when the pick matches the roll. */
+export function settleBet(
+  pick: RouletteColor,
+  rolled: RouletteColor,
+  bet: bigint,
+): { won: boolean; payout: bigint } {
+  const won = pick === rolled;
+  return { won, payout: won ? payoutFor(rolled, bet) : 0n };
+}
+
 /**
  * Wheel rendering: 5×5 emoji grid. The 16-cell outer ring carries the
  * sector colors, the inner ring is void and the center is the arrow.
