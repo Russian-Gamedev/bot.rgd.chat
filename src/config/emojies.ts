@@ -29,3 +29,13 @@ export enum EmojiCoin {
   Bottom = `<:coin_flipped:${EmojiCoinId.Bottom}>`,
   Animated = `<a:coin_flip:${EmojiCoinId.Animated}>`,
 }
+
+export enum EmojiSlotsId {
+  Slots = '1547256591349456987',
+  Void = '1547256144375058523',
+}
+
+export enum EmojiSlots {
+  Slots = `<a:slots:${EmojiSlotsId.Slots}>`,
+  Void = `<:void:${EmojiSlotsId.Void}>`,
+}
