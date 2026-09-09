@@ -4,8 +4,8 @@ import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module
 import { UserModule } from '#core/users/users.module';
 import { WalletModule } from '#core/wallet/wallet.module';
 
-import { FlipGame } from './games/flip.game';
-import { SlotGame } from './games/slot.game';
+import { FlipGame } from './games/flip/flip.game';
+import { SlotGame } from './games/slot/slot.game';
 
 @Module({
   imports: [UserModule, WalletModule, GuildSettingsModule],
