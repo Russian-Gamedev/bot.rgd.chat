@@ -9,3 +9,12 @@ export class NicknameHistoryDto {
   })
   member: GuildMember | null;
 }
+
+export class UnlockNicknameDto {
+  @MemberOption({
+    name: 'member',
+    description: 'Участник, с которого снять блокировку никнейма',
+    required: true,
+  })
+  member: GuildMember;
+}

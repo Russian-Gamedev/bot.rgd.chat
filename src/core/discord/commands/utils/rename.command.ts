@@ -303,6 +303,7 @@ export class RenameCommands {
       new_nickname,
       lockDuration * 3600,
       BigInt(executor_member.id),
+      lockCost,
     );
 
     const durationText = `<t:${Math.floor(Date.now() / 1000) + lockDuration * 3600}:R>`;
