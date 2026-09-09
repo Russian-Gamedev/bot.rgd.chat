@@ -30,67 +30,7 @@ export class NicknameService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.migrateLegacyLocks();
-  }
-
-  // TODO: delete in next patch (legacy lock format migration)
-  private async migrateLegacyLocks(): Promise<void> {
-    const keys = await this.redis.keys('nickname:locked:*');
-    if (!keys.length) return;
-
-    for (const key of keys) {
-      const legacyNickname = await this.redis.get(key);
-      if (!legacyNickname || this.parseLock(legacyNickname)) continue;
-
-      const ttlSeconds = await this.redis.ttl(key);
-      if (ttlSeconds <= 0) continue;
-
-      const [, , guildId] = key.split(':');
-      const cost = await this.findLegacyLockCost(
-        BigInt(guildId),
-        legacyNickname,
-      );
-
-      await this.redis.set(
-        key,
-        JSON.stringify({ nickname: legacyNickname, cost: cost.toString() }),
-        'EX',
-        ttlSeconds,
-      );
-
-      this.logger.log(
-        `Migrated legacy nickname lock ${key} to the new format (cost: ${cost}, TTL: ${ttlSeconds}s)`,
-      );
-    }
-  }
-
-  // TODO: delete in next patch (legacy lock format migration)
-  private async findLegacyLockCost(
-    guildId: bigint,
-    nickname: string,
-  ): Promise<bigint> {
-    const transactions = await this.walletService.findTransactions({
-      guildId: String(guildId),
-      type: WalletTransactionType.DEBIT,
-      reason: 'lock-nickname',
-      limit: 50,
-    });
-
-    const matched =
-      transactions.find(
-        (tx) =>
-          (tx.metadata as { new_nickname?: string } | null)?.new_nickname ===
-          nickname,
-      ) ?? transactions[0];
-
-    if (!matched) {
-      this.logger.warn(
-        `No lock-nickname transaction found for legacy lock with nickname "${nickname}" in guild ${guildId}`,
-      );
-      return 0n;
-    }
-
-    return matched.amount;
+    ///
   }
 
   private getRedisKey(guildId: bigint, userId: bigint): string {
