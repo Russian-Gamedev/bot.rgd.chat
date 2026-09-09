@@ -25,6 +25,16 @@ export interface WalletOperationOptions {
   metadata?: Record<string, unknown>;
 }
 
+export interface WalletTransactionQuery {
+  userId?: DiscordID;
+  guildId?: DiscordID | null;
+  type?: WalletTransactionType;
+  reason?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+}
+
 @Injectable()
 export class WalletService {
   constructor(
@@ -215,6 +225,37 @@ export class WalletService {
       orderBy: { createdAt: 'DESC' },
       limit: Math.min(limit, 100),
       offset,
+    });
+  }
+
+  async findTransactions(
+    query: WalletTransactionQuery = {},
+  ): Promise<WalletTransactionEntity[]> {
+    const {
+      userId,
+      guildId,
+      type,
+      reason,
+      fromDate,
+      toDate,
+      limit = 50,
+    } = query;
+
+    const where: Record<string, unknown> = {};
+    if (userId) where.user_id = BigInt(userId);
+    if (guildId) where.guild_id = BigInt(guildId);
+    if (type) where.type = type;
+    if (reason) where.reason = reason;
+    if (fromDate || toDate) {
+      where.createdAt = {
+        ...(fromDate ? { $gte: fromDate } : {}),
+        ...(toDate ? { $lte: toDate } : {}),
+      };
+    }
+
+    return this.txRepository.find(where, {
+      orderBy: { createdAt: 'DESC' },
+      limit: Math.min(limit, 100),
     });
   }
 
