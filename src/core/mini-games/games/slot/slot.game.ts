@@ -147,7 +147,7 @@ const LINES: Array<{ name: string; cells: Array<[number, number]> }> = [
   },
 ];
 
-const HIDDEN_SYMBOL = EmojiSlots.Void;
+const HIDDEN_SYMBOL = EmojiSlots.Slots;
 const TOTAL_REELS = 3;
 const REEL_SPIN_MS = 1_000;
 
@@ -261,7 +261,7 @@ export class SlotGame {
     bet: bigint,
   ): Promise<void> {
     const embed = new EmbedBuilder()
-      .setTitle(`${EmojiSlots.Slots} Слот машина ${EmojiSlots.Slots}`)
+      .setTitle('🎰 Слот машина 🎰')
       .setColor(Colors.Primary)
       .setAuthor({
         name: member.displayName,
