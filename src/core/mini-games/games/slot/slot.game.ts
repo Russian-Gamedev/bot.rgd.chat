@@ -70,13 +70,13 @@ const REEL = [
  * so the house edge is 1 - 8 * Σ (w/18)³ * payout = 1 - 5520/5832 ≈ 5.3%.
  */
 const PAYOUTS: Record<string, number> = {
-  '🍒': 2,
   '🍋': 2,
-  '🔔': 4,
-  '💎': 8,
-  '⭐': 10,
-  '🍀': 20,
-  '7️⃣': 40,
+  '🍒': 5,
+  '🔔': 10,
+  '💎': 20,
+  '⭐': 50,
+  '🍀': 100,
+  '7️⃣': 200,
 };
 
 /** Paying lines on the 3x3 grid, cells are [row, col]. */
