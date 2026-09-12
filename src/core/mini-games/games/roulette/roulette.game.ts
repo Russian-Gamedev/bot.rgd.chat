@@ -18,7 +18,7 @@ import {
   StringOption,
 } from 'necord';
 import { Colors } from '#config/constants';
-import { EmojiCoin } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { MiniGame } from '#core/mini-games/entities/mini-game-round.entity';
 import { MiniGameAlreadyPlayingException } from '#core/mini-games/mini-game.exception';
 import { MiniGameService } from '#core/mini-games/mini-game.service';
@@ -249,7 +249,7 @@ export class RouletteGame {
       : `🎲 Выпало ${ROULETTE_EMOJI[rolledColor]} **${ROULETTE_LABELS[rolledColor]}**. К сожалению, вы проиграли.`;
 
     embed.setDescription(
-      `${finalGrid}\n\n${outcome}\n__Ставка:__ ${formatCoins(result.bet)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(result.balanceBefore)}~~ -> ${formatCoins(result.balanceAfter)} ${EmojiCoin.Bottom}`,
+      `${finalGrid}\n\n${outcome}\n__Ставка:__ ${formatCoins(result.bet)} ${Emojis.CoinTop}\n__Баланс:__ ~~${formatCoins(result.balanceBefore)}~~ -> ${formatCoins(result.balanceAfter)} ${Emojis.CoinBottom}`,
     );
     embed.setColor(result.won ? '#5fdb00' : '#ff2f00');
 

@@ -16,7 +16,7 @@ import {
   type SlashCommandContext,
 } from 'necord';
 import { Colors } from '#config/constants';
-import { EmojiCoin, EmojiSlots } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { MiniGame } from '#core/mini-games/entities/mini-game-round.entity';
 import { MiniGameAlreadyPlayingException } from '#core/mini-games/mini-game.exception';
 import { MiniGameService } from '#core/mini-games/mini-game.service';
@@ -147,7 +147,7 @@ const LINES: Array<{ name: string; cells: Array<[number, number]> }> = [
   },
 ];
 
-const HIDDEN_SYMBOL = EmojiSlots.Slots;
+const HIDDEN_SYMBOL = Emojis.Slots;
 const TOTAL_REELS = 3;
 const REEL_SPIN_MS = 1_000;
 
@@ -347,7 +347,7 @@ export class SlotGame {
       : 'К сожалению, вы проиграли.';
 
     embed.setDescription(
-      `${gridText}\n\n${outcome}\n__Ставка:__ ${formatCoins(result.bet)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(result.balanceBefore)}~~ -> ${formatCoins(result.balanceAfter)} ${EmojiCoin.Bottom}`,
+      `${gridText}\n\n${outcome}\n__Ставка:__ ${formatCoins(result.bet)} ${Emojis.CoinTop}\n__Баланс:__ ~~${formatCoins(result.balanceBefore)}~~ -> ${formatCoins(result.balanceAfter)} ${Emojis.CoinBottom}`,
     );
     embed.setColor(result.won ? '#5fdb00' : '#ff2f00');
 

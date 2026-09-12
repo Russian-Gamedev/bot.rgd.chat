@@ -16,7 +16,7 @@ import {
   SlashCommand,
   type SlashCommandContext,
 } from 'necord';
-import { EmojiCoin, EmojiCoinId } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { MiniGame } from '#core/mini-games/entities/mini-game-round.entity';
 import { MiniGameAlreadyPlayingException } from '#core/mini-games/mini-game.exception';
 import { MiniGameService } from '#core/mini-games/mini-game.service';
@@ -36,7 +36,7 @@ import {
 import type { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { UserService } from '#core/users/users.service';
 import { InsufficientFundsException } from '#core/wallet/wallet.exception';
-import { formatCoins } from '#lib/utils';
+import { formatCoins, getEmojiId } from '#lib/utils';
 import type { DiscordID } from '#root/lib/types';
 
 const FLIP_DURATION_MS = 3_000;
@@ -160,7 +160,7 @@ export class FlipGame {
         iconURL: member.displayAvatarURL(),
       })
       .setThumbnail(
-        `https://cdn.discordapp.com/emojis/${EmojiCoinId.Animated}.webp?size=64&animated=true`,
+        `https://cdn.discordapp.com/emojis/${getEmojiId(Emojis.CoinAnimated)}.webp?size=64&animated=true`,
       );
 
     const toss = async ({
@@ -169,7 +169,7 @@ export class FlipGame {
       await messenger.ack();
 
       embed.setDescription(
-        `**ПОДБРАСЫВАЕМ...**\n__Ставка:__ ${formatCoins(bet)} ${EmojiCoin.Top}\n__Баланс:__ ${formatCoins(balance)} ${EmojiCoin.Bottom}`,
+        `**ПОДБРАСЫВАЕМ...**\n__Ставка:__ ${formatCoins(bet)} ${Emojis.CoinTop}\n__Баланс:__ ${formatCoins(balance)} ${Emojis.CoinBottom}`,
       );
       await messenger.edit({ embeds: [embed] });
 
@@ -190,10 +190,10 @@ export class FlipGame {
     );
 
     embed.setDescription(
-      `**${result.won ? 'ПОБЕДА' : 'ПОСАСАКА'}**\n__Ставка:__ ${formatCoins(result.bet)} ${EmojiCoin.Top}\n__Баланс:__ ~~${formatCoins(result.balanceBefore)}~~ -> ${formatCoins(result.balanceAfter)} ${EmojiCoin.Bottom}`,
+      `**${result.won ? 'ПОБЕДА' : 'ПОСАСАКА'}**\n__Ставка:__ ${formatCoins(result.bet)} ${Emojis.CoinTop}\n__Баланс:__ ~~${formatCoins(result.balanceBefore)}~~ -> ${formatCoins(result.balanceAfter)} ${Emojis.CoinBottom}`,
     );
     embed.setThumbnail(
-      `https://cdn.discordapp.com/emojis/${result.won ? EmojiCoinId.Bottom : EmojiCoinId.Top}.webp?size=64&animated=true`,
+      `https://cdn.discordapp.com/emojis/${result.won ? getEmojiId(Emojis.CoinBottom) : getEmojiId(Emojis.CoinTop)}.webp?size=64&animated=true`,
     );
     embed.setColor(result.won ? '#5fdb00' : '#ff2f00');
 

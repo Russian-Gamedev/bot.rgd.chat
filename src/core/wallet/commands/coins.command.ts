@@ -16,7 +16,7 @@ import {
   type SlashCommandContext,
   Subcommand,
 } from 'necord';
-import { EmojiCoin } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { UserService } from '#core/users/users.service';
 import {
   WalletTransactionEntity,
@@ -139,7 +139,7 @@ export class CoinsCommand {
     const embed = new EmbedBuilder()
       .setColor('#FF9900')
       .setDescription(
-        `<@${interaction.user.id}> перевёл ${formatCoins(amount)} ${EmojiCoin.Bottom} монет пользователю <@${dto.target.id}>.`,
+        `<@${interaction.user.id}> перевёл ${formatCoins(amount)} ${Emojis.CoinBottom} монет пользователю <@${dto.target.id}>.`,
       );
 
     return interaction.reply({ embeds: [embed] });
@@ -173,7 +173,7 @@ export class CoinsCommand {
     const embed = new EmbedBuilder()
       .setColor('#FF9900')
       .setDescription(
-        `<@${dto.member.id}>, <@${interaction.user.id}> запрашивает у вас ${formatCoins(value)} ${EmojiCoin.Bottom} монет.`,
+        `<@${dto.member.id}>, <@${interaction.user.id}> запрашивает у вас ${formatCoins(value)} ${Emojis.CoinBottom} монет.`,
       );
 
     return interaction.reply({
@@ -228,7 +228,7 @@ export class CoinsCommand {
     const embed = new EmbedBuilder()
       .setColor('#5fdb00')
       .setDescription(
-        `✅ <@${payload.targetId}> перевёл ${formatCoins(payload.value)} ${EmojiCoin.Bottom} монет <@${payload.requesterId}>.`,
+        `✅ <@${payload.targetId}> перевёл ${formatCoins(payload.value)} ${Emojis.CoinBottom} монет <@${payload.requesterId}>.`,
       );
     return interaction.update({ embeds: [embed], components: [] });
   }

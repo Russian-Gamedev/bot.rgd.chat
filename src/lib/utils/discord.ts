@@ -1,10 +1,25 @@
-import { BaseImageURLOptions, GuildMember, Message, User } from 'discord.js';
+import {
+  BaseImageURLOptions,
+  GuildMember,
+  Message,
+  parseEmoji,
+  User,
+} from 'discord.js';
 
 import { DISCORD_CDN } from '#config/constants';
 
 /** Checks whether a string looks like a Discord snowflake ID. */
 export function isDiscordId(value: string): boolean {
   return /^\d{17,21}$/.test(value);
+}
+
+/** Extracts the snowflake ID from a custom emoji tag like `<:name:id>` or `<a:name:id>`. */
+export function getEmojiId(emoji: string): string {
+  const parsed = parseEmoji(emoji);
+  if (!parsed?.id) {
+    throw new Error(`Not a custom emoji tag: ${emoji}`);
+  }
+  return parsed.id;
 }
 
 /** Builds a Discord CDN avatar URL from a user ID and avatar hash. Falls back to default avatar. */

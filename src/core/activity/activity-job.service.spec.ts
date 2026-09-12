@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from 'bun:test';
 import type { EntityManager } from '@mikro-orm/core';
 import type { Client, Guild } from 'discord.js';
 
-import { EmojiCoin } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { GuildEvents } from '#config/guilds';
 import type { GuildEventService } from '#core/guilds/events/guild-events.service';
 import type { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
@@ -184,7 +184,7 @@ describe('ActivityJobService', () => {
     expect(send).toHaveBeenCalledTimes(2);
     const [winnerMessage] = send.mock.calls[1] as unknown as [string];
     expect(winnerMessage.replace(/\u00A0/g, ' ')).toBe(
-      `<@42> выиграл 10 000 ${EmojiCoin.Animated}`,
+      `<@42> выиграл 10 000 ${Emojis.CoinAnimated}`,
     );
   });
 

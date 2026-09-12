@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 
-import { EmojiSlots } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 
 import type { RouletteColor } from './roulette.types';
 
@@ -55,7 +55,7 @@ export function settleBet(
  * Wheel rendering: 5×5 emoji grid. The 16-cell outer ring carries the
  * sector colors, the inner ring is void and the center is the arrow.
  */
-const VOID = EmojiSlots.Void;
+const VOID = Emojis.Void;
 
 /** Sector colors, clockwise from the top-left corner: 7 red, 8 black, 1 green. */
 const RING: string[] = [

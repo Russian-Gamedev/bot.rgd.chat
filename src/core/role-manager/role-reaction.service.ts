@@ -10,7 +10,7 @@ import {
 } from 'discord.js';
 import { Context, MessageCommand, type MessageCommandContext } from 'necord';
 
-import { EmojiNumber } from '#config/emojies';
+import { EmojiNumber } from '#config/emojis';
 
 import { RoleReactionEntity } from './entities/role-reaction.entity';
 

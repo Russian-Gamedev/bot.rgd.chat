@@ -8,7 +8,7 @@ import {
   type SlashCommandContext,
 } from 'necord';
 
-import { EmojiCoin } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { UserService } from '#core/users/users.service';
 import { InsufficientFundsException } from '#core/wallet/wallet.exception';
 import { WalletService } from '#core/wallet/wallet.service';
@@ -124,7 +124,7 @@ export class NicknameCommands {
     } catch (error) {
       if (error instanceof InsufficientFundsException) {
         return interaction.reply({
-          content: `Недостаточно монет для снятия блокировки. Нужно: ${formatCoins(unlockCost)} ${EmojiCoin.Animated}`,
+          content: `Недостаточно монет для снятия блокировки. Нужно: ${formatCoins(unlockCost)} ${Emojis.CoinAnimated}`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -136,7 +136,7 @@ export class NicknameCommands {
     const expiresAt = lock.expiresAt ? ` (до <t:${lock.expiresAt}:R>)` : '';
 
     return interaction.reply({
-      content: `<@${interaction.user.id}> снял блокировку никнейма <@${target.id}>${expiresAt} за ${formatCoins(unlockCost)} ${EmojiCoin.Animated}`,
+      content: `<@${interaction.user.id}> снял блокировку никнейма <@${target.id}>${expiresAt} за ${formatCoins(unlockCost)} ${Emojis.CoinAnimated}`,
     });
   }
 }

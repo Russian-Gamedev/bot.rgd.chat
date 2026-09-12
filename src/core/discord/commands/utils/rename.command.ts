@@ -10,7 +10,7 @@ import {
   type TextCommandContext,
 } from 'necord';
 
-import { EmojiCoin } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { GuildEvents, GuildSettings } from '#config/guilds';
 import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
@@ -255,7 +255,7 @@ export class RenameCommands {
 
     return {
       error: false,
-      message: `Бот переименован в \`${new_nickname}\` за ${formatCoins(RENAME_BOT_COST)} ${EmojiCoin.Animated}`,
+      message: `Бот переименован в \`${new_nickname}\` за ${formatCoins(RENAME_BOT_COST)} ${Emojis.CoinAnimated}`,
       attachments: [
         'https://tenor.com/view/when-the-money-vince-mcmahon-big-chungus-wwe-gif-16018373',
       ],
@@ -310,7 +310,7 @@ export class RenameCommands {
 
     return {
       error: false,
-      message: `Участник <@${target_member.user.id}> изменён на \`${new_nickname}\` и заблокирован до ${durationText} за ${formatCoins(lockCost)} ${EmojiCoin.Animated}`,
+      message: `Участник <@${target_member.user.id}> изменён на \`${new_nickname}\` и заблокирован до ${durationText} за ${formatCoins(lockCost)} ${Emojis.CoinAnimated}`,
     };
   }
 }

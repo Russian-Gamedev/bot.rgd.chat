@@ -13,7 +13,7 @@ import { Context, SlashCommand, type SlashCommandContext } from 'necord';
 
 import { MetricsService } from '#common/metrics/metrics.service';
 import { Colors } from '#config/constants';
-import { EmojiCoin } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { GuildEvents, GuildSettings } from '#config/guilds';
 import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
@@ -384,7 +384,7 @@ export class ActivityJobService {
     const winner = pickRandom(activities);
     const prize = ACTIVITY_RAFFLE_PRIZES[period];
     const userStr = `<@${winner.user_id}>`;
-    const money = `${formatCoins(prize)} ${EmojiCoin.Animated}`;
+    const money = `${formatCoins(prize)} ${Emojis.CoinAnimated}`;
 
     try {
       const user = await this.userService.findOrCreateMember(
@@ -423,7 +423,7 @@ export class ActivityJobService {
     );
     const usersStreak = await this.activityService.getTopMemberStreaks(
       guildId,
-      15,
+      10,
     );
 
     const embed = new EmbedBuilder();
@@ -446,7 +446,7 @@ export class ActivityJobService {
       data
         .sort((a, b) => b[key] - a[key])
         .map((value) => ({ user: value.user_id, value: value[key] }))
-        .slice(0, 15)
+        .slice(0, 10)
         .filter((a) => a.value > 0);
 
     const buildLine = (
@@ -473,7 +473,7 @@ export class ActivityJobService {
 
     const topVoice = buildTop(
       sort(activities, 'voice_seconds'),
-      (item, rank) => buildLine(item.user, formatTime(item.value, 3), rank),
+      (item, rank) => buildLine(item.user, formatTime(item.value, 2), rank),
       'никто не заходил в войс :(',
     );
 
@@ -490,7 +490,7 @@ export class ActivityJobService {
     const lastReactions = reactionsRaw.at(-1);
     const reactions = reactionsRaw
       .filter((a) => a.reaction_count > 0)
-      .slice(0, 15);
+      .slice(0, 10);
 
     /// shit code to always show the last user in the list
     if (
@@ -520,14 +520,6 @@ export class ActivityJobService {
       'никто не реагировал :(',
     );
 
-    const topNewRegs = buildTop(
-      newRegs.slice(0, 15),
-      (item, rank) => `${rank}. <@${item.user_id}>\n`,
-      'никто не пришел к нам :(',
-    );
-
-    const totalActives = activities.length.toLocaleString('ru-RU');
-
     const topStreaks = buildTop(
       usersStreak,
       (item, rank) =>
@@ -540,14 +532,36 @@ export class ActivityJobService {
     );
 
     embed.addFields(
-      { name: 'Стата по войсу', value: topVoice, inline: true },
-      { name: 'Стата по чату', value: topMessages, inline: true },
+      {
+        name: `${Emojis.Volume} Стата по войсу`,
+        value: topVoice,
+        inline: true,
+      },
+      {
+        name: `${Emojis.Message} Стата по чату`,
+        value: topMessages,
+        inline: true,
+      },
       { name: '\u200b', value: '\u200b' },
-      { name: 'Подсчёт неплохих цифр', value: topReactions, inline: true },
-      { name: 'Новореги', value: topNewRegs, inline: true },
+      {
+        name: `${Emojis.Madlaugh} Подсчёт неплохих цифр`,
+        value: topReactions,
+        inline: true,
+      },
+      { name: '🔥 Активные пользователи', value: topStreaks, inline: true },
       { name: '\u200b', value: '\u200b' },
-      { name: 'Активные пользователи', value: topStreaks, inline: true },
-      { name: 'Писало в чате', value: totalActives, inline: false },
+      ...(newRegs.length > 0
+        ? [
+            {
+              name: '👋 Новореги',
+              value: newRegs
+                .slice(0, 10)
+                .map((item) => `<@${item.user_id}>`)
+                .join(','),
+              inline: true,
+            },
+          ]
+        : []),
     );
 
     embed.setColor(Colors.Primary);
