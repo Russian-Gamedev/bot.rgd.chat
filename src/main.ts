@@ -63,8 +63,12 @@ function registerProcessShutdownHandlers(
 }
 
 async function main() {
+  const isProduction = process.env.NODE_ENV === 'production';
   const app = await NestFactory.create(AppModule, {
-    logger: new ConsoleLogger({ json: process.env.NODE_ENV === 'production' }),
+    logger: new ConsoleLogger({
+      json: isProduction,
+      logLevels: isProduction ? ['log', 'warn', 'error', 'fatal'] : undefined,
+    }),
   });
   const logger = new Logger('Bootstrap');
 

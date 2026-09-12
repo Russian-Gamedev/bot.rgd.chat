@@ -61,7 +61,7 @@ export class ActivityService {
     const reactionCount = increment.reactionCount ?? 0;
     const activityDate = toMoscowDateKey(at);
 
-    this.logger.log(
+    this.logger.debug(
       `Recording activity for guild ${normalizedGuildId}, user ${normalizedUserId}, date ${activityDate}, at ${at.toISOString()}: messageScore=${messageScore}, voiceSeconds=${voiceSeconds}, reactionCount=${reactionCount}`,
     );
 

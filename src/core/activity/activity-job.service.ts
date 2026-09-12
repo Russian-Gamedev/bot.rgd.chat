@@ -236,7 +236,7 @@ export class ActivityJobService {
         if (!checkAutoRole) continue;
 
         if (user.activeStreak >= activeRoleThreshold!) {
-          this.logger.log(
+          this.logger.debug(
             `User ${user.user_id} in guild ${guild.id} has an active streak of ${user.activeStreak} days!`,
           );
 
