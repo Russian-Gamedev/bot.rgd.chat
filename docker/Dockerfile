@@ -14,6 +14,8 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
+ENV NODE_ENV=production
+
 # Build a Linux Bun standalone executable inside the container.
 RUN bun run build.ts
 
