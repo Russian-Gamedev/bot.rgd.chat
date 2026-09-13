@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDate,
   IsOptional,
   IsString,
@@ -70,6 +71,10 @@ export class PatchCurrentUserProfileDto {
   @ValidateNested()
   @Type(() => PatchPublicProfileInfoDto)
   info?: PatchPublicProfileInfoDto;
+
+  @IsOptional()
+  @IsBoolean()
+  activityPublic?: boolean;
 }
 
 function trimString({ value }: { value: unknown }) {

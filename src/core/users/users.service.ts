@@ -104,6 +104,10 @@ export class UserService {
       profile.birthDate = dto.birthDate ?? null;
     }
 
+    if (hasOwn(dto, 'activityPublic')) {
+      profile.activityPublic = dto.activityPublic ?? false;
+    }
+
     if (dto.info) {
       profile.profileInfo = mergeProfileInfoPatch(
         profile.profileInfo,

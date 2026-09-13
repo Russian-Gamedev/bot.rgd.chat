@@ -9,6 +9,11 @@ import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { UserService } from '#core/users/users.service';
 import type { DiscordID } from '#root/lib/types';
 import { toMoscowDateKey } from './activity-period';
+import {
+  type ActivityDayDto,
+  type ActivityOverviewDayDto,
+  type ActivityTotalsDto,
+} from './dto/activity-stats.dto';
 import { UserActivityDailyEntity } from './entities/user-activity-daily.entity';
 import { UserActivityTotalEntity } from './entities/user-activity-total.entity';
 
@@ -163,6 +168,84 @@ export class ActivityService {
     });
 
     return aggregateActivityRows(rows);
+  }
+
+  async getUserActivityDays(
+    userId: DiscordID,
+    start: string,
+    end: string,
+  ): Promise<ActivityDayDto[]> {
+    const rows = await this.dailyActivityRepository.find({
+      user_id: BigInt(userId),
+      guild_id: null,
+      date: { $gte: start, $lt: end },
+    });
+
+    return rows
+      .map(toActivityDay)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  }
+
+  async getUserActivityTotals(userId: DiscordID): Promise<ActivityTotalsDto> {
+    return toActivityTotals(await this.getGlobalActivityTotal(userId));
+  }
+
+  async getOverviewActivityDays(
+    start: string,
+    end: string,
+  ): Promise<ActivityOverviewDayDto[]> {
+    interface OverviewRow {
+      date: string;
+      message_score: number | string | bigint;
+      voice_seconds: number | string | bigint;
+      reaction_count: number | string | bigint;
+      active_users: number | string | bigint;
+    }
+
+    const rows: OverviewRow[] = await this.dailyActivityRepository
+      .createQueryBuilder('a')
+      .select([
+        'a.date',
+        raw('sum(a.message_score)').as('message_score'),
+        raw('sum(a.voice_seconds)').as('voice_seconds'),
+        raw('sum(a.reaction_count)').as('reaction_count'),
+        raw('count(distinct a.user_id)').as('active_users'),
+      ])
+      .where({ guild_id: null, date: { $gte: start, $lt: end } })
+      .groupBy('a.date')
+      .orderBy({ 'a.date': 'asc' })
+      .execute();
+
+    return rows.map((row) => ({
+      ...toActivityDay(row),
+      activeUsers: Number(row.active_users),
+    }));
+  }
+
+  async getOverviewActivityTotals(): Promise<ActivityTotalsDto> {
+    const row = await this.totalActivityRepository
+      .createQueryBuilder('t')
+      .select([
+        raw('coalesce(sum(t.message_score), 0)').as('message_score'),
+        raw('coalesce(sum(t.voice_seconds), 0)').as('voice_seconds'),
+        raw('coalesce(sum(t.reaction_count), 0)').as('reaction_count'),
+      ])
+      .where({ guild_id: null })
+      .execute('get');
+
+    return toActivityTotals(row as UserActivityTotalEntity | null);
+  }
+
+  async getActiveUsersCountSince(start: string): Promise<number> {
+    const row = await this.dailyActivityRepository
+      .createQueryBuilder('a')
+      .select([raw('count(distinct a.user_id)').as('active_users')])
+      .where({ guild_id: null, date: { $gte: start } })
+      .execute('get');
+
+    return Number(
+      (row as { active_users?: number | string } | null)?.active_users ?? 0,
+    );
   }
 
   async increaseMemberStreak(member: MemberProfileEntity): Promise<void> {
@@ -322,8 +405,32 @@ function aggregateActivityRows(
   return [...stats.values()];
 }
 
-function toNumber(value: number | bigint): number {
+function toNumber(value: number | bigint | string): number {
   return Number(value);
+}
+
+function toActivityDay(row: {
+  date: string;
+  message_score: number | bigint | string;
+  voice_seconds: number | bigint | string;
+  reaction_count: number | bigint | string;
+}): ActivityDayDto {
+  return {
+    date: row.date,
+    messageScore: toNumber(row.message_score),
+    voiceSeconds: toNumber(row.voice_seconds),
+    reactionCount: toNumber(row.reaction_count),
+  };
+}
+
+function toActivityTotals(
+  totals: UserActivityTotalEntity | null,
+): ActivityTotalsDto {
+  return {
+    messageScore: totals ? toNumber(totals.message_score) : 0,
+    voiceSeconds: totals ? toNumber(totals.voice_seconds) : 0,
+    reactionCount: totals ? toNumber(totals.reaction_count) : 0,
+  };
 }
 
 const INCREMENT_FIELDS = [

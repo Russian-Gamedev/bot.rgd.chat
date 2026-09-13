@@ -18,7 +18,7 @@ import { UserService } from './users.service';
 
 const USER_RESPONSE_CACHE_TTL_SECONDS = 60;
 const USER_RESPONSE_CACHE_MISS = '-';
-const USER_RESPONSE_CACHE_VERSION = 'v6';
+const USER_RESPONSE_CACHE_VERSION = 'v7';
 const PROFILE_SYNC_THROTTLE_SECONDS = 60 * 60;
 const PROFILE_SYNC_THROTTLE_KEY_PREFIX = 'users:profile-sync-throttle';
 

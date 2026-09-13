@@ -63,6 +63,9 @@ export class PublicUserProfileDto {
   banCount: number;
 
   @Expose()
+  activityPublic: boolean;
+
+  @Expose()
   @Type(() => PublicUserProfileTagDto)
   tags: PublicUserProfileTagDto[];
 }
