@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Controller,
-  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -30,7 +29,6 @@ import {
 import { ActivityRangeQueryDto } from './dto/activity-range.dto';
 import {
   type ActivityOverviewDto,
-  type CurrentUserActivityDto,
   type UserActivityDto,
 } from './dto/activity-stats.dto';
 
@@ -50,7 +48,7 @@ export class ActivityController {
   async getMyActivity(
     @Actor() actor: AuthenticatedActor,
     @Query() query: ActivityRangeQueryDto,
-  ): Promise<CurrentUserActivityDto> {
+  ): Promise<UserActivityDto> {
     const userId = getActorUserId(actor);
     const profile = await this.requireProfile(userId);
     const [start, end] = getActivityRange(
@@ -85,20 +83,22 @@ export class ActivityController {
 
     const requesterId =
       actor?.type === ActorType.User ? BigInt(actor.id) : null;
-    if (requesterId !== BigInt(userId) && !profile.activityPublic) {
-      throw new ForbiddenException('Activity is private.');
-    }
+    const showDays =
+      (requesterId !== null && requesterId === BigInt(userId)) ||
+      profile.activityPublic;
 
     const [start, end] = getActivityRange(
       query.months ?? DEFAULT_ACTIVITY_RANGE_MONTHS,
     );
-
-    const [days, totals] = await Promise.all([
-      this.activityService.getUserActivityDays(userId, start, end),
+    const [totals, days] = await Promise.all([
       this.activityService.getUserActivityTotals(userId),
+      showDays
+        ? this.activityService.getUserActivityDays(userId, start, end)
+        : Promise.resolve(null),
     ]);
 
     return {
+      isPublic: profile.activityPublic,
       days,
       totals,
       streak: {

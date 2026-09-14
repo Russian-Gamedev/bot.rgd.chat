@@ -17,13 +17,11 @@ export interface ActivityStreakDto {
 }
 
 export interface UserActivityDto {
-  days: ActivityDayDto[];
+  isPublic: boolean;
+  /** Per-day graph data; null when the user keeps their activity graph private. */
+  days: ActivityDayDto[] | null;
   totals: ActivityTotalsDto;
   streak: ActivityStreakDto;
-}
-
-export interface CurrentUserActivityDto extends UserActivityDto {
-  isPublic: boolean;
 }
 
 export interface ActivityOverviewDayDto extends ActivityDayDto {
