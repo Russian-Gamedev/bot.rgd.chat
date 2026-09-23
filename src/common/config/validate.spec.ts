@@ -17,6 +17,11 @@ const baseConfig = {
   JWT_SECRET: 'jwt-secret',
   TELEGRAM_BOT_TOKEN: 'telegram-token',
   TELEGRAM_API_ROOT: 'https://api.telegram.org',
+  S3_ENDPOINT: 'http://minio:9000',
+  S3_REGION: 'us-east-1',
+  S3_BUCKET: 'golder',
+  S3_ACCESS_KEY_ID: 'minioadmin',
+  S3_SECRET_ACCESS_KEY: 'minioadmin',
 };
 
 describe('config validation', () => {

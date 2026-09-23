@@ -6,6 +6,7 @@ import { AppConfigModule } from '#common/config/config.module';
 import { DatabaseModule } from '#common/database.module';
 import { MetricsModule } from '#common/metrics/metrics.module';
 import { RedisModule } from '#common/redis.module';
+import { S3Module } from '#common/s3/s3.module';
 import { ScheduleLoggerService } from '#common/schedule-logger.service';
 import { ActivityModule } from '#core/activity/activity.module';
 import { AuthModule } from '#core/auth/auth.module';
@@ -14,6 +15,7 @@ import { BirthdayModule } from '#core/birthday/birthday.module';
 import { BotsModule } from '#core/bots/bots.module';
 import { DiscordModule } from '#core/discord/discord.module';
 import { FunModule } from '#core/fun/fun.module';
+import { GolderModule } from '#core/golder/golder.module';
 import { GuildModule } from '#core/guilds/guild.module';
 import { ItemsModule } from '#core/items/items.module';
 import { MahoragaModule } from '#core/mahoraga/mahoraga.module';
@@ -35,6 +37,7 @@ import { AppController } from './app.controller';
     MetricsModule,
     DatabaseModule,
     RedisModule,
+    S3Module,
     DiscordModule,
     UserModule,
     GuildModule,
@@ -44,6 +47,7 @@ import { AppController } from './app.controller';
     MiniGamesModule,
     AuthModule,
     ItemsModule,
+    GolderModule,
     MahoragaModule,
     WalletModule,
     BarModule,

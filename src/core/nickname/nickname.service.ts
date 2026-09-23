@@ -4,7 +4,6 @@ import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Client } from 'discord.js';
 import { Redis } from 'ioredis';
 
-import { WalletTransactionType } from '#core/wallet/entities/wallet-transaction.entity';
 import { WalletService } from '#core/wallet/wallet.service';
 
 import { NicknameHistoryEntity } from './entities/nickname-history.entity';
@@ -26,7 +25,7 @@ export class NicknameService implements OnModuleInit {
     @Inject(Redis)
     private readonly redis: Redis,
     private readonly client: Client,
-    private readonly walletService: WalletService,
+    readonly _walletService: WalletService,
   ) {}
 
   async onModuleInit(): Promise<void> {

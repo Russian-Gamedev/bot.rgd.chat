@@ -12,6 +12,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { trimString } from '#lib/utils';
 import {
   MAX_PUBLIC_PROFILE_ABOUT_LENGTH,
   MAX_PUBLIC_PROFILE_LINK_ICON_LENGTH,
@@ -75,10 +76,6 @@ export class PatchCurrentUserProfileDto {
   @IsOptional()
   @IsBoolean()
   activityPublic?: boolean;
-}
-
-function trimString({ value }: { value: unknown }) {
-  return typeof value === 'string' ? value.trim() : value;
 }
 
 function emptyStringToNull({ value }: { value: unknown }) {

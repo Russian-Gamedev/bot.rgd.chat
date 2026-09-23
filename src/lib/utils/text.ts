@@ -2,6 +2,11 @@ const ZERO_WIDTH_REGEX = /[\u200B-\u200D\uFEFF]/g;
 
 type PluralizeForms = [string, string, string];
 
+/** class-transformer Transform helper: trims string values, leaves others as-is. */
+export function trimString({ value }: { value: unknown }) {
+  return typeof value === 'string' ? value.trim() : value;
+}
+
 /** Normalizes user text for stable spam/repeat comparisons. */
 export function normalizeMessageText(content: string): string {
   return content

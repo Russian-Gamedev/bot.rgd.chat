@@ -90,6 +90,34 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   OPENAI_ACCESS_TOKEN?: string;
+
+  @IsString()
+  S3_ENDPOINT: string;
+
+  @IsString()
+  S3_REGION: string;
+
+  @IsString()
+  S3_BUCKET: string;
+
+  @IsString()
+  S3_ACCESS_KEY_ID: string;
+
+  @IsString()
+  S3_SECRET_ACCESS_KEY: string;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => parseOptionalBoolean(value, true))
+  S3_FORCE_PATH_STYLE?: boolean = true;
+
+  @IsOptional()
+  @IsString()
+  S3_PUBLIC_BASE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  WEB_BASE_URL?: string;
 }
 
 function parseOptionalBoolean(value: unknown, defaultValue: boolean): boolean {

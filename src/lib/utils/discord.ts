@@ -13,6 +13,27 @@ export function isDiscordId(value: string): boolean {
   return /^\d{17,21}$/.test(value);
 }
 
+export interface DiscordMessageLink {
+  guildId: string;
+  channelId: string;
+  messageId: string;
+}
+
+const DISCORD_MESSAGE_URL_PATTERN =
+  /^https:\/\/(?:[a-z]+\.)?discord(?:app)?\.com\/channels\/(\d{15,21})\/(\d{15,21})\/(\d{15,21})$/i;
+
+/** Parses a discord.com/channels message link; returns null for other URLs. */
+export function parseDiscordMessageUrl(url: string): DiscordMessageLink | null {
+  const match = DISCORD_MESSAGE_URL_PATTERN.exec(url.trim());
+  if (!match) return null;
+
+  return {
+    guildId: match[1],
+    channelId: match[2],
+    messageId: match[3],
+  };
+}
+
 /** Extracts the snowflake ID from a custom emoji tag like `<:name:id>` or `<a:name:id>`. */
 export function getEmojiId(emoji: string): string {
   const parsed = parseEmoji(emoji);

@@ -41,6 +41,7 @@ lerna-debug.log*
 dist
 
 docker/postgresql
+docker/minio
 
 # Sentry Config File
 .sentryclirc
