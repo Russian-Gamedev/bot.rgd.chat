@@ -105,7 +105,7 @@ describe('GolderService', () => {
     const { service, storage } = createService();
 
     const result = await service.createUpload(OWNER_ID, {
-      slug: 'cat-picture',
+      name: 'Котик',
       tags: ['Cat', ' cat ', 'art'],
       contentType: 'image/png',
       sizeBytes: 1024,
@@ -113,28 +113,30 @@ describe('GolderService', () => {
 
     expect(result.upload.url).toBe('https://signed.example/put');
     expect(result.media.status).toBe(GolderMediaStatus.Pending);
+    expect(result.media.slug).toBe('kotik');
+    expect(result.media.name).toBe('Котик');
     expect(storage.getPresignedPutUrl).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a duplicate published slug', async () => {
+  it('suffixes the slug when the name is already published', async () => {
     media.status = GolderMediaStatus.Ready;
     const { service } = createService({ media });
 
-    await expect(
-      service.createUpload(OWNER_ID, {
-        slug: 'cat-picture',
-        tags: [],
-        contentType: 'image/png',
-        sizeBytes: 1024,
-      }),
-    ).rejects.toThrow('This slug is already taken.');
+    const result = await service.createUpload(OWNER_ID, {
+      name: 'cat-picture',
+      tags: [],
+      contentType: 'image/png',
+      sizeBytes: 1024,
+    });
+
+    expect(result.media.slug).toBe('cat-picture-2');
   });
 
   it('lets the owner retry by replacing their own pending row', async () => {
     const { service, entityManager, storage } = createService({ media });
 
     const result = await service.createUpload(OWNER_ID, {
-      slug: 'cat-picture',
+      name: 'Cat picture',
       tags: [],
       contentType: 'image/png',
       sizeBytes: 1024,
@@ -143,6 +145,7 @@ describe('GolderService', () => {
     expect(entityManager.remove).toHaveBeenCalledWith(media);
     expect(storage.deleteObject).toHaveBeenCalledWith('golder/uuid.png');
     expect(result.media.slug).toBe('cat-picture');
+    expect(result.media.name).toBe('Cat picture');
   });
 
   it('forbids completing uploads of other users', async () => {
@@ -184,11 +187,12 @@ describe('GolderService', () => {
     const { service } = createService({ media });
 
     const result = await service.updateMedia(OWNER_ID, media.slug, {
-      slug: 'dog-picture',
+      name: 'Новое название',
       tags: ['dog'],
     });
 
-    expect(result.slug).toBe('dog-picture');
+    expect(result.name).toBe('Новое название');
+    expect(result.slug).toBe('cat-picture');
     expect(result.tags).toEqual(['dog']);
   });
 
@@ -281,12 +285,13 @@ describe('GolderService.importFromDiscordMessage', () => {
     const items = await service.importFromDiscordMessage(
       OWNER_ID,
       { channelId: '1', messageId: '2' },
-      'my-cat',
+      'Мой кот',
       ['Cat', ' MEME '],
     );
 
     expect(items).toHaveLength(1);
-    expect(items[0]?.slug).toBe('my-cat');
+    expect(items[0]?.slug).toBe('moy-kot');
+    expect(items[0]?.name).toBe('Мой кот');
     expect(items[0]?.tags).toEqual(['cat', 'meme']);
     expect(items[0]?.status).toBe(GolderMediaStatus.Ready);
     expect(items[0]?.uploadedBy).toBe(OWNER_ID);

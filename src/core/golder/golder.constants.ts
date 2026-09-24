@@ -1,5 +1,6 @@
-export const GOLDER_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const GOLDER_SLUG_MAX_LENGTH = 64;
+
+export const GOLDER_NAME_MAX_LENGTH = 200;
 
 export const GOLDER_MAX_TAGS = 10;
 export const GOLDER_TAG_MAX_LENGTH = 32;
@@ -23,15 +24,6 @@ export function normalizeTags(tags: string[]): string[] {
         .filter((tag) => tag.length > 0),
     ),
   ];
-}
-
-/** Slug from a filename: "My Cat! 2026.PNG" -> "my-cat-2026". */
-export function slugFromFilename(filename: string): string {
-  return filename
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, GOLDER_SLUG_MAX_LENGTH);
 }
 
 /** Parses a comma-separated tag string with the same normalization as tags. */

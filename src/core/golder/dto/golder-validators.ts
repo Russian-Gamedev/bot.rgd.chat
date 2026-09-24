@@ -5,30 +5,26 @@ import {
   IsArray,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 import { trimString } from '#lib/utils';
 import {
   GOLDER_MAX_TAGS,
-  GOLDER_SLUG_MAX_LENGTH,
-  GOLDER_SLUG_PATTERN,
+  GOLDER_NAME_MAX_LENGTH,
   GOLDER_TAG_MAX_LENGTH,
   normalizeTags,
 } from '../golder.constants';
 
-const SLUG_MESSAGE =
-  'Slug must consist of lowercase latin letters, digits and dashes.';
-
-/** Validates the golder media slug: lowercase latin letters, digits and dashes. */
-export function GolderSlug(isOptional = false): PropertyDecorator {
+/** Validates the golder media display name: any language, 1..200 chars. */
+export function GolderName(isOptional = false): PropertyDecorator {
   const optional = isOptional ? [IsOptional()] : [];
   return applyDecorators(
     Transform(trimString),
     ...optional,
     IsString(),
-    Matches(GOLDER_SLUG_PATTERN, { message: SLUG_MESSAGE }),
-    MaxLength(GOLDER_SLUG_MAX_LENGTH),
+    MinLength(1, { message: 'Name is required.' }),
+    MaxLength(GOLDER_NAME_MAX_LENGTH),
   );
 }
 

@@ -22,7 +22,7 @@ describe('GolderController', () => {
     const controller = new GolderController(golderService);
 
     const result = await controller.createUpload(actor, {
-      slug: 'cat-picture',
+      name: 'cat-picture',
       tags: ['cat'],
       contentType: 'image/png',
       sizeBytes: 10,
@@ -30,7 +30,7 @@ describe('GolderController', () => {
 
     expect(result.upload.url).toBe('signed');
     expect(golderService.createUpload).toHaveBeenCalledWith('42', {
-      slug: 'cat-picture',
+      name: 'cat-picture',
       tags: ['cat'],
       contentType: 'image/png',
       sizeBytes: 10,

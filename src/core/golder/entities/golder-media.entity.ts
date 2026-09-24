@@ -17,6 +17,9 @@ export class GolderMediaEntity extends BaseEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
+  @Property({ length: 200 })
+  name: string;
+
   @Property({ unique: true })
   slug: string;
 

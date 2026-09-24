@@ -31,3 +31,55 @@ export function pluralize(count: number, [one, few, many]: PluralizeForms) {
 
   return many;
 }
+
+const RU_TRANSLIT: Record<string, string> = {
+  а: 'a',
+  б: 'b',
+  в: 'v',
+  г: 'g',
+  д: 'd',
+  е: 'e',
+  ё: 'e',
+  ж: 'zh',
+  з: 'z',
+  и: 'i',
+  й: 'y',
+  к: 'k',
+  л: 'l',
+  м: 'm',
+  н: 'n',
+  о: 'o',
+  п: 'p',
+  р: 'r',
+  с: 's',
+  т: 't',
+  у: 'u',
+  ф: 'f',
+  х: 'h',
+  ц: 'ts',
+  ч: 'ch',
+  ш: 'sh',
+  щ: 'sch',
+  ъ: '',
+  ы: 'y',
+  ь: '',
+  э: 'e',
+  ю: 'yu',
+  я: 'ya',
+};
+
+/**
+ * Converts text into a URL-friendly latin slug: transliterates Russian,
+ * lowercases, collapses non-alphanumerics into dashes. Returns '' when
+ * nothing survives (e.g. the name was all-emoji).
+ */
+export function slugify(value: string, maxLength = 64): string {
+  const translit = [...value.toLowerCase()]
+    .map((char) => RU_TRANSLIT[char] ?? char)
+    .join('');
+  const slug = translit.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (slug.length <= maxLength) {
+    return slug;
+  }
+  return slug.slice(0, maxLength).replace(/-+$/g, '');
+}

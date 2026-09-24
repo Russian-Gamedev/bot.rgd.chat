@@ -4,11 +4,11 @@ import {
   GOLDER_CONTENT_TYPE_PATTERN,
   GOLDER_MAX_UPLOAD_BYTES,
 } from '../golder.constants';
-import { GolderSlug, GolderTags } from './golder-validators';
+import { GolderName, GolderTags } from './golder-validators';
 
 export class CreateGolderUploadDto {
-  @GolderSlug()
-  slug: string;
+  @GolderName()
+  name: string;
 
   @GolderTags()
   tags: string[];

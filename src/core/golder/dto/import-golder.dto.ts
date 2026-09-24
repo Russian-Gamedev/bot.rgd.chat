@@ -3,7 +3,7 @@ import { IsString, MaxLength } from 'class-validator';
 
 import { trimString } from '#lib/utils';
 
-import { GolderSlug, GolderTags } from './golder-validators';
+import { GolderName, GolderTags } from './golder-validators';
 
 export class ImportGolderDto {
   @Transform(trimString)
@@ -11,8 +11,8 @@ export class ImportGolderDto {
   @MaxLength(1024)
   url: string;
 
-  @GolderSlug()
-  slug: string;
+  @GolderName()
+  name: string;
 
   @GolderTags()
   tags: string[];

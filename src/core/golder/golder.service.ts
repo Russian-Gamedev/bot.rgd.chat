@@ -16,7 +16,11 @@ import { Client, type Message } from 'discord.js';
 
 import { S3StorageService } from '#common/s3/s3-storage.service';
 import { UserService } from '#core/users/users.service';
-import { assertPublicHttpUrl, parseDiscordMessageUrl } from '#lib/utils';
+import {
+  assertPublicHttpUrl,
+  parseDiscordMessageUrl,
+  slugify,
+} from '#lib/utils';
 import { type DiscordID } from '#root/lib/types';
 import { CreateGolderUploadDto } from './dto/create-golder-upload.dto';
 import {
@@ -54,7 +58,9 @@ export class GolderService {
     user_id: DiscordID,
     dto: CreateGolderUploadDto,
   ): Promise<GolderUploadDto> {
-    const existing = await this.mediaRepository.findOne({ slug: dto.slug });
+    const baseSlug = slugify(dto.name, GOLDER_SLUG_MAX_LENGTH) || 'media';
+    let slug = baseSlug;
+    const existing = await this.mediaRepository.findOne({ slug });
     if (existing) {
       // Свою зависшую pending-запись (неудачная попытка загрузки) можно
       // перезаписать — она не должна навсегда занимать slug.
@@ -62,16 +68,18 @@ export class GolderService {
         existing.status !== GolderMediaStatus.Pending ||
         existing.uploaded_by !== BigInt(user_id)
       ) {
-        throw new ConflictException('This slug is already taken.');
+        slug = await this.nextFreeSlug(baseSlug, 1);
+      } else {
+        await this.storage
+          .deleteObject(existing.object_key)
+          .catch(() => undefined);
+        await this.entityManager.remove(existing).flush();
       }
-      await this.storage
-        .deleteObject(existing.object_key)
-        .catch(() => undefined);
-      await this.entityManager.remove(existing).flush();
     }
 
     const media = new GolderMediaEntity();
-    media.slug = dto.slug;
+    media.name = dto.name;
+    media.slug = slug;
     media.tags = dto.tags;
     media.uploaded_by = BigInt(user_id);
     media.object_key = buildObjectKey(dto.contentType);
@@ -133,11 +141,9 @@ export class GolderService {
     const media = await this.requireMedia(slug);
     this.assertOwner(media, user_id);
 
-    if (dto.slug && dto.slug !== media.slug) {
-      if (await this.mediaRepository.findOne({ slug: dto.slug })) {
-        throw new ConflictException('This slug is already taken.');
-      }
-      media.slug = dto.slug;
+    // slug не меняем — ссылки на медиа остаются стабильными.
+    if (dto.name !== undefined) {
+      media.name = dto.name;
     }
     if (dto.tags) {
       media.tags = dto.tags;
@@ -159,11 +165,18 @@ export class GolderService {
     const where: FilterQuery<GolderMediaEntity> = {
       status: GolderMediaStatus.Ready,
     };
+    const conditions: FilterQuery<GolderMediaEntity>[] = [];
     if (query.search) {
-      where.slug = { $ilike: `%${query.search}%` };
+      const search = { $ilike: `%${query.search}%` };
+      conditions.push({ $or: [{ slug: search }, { name: search }] });
     }
     if (query.tagList.length > 0) {
-      where.tags = { $overlap: query.tagList };
+      conditions.push({
+        $or: query.tagList.map((tag) => ({ tags: { $contains: [tag] } })),
+      });
+    }
+    if (conditions.length > 0) {
+      where.$and = conditions;
     }
 
     const [medias, total] = await this.mediaRepository.findAndCount(where, {
@@ -194,23 +207,24 @@ export class GolderService {
   async importFromUrl(
     user_id: DiscordID,
     url: string,
-    slug: string,
+    name: string,
     tags: string[],
   ): Promise<GolderMediaDto[]> {
     const link = parseDiscordMessageUrl(url);
     if (link) {
-      return this.importFromDiscordMessage(user_id, link, slug, tags);
+      return this.importFromDiscordMessage(user_id, link, name, tags);
     }
-    return this.importFromDirectUrl(user_id, url, slug, tags);
+    return this.importFromDirectUrl(user_id, url, name, tags);
   }
 
   async importFromDiscordMessage(
     user_id: DiscordID,
     message: { channelId: string; messageId: string },
-    slug: string,
+    name: string,
     tags: string[],
   ): Promise<GolderMediaDto[]> {
-    if (await this.mediaRepository.findOne({ slug })) {
+    const baseSlug = slugify(name, GOLDER_SLUG_MAX_LENGTH) || 'media';
+    if (await this.mediaRepository.findOne({ slug: baseSlug })) {
       throw new ConflictException('This slug is already taken.');
     }
 
@@ -238,7 +252,7 @@ export class GolderService {
       created.push(
         await this.createImportedMedia(
           user_id,
-          slug,
+          name,
           tags,
           index,
           contentType,
@@ -258,7 +272,7 @@ export class GolderService {
   async importFromDirectUrl(
     user_id: DiscordID,
     sourceUrl: string,
-    slug: string,
+    name: string,
     tags: string[],
   ): Promise<GolderMediaDto[]> {
     await assertPublicHttpUrl(sourceUrl);
@@ -291,20 +305,24 @@ export class GolderService {
     }
 
     return [
-      await this.createImportedMedia(user_id, slug, tags, 0, contentType, body),
+      await this.createImportedMedia(user_id, name, tags, 0, contentType, body),
     ];
   }
 
   private async createImportedMedia(
     user_id: DiscordID,
-    slug: string,
+    name: string,
     tags: string[],
     index: number,
     contentType: string,
     body: Buffer,
   ): Promise<GolderMediaDto> {
     const media = new GolderMediaEntity();
-    media.slug = await this.nextFreeSlug(slug, index);
+    media.name = name;
+    media.slug = await this.nextFreeSlug(
+      slugify(name, GOLDER_SLUG_MAX_LENGTH) || 'media',
+      index,
+    );
     media.tags = normalizeTags(tags);
     media.uploaded_by = BigInt(user_id);
     media.object_key = buildObjectKey(contentType);
@@ -379,6 +397,7 @@ export class GolderService {
   ): GolderMediaDto {
     return {
       id: media.id,
+      name: media.name,
       slug: media.slug,
       tags: media.tags,
       url: this.storage.getPublicUrl(media.object_key),

@@ -49,7 +49,7 @@ export class GolderController {
     const items = await this.golderService.importFromUrl(
       getActorUserId(actor),
       dto.url,
-      dto.slug,
+      dto.name,
       dto.tags,
     );
     return { items };

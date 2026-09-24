@@ -2,6 +2,7 @@ import type { GolderMediaStatus } from '../entities/golder-media.entity';
 
 export interface GolderMediaDto {
   id: string;
+  name: string;
   slug: string;
   tags: string[];
   url: string;

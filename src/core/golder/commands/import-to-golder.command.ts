@@ -11,6 +11,7 @@ import {
   type Message,
   MessageFlags,
   ModalBuilder,
+  type ModalSubmitFields,
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
@@ -20,7 +21,7 @@ import { Context, Fields, MessageCommand, Modal, TargetMessage } from 'necord';
 
 import { EnvironmentVariables } from '#config/env';
 import { stripTrailingSlash } from '#lib/utils';
-import { parseTagsCsv } from '../golder.constants';
+import { GOLDER_NAME_MAX_LENGTH, parseTagsCsv } from '../golder.constants';
 import { GolderService } from '../golder.service';
 
 const IMPORT_MODAL_ID = 'golder-import';
@@ -41,6 +42,9 @@ export class ImportToGolderCommand {
     @Context() [interaction]: MessageCommandContext,
     @TargetMessage() message: Message,
   ) {
+    this.logger.debug(
+      `Golder import requested by ${interaction.user.username} for message ${message.channelId}/${message.id}`,
+    );
     await this.redis.set(
       `golder:import-pending:${interaction.user.id}`,
       JSON.stringify({ channelId: message.channelId, messageId: message.id }),
@@ -55,12 +59,12 @@ export class ImportToGolderCommand {
         .addComponents(
           new ActionRowBuilder<TextInputBuilder>().addComponents(
             new TextInputBuilder()
-              .setCustomId('slug')
-              .setLabel('Название (slug)')
-              .setPlaceholder('naprimer-moya-kartinka')
+              .setCustomId('name')
+              .setLabel('Название')
+              .setPlaceholder('гусь, техас, мем')
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
-              .setMaxLength(64),
+              .setMaxLength(200),
           ),
           new ActionRowBuilder<TextInputBuilder>().addComponents(
             new TextInputBuilder()
@@ -78,8 +82,11 @@ export class ImportToGolderCommand {
   @Modal(IMPORT_MODAL_ID)
   public async onImportSubmit(
     @Context() [interaction]: ModalContext,
-    @Fields() fields: { slug?: string; tags?: string },
+    @Fields() fields: ModalSubmitFields,
   ) {
+    this.logger.debug(
+      `Golder import modal submitted by ${interaction.user.username}`,
+    );
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const pending = await this.redis.getdel(
@@ -97,21 +104,24 @@ export class ImportToGolderCommand {
       channelId: string;
       messageId: string;
     };
-    const slug = (fields.slug ?? '').trim().toLowerCase();
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    const name = fields.getTextInputValue('name').trim();
+    const tags = parseTagsCsv(fields.getTextInputValue('tags'));
+    this.logger.debug(
+      `Golder import values: name="${name}" tags=${JSON.stringify(tags)} target=${channelId}/${messageId}`,
+    );
+
+    if (name.length === 0 || name.length > GOLDER_NAME_MAX_LENGTH) {
       await interaction.editReply({
-        content:
-          'Название обязательно: строчные латинские буквы, цифры и дефисы.',
+        content: 'Название обязательно — до 200 символов.',
       });
       return;
     }
-    const tags = parseTagsCsv(fields.tags ?? '');
 
     try {
       const items = await this.golderService.importFromDiscordMessage(
         interaction.user.id,
         { channelId, messageId },
-        slug,
+        name,
         tags,
       );
       const webBaseUrl = stripTrailingSlash(
@@ -133,7 +143,7 @@ export class ImportToGolderCommand {
 
   private toUserMessage(error: unknown): string {
     if (error instanceof ConflictException) {
-      return 'Такое название уже занято — попробуйте другое.';
+      return 'Попробуйте другое название.';
     }
     if (error instanceof NotFoundException) {
       return 'Сообщение не найдено или недоступно боту.';
