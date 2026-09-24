@@ -170,7 +170,7 @@ export class TarotCommand {
 
   private async interpret(draw: TarotDraw): Promise<TarotInterpretation> {
     const response = await this.openai.responses.create({
-      model: 'deepseek/deepseek-v4-flash',
+      model: 'openai/gpt-6-luna',
       instructions,
       input: JSON.stringify({
         question: draw.question,
