@@ -10,6 +10,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Client, type Message } from 'discord.js';
@@ -42,9 +43,17 @@ import {
   GOLDER_TAG_SUGGESTION_LIMIT,
   normalizeTags,
 } from './golder.constants';
+import {
+  contentTypeFromUrl,
+  looksLikeMediaUrl,
+  nameFromUrl,
+} from './media-url';
+import { type GolderSourceInfo, resolveSourcePage } from './source-resolver';
 
 @Injectable()
 export class GolderService {
+  private readonly logger = new Logger(GolderService.name);
+
   constructor(
     @InjectRepository(GolderMediaEntity)
     private readonly mediaRepository: EntityRepository<GolderMediaEntity>,
@@ -214,7 +223,36 @@ export class GolderService {
     if (link) {
       return this.importFromDiscordMessage(user_id, link, name, tags);
     }
+    if (!looksLikeMediaUrl(url)) {
+      // Страница (Tenor и любые другие) — достаём прямую ссылку на медиа из Open Graph.
+      const info = await this.resolveSource(user_id, url);
+      if (!info.mediaUrl) {
+        throw new BadRequestException(
+          'Could not find media at the source URL.',
+        );
+      }
+      url = info.mediaUrl;
+    }
     return this.importFromDirectUrl(user_id, url, name, tags);
+  }
+
+  /** Информация для автозаполнения формы импорта по ссылке. */
+  async resolveSource(
+    user_id: DiscordID,
+    url: string,
+  ): Promise<GolderSourceInfo> {
+    const link = parseDiscordMessageUrl(url);
+    if (link) {
+      return { mediaUrl: null, name: null, tags: [] };
+    }
+    if (looksLikeMediaUrl(url)) {
+      return {
+        mediaUrl: url,
+        name: nameFromUrl(url),
+        tags: [],
+      };
+    }
+    return resolveSourcePage(url);
   }
 
   async importFromDiscordMessage(
@@ -239,7 +277,14 @@ export class GolderService {
     const created: GolderMediaDto[] = [];
     for (const [index, attachment] of attachments.entries()) {
       const downloaded = await downloadAttachment(attachment.url);
-      if (!downloaded || downloaded.body.length > GOLDER_MAX_UPLOAD_BYTES) {
+      if (!downloaded) {
+        this.logger.warn(`Golder import: failed to download ${attachment.url}`);
+        continue;
+      }
+      if (downloaded.body.length > GOLDER_MAX_UPLOAD_BYTES) {
+        this.logger.warn(
+          `Golder import: ${attachment.url} is larger than the limit (${downloaded.body.length} bytes)`,
+        );
         continue;
       }
       const contentType =
@@ -247,6 +292,9 @@ export class GolderService {
         downloaded.contentType ??
         contentTypeFromUrl(attachment.url);
       if (!contentType || !GOLDER_CONTENT_TYPE_PATTERN.test(contentType)) {
+        this.logger.warn(
+          `Golder import: unsupported content type "${contentType ?? 'unknown'}" for ${attachment.url}`,
+        );
         continue;
       }
       created.push(
@@ -502,41 +550,4 @@ function collectAttachments(discordMessage: Message): ImportableMedia[] {
       isKnownSupportedAttachment(item) ||
       (item.contentType === null && looksLikeMediaUrl(item.url)),
   );
-}
-
-const MEDIA_EXTENSIONS = new Set([
-  'png',
-  'jpg',
-  'jpeg',
-  'gif',
-  'webp',
-  'mp4',
-  'webm',
-  'mov',
-  'mp3',
-  'wav',
-  'ogg',
-]);
-
-function looksLikeMediaUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  const path = url.split('?')[0];
-  const extension = path.split('.').pop()?.toLowerCase() ?? '';
-  return MEDIA_EXTENSIONS.has(extension);
-}
-
-function contentTypeFromUrl(url: string): string | null {
-  const path = url.split('?')[0];
-  const extension = path.split('.').pop()?.toLowerCase() ?? '';
-  if (extension === 'png') return 'image/png';
-  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
-  if (extension === 'gif') return 'image/gif';
-  if (extension === 'webp') return 'image/webp';
-  if (extension === 'mp4') return 'video/mp4';
-  if (extension === 'mov') return 'video/quicktime';
-  if (extension === 'webm') return 'video/webm';
-  if (extension === 'mp3') return 'audio/mpeg';
-  if (extension === 'wav') return 'audio/wav';
-  if (extension === 'ogg') return 'audio/ogg';
-  return null;
 }

@@ -396,7 +396,7 @@ describe('GolderService.importFromDiscordMessage', () => {
     const { service } = createService();
 
     await expect(
-      service.importFromUrl(
+      service.importFromDirectUrl(
         OWNER_ID,
         'http://93.184.216.34/page.html',
         'page',

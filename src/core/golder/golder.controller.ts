@@ -26,6 +26,7 @@ import { ImportGolderDto } from './dto/import-golder.dto';
 import { ListGolderQueryDto } from './dto/list-golder-query.dto';
 import { UpdateGolderMediaDto } from './dto/update-golder-media.dto';
 import { GolderService } from './golder.service';
+import type { GolderSourceInfo } from './source-resolver';
 
 @Controller('golder')
 export class GolderController {
@@ -53,6 +54,15 @@ export class GolderController {
       dto.tags,
     );
     return { items };
+  }
+
+  @Get('import/resolve')
+  @UseGuards(ActorAuthGuard)
+  resolveSource(
+    @Actor() actor: AuthenticatedActor,
+    @Query('url') url: string,
+  ): Promise<GolderSourceInfo> {
+    return this.golderService.resolveSource(getActorUserId(actor), url);
   }
 
   @Post('uploads/:id/complete')
