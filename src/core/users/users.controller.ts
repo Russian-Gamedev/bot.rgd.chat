@@ -10,12 +10,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { type Response } from 'express';
-import { GameListQueryDto } from '#core/games/dto/games.dto';
-import { GamesService } from '#core/games/games.service';
 import { getActorUserId } from '#core/permissions/actor-user-id';
 import { Actor } from '#core/permissions/permissions.decorator';
 import { ActorAuthGuard } from '#core/permissions/permissions.guard';
 import { type AuthenticatedActor } from '#core/permissions/permissions.types';
+import { ProjectListQueryDto } from '#core/projects/dto/projects.dto';
+import { ProjectsService } from '#core/projects/projects.service';
 import { replaceImageExtension } from '#lib/utils/discord';
 
 import { CurrentUserProfileDto } from './dto/current-user-profile.dto';
@@ -30,7 +30,7 @@ export class UsersController {
   constructor(
     private readonly userService: UserService,
     private readonly publicProfileService: PublicProfileService,
-    private readonly gamesService: GamesService,
+    private readonly projectsService: ProjectsService,
   ) {}
 
   @Get('me')
@@ -52,16 +52,16 @@ export class UsersController {
     return this.publicProfileService.getCurrentUserProfile(userId, actor);
   }
 
-  @Get(':id_or_username/games')
-  async getGames(
+  @Get(':id_or_username/projects')
+  async getProjects(
     @Param('id_or_username') lookup: string,
-    @Query() query: GameListQueryDto,
+    @Query() query: ProjectListQueryDto,
   ) {
     const profile = await this.userService.lookupProfile(lookup);
     if (!profile) {
       throw new NotFoundException('User profile was not found.');
     }
-    return this.gamesService.listByUser(profile.user_id.toString(), query);
+    return this.projectsService.listByUser(profile.user_id.toString(), query);
   }
 
   @Get(':id')

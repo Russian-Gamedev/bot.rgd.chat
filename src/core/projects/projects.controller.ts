@@ -24,47 +24,47 @@ import { PermissionService } from '#core/permissions/permissions.service';
 import type { AuthenticatedActor } from '#core/permissions/permissions.types';
 import { Permission } from '#core/permissions/permissions.types';
 import {
-  CreateGameDto,
-  GameListQueryDto,
-  GameReviewListQueryDto,
-  MineGamesQueryDto,
-  PublishGameDto,
-  RequestGameChangesDto,
-  TransferGameOwnerDto,
-  UpdateGameDto,
-} from './dto/games.dto';
-import { GameLikesService } from './game-likes.service';
-import { GameReviewService } from './game-review.service';
-import { GameTagsService } from './game-tags.service';
-import { GamesService } from './games.service';
+  CreateProjectDto,
+  MineProjectsQueryDto,
+  ProjectListQueryDto,
+  ProjectReviewListQueryDto,
+  PublishProjectDto,
+  RequestProjectChangesDto,
+  TransferProjectOwnerDto,
+  UpdateProjectDto,
+} from './dto/projects.dto';
+import { ProjectLikesService } from './project-likes.service';
+import { ProjectReviewService } from './project-review.service';
+import { ProjectTagsService } from './project-tags.service';
+import { ProjectsService } from './projects.service';
 
-@Controller('games')
-export class GamesController {
+@Controller('projects')
+export class ProjectsController {
   constructor(
-    private readonly games: GamesService,
-    private readonly review: GameReviewService,
-    private readonly likes: GameLikesService,
-    private readonly tags: GameTagsService,
+    private readonly projects: ProjectsService,
+    private readonly review: ProjectReviewService,
+    private readonly likes: ProjectLikesService,
+    private readonly tags: ProjectTagsService,
     private readonly permissions: PermissionService,
   ) {}
   @Get()
-  list(@Query() q: GameListQueryDto) {
-    return this.games.list(q);
+  list(@Query() q: ProjectListQueryDto) {
+    return this.projects.list(q);
   }
   @Post()
   @UseGuards(ActorAuthGuard)
-  create(@Actor() a: AuthenticatedActor, @Body() d: CreateGameDto) {
-    return this.games.create(getActorUserId(a), d);
+  create(@Actor() a: AuthenticatedActor, @Body() d: CreateProjectDto) {
+    return this.projects.create(getActorUserId(a), d);
   }
   @Get('mine')
   @UseGuards(ActorAuthGuard)
-  mine(@Actor() a: AuthenticatedActor, @Query() q: MineGamesQueryDto) {
-    return this.games.listMine(getActorUserId(a), q);
+  mine(@Actor() a: AuthenticatedActor, @Query() q: MineProjectsQueryDto) {
+    return this.projects.listMine(getActorUserId(a), q);
   }
   @Get('review')
   @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
-  reviewList(@Query() q: GameReviewListQueryDto) {
+  @RequirePermissions(Permission.ProjectsReview)
+  reviewList(@Query() q: ProjectReviewListQueryDto) {
     return this.review.list(q);
   }
   @Get('tags')
@@ -74,7 +74,7 @@ export class GamesController {
   @Get(':id/editor')
   @UseGuards(ActorAuthGuard)
   async editor(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
-    return this.games.getEditor(
+    return this.projects.getEditor(
       id,
       getActorUserId(a),
       await this.isReviewer(a),
@@ -82,40 +82,40 @@ export class GamesController {
   }
   @Get(':id/review')
   @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
+  @RequirePermissions(Permission.ProjectsReview)
   reviewOne(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
-    return this.games.getEditor(id, getActorUserId(a), true);
+    return this.projects.getEditor(id, getActorUserId(a), true);
   }
   @Post(':id/review/publish')
   @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
+  @RequirePermissions(Permission.ProjectsReview)
   publish(
     @Param('id') id: string,
     @Actor() a: AuthenticatedActor,
-    @Body() d: PublishGameDto,
+    @Body() d: PublishProjectDto,
   ) {
     return this.review.publish(id, getActorUserId(a), d.comment);
   }
   @Post(':id/review/request-changes')
   @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
+  @RequirePermissions(Permission.ProjectsReview)
   changes(
     @Param('id') id: string,
     @Actor() a: AuthenticatedActor,
-    @Body() d: RequestGameChangesDto,
+    @Body() d: RequestProjectChangesDto,
   ) {
     return this.review.requestChanges(id, getActorUserId(a), d.comment);
   }
   @Patch(':id/review/owner')
   @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GamesReview)
-  owner(@Param('id') id: string, @Body() d: TransferGameOwnerDto) {
+  @RequirePermissions(Permission.ProjectsReview)
+  owner(@Param('id') id: string, @Body() d: TransferProjectOwnerDto) {
     return this.review.transferOwner(id, d.owner_id);
   }
   @Post(':id/submit-review')
   @UseGuards(ActorAuthGuard)
   submit(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
-    return this.games.submit(id, getActorUserId(a));
+    return this.projects.submit(id, getActorUserId(a));
   }
   @Get(':id/like')
   @UseGuards(ActorAuthGuard)
@@ -134,24 +134,28 @@ export class GamesController {
   }
   @Get(':id_or_slug')
   get(@Param('id_or_slug') idOrSlug: string) {
-    return this.games.getPublic(idOrSlug);
+    return this.projects.getPublic(idOrSlug);
   }
   @Patch(':id')
   @UseGuards(ActorAuthGuard)
   update(
     @Param('id') id: string,
     @Actor() a: AuthenticatedActor,
-    @Body() d: UpdateGameDto,
+    @Body() d: UpdateProjectDto,
   ) {
-    return this.games.update(id, getActorUserId(a), d);
+    return this.projects.update(id, getActorUserId(a), d);
   }
   @Delete(':id')
   @UseGuards(ActorAuthGuard)
   @HttpCode(204)
   async remove(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
-    return this.games.remove(id, getActorUserId(a), await this.isReviewer(a));
+    return this.projects.remove(
+      id,
+      getActorUserId(a),
+      await this.isReviewer(a),
+    );
   }
   private isReviewer(a: AuthenticatedActor) {
-    return this.permissions.hasPermission(a, Permission.GamesReview);
+    return this.permissions.hasPermission(a, Permission.ProjectsReview);
   }
 }

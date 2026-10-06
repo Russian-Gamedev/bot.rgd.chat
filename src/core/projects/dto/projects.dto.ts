@@ -23,30 +23,31 @@ import {
   ValidatorConstraint,
   type ValidatorConstraintInterface,
 } from 'class-validator';
-import { normalizeGameSlug } from '../games.slug';
+import { normalizeProjectSlug } from '../projects.slug';
 import {
-  GameAttachmentType,
-  GameAuthorType,
-  GameListSort,
-  GameReviewAction,
-  GameRevisionStatus,
-} from '../games.types';
+  ProjectAttachmentType,
+  ProjectAuthorType,
+  ProjectListSort,
+  ProjectReviewAction,
+  ProjectRevisionStatus,
+  ProjectType,
+} from '../projects.types';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
-interface GameAuthorShape {
-  type: GameAuthorType;
+interface ProjectAuthorShape {
+  type: ProjectAuthorType;
   discord_user_id?: string;
   name?: string;
 }
-@ValidatorConstraint({ name: 'gameAuthorShape' })
-class GameAuthorShapeConstraint implements ValidatorConstraintInterface {
+@ValidatorConstraint({ name: 'projectAuthorShape' })
+class ProjectAuthorShapeConstraint implements ValidatorConstraintInterface {
   validate(_value: unknown, args?: ValidationArguments) {
     if (!args) return false;
-    const author = args.object as GameAuthorShape;
-    return author.type === GameAuthorType.Discord
+    const author = args.object as ProjectAuthorShape;
+    return author.type === ProjectAuthorType.Discord
       ? author.discord_user_id !== undefined && author.name === undefined
-      : author.type === GameAuthorType.Text
+      : author.type === ProjectAuthorType.Text
         ? author.name !== undefined && author.discord_user_id === undefined
         : false;
   }
@@ -54,8 +55,10 @@ class GameAuthorShapeConstraint implements ValidatorConstraintInterface {
     return 'discord authors require only discord_user_id; text authors require only name';
   }
 }
-@ValidatorConstraint({ name: 'gameHasImageAttachment' })
-class GameHasImageAttachmentConstraint implements ValidatorConstraintInterface {
+@ValidatorConstraint({ name: 'projectHasImageAttachment' })
+class ProjectHasImageAttachmentConstraint
+  implements ValidatorConstraintInterface
+{
   validate(value: unknown) {
     return (
       Array.isArray(value) &&
@@ -64,7 +67,7 @@ class GameHasImageAttachmentConstraint implements ValidatorConstraintInterface {
           attachment &&
           typeof attachment === 'object' &&
           'type' in attachment &&
-          attachment.type === GameAttachmentType.Image,
+          attachment.type === ProjectAttachmentType.Image,
       )
     );
   }
@@ -72,14 +75,14 @@ class GameHasImageAttachmentConstraint implements ValidatorConstraintInterface {
     return 'At least one image attachment is required.';
   }
 }
-export class GameAuthorInputDto {
-  @IsEnum(GameAuthorType)
-  @Validate(GameAuthorShapeConstraint)
-  type: GameAuthorType;
-  @ValidateIf((o) => o.type === GameAuthorType.Discord)
+export class ProjectAuthorInputDto {
+  @IsEnum(ProjectAuthorType)
+  @Validate(ProjectAuthorShapeConstraint)
+  type: ProjectAuthorType;
+  @ValidateIf((o) => o.type === ProjectAuthorType.Discord)
   @IsNumberString()
   discord_user_id?: string;
-  @ValidateIf((o) => o.type === GameAuthorType.Text)
+  @ValidateIf((o) => o.type === ProjectAuthorType.Text)
   @Transform(trim)
   @IsString()
   @MinLength(1)
@@ -91,7 +94,7 @@ export class GameAuthorInputDto {
   @MaxLength(80)
   role: string;
 }
-export class GameLinkInputDto {
+export class ProjectLinkInputDto {
   @Transform(trim)
   @IsString()
   @MinLength(1)
@@ -106,14 +109,14 @@ export class GameLinkInputDto {
   @MaxLength(2048)
   link: string;
 }
-export class GameAttachmentInputDto {
-  @IsEnum(GameAttachmentType)
-  type: GameAttachmentType;
+export class ProjectAttachmentInputDto {
+  @IsEnum(ProjectAttachmentType)
+  type: ProjectAttachmentType;
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(2048)
   url: string;
 }
-export class CreateGameDto {
+export class CreateProjectDto {
   @Transform(trim)
   @IsString()
   @MinLength(1)
@@ -121,7 +124,7 @@ export class CreateGameDto {
   title: string;
   @IsOptional()
   @Transform(({ value }) =>
-    typeof value === 'string' ? normalizeGameSlug(value) : value,
+    typeof value === 'string' ? normalizeProjectSlug(value) : value,
   )
   @IsString()
   @MinLength(1)
@@ -131,6 +134,8 @@ export class CreateGameDto {
   @IsString() @MaxLength(20_000) description: string;
   @IsDateString({ strict: true })
   release_date: string;
+  @IsEnum(ProjectType)
+  type: ProjectType;
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -155,22 +160,22 @@ export class CreateGameDto {
   @IsArray()
   @ArrayMaxSize(20)
   @ValidateNested({ each: true })
-  @Type(() => GameAuthorInputDto)
-  authors: GameAuthorInputDto[];
+  @Type(() => ProjectAuthorInputDto)
+  authors: ProjectAuthorInputDto[];
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
   @ValidateNested({ each: true })
-  @Type(() => GameLinkInputDto)
-  links?: GameLinkInputDto[];
+  @Type(() => ProjectLinkInputDto)
+  links?: ProjectLinkInputDto[];
   @IsArray()
   @ArrayMaxSize(20)
-  @Validate(GameHasImageAttachmentConstraint)
+  @Validate(ProjectHasImageAttachmentConstraint)
   @ValidateNested({ each: true })
-  @Type(() => GameAttachmentInputDto)
-  attachments: GameAttachmentInputDto[];
+  @Type(() => ProjectAttachmentInputDto)
+  attachments: ProjectAttachmentInputDto[];
 }
-export class UpdateGameDto {
+export class UpdateProjectDto {
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -179,7 +184,7 @@ export class UpdateGameDto {
   title?: string;
   @IsOptional()
   @Transform(({ value }) =>
-    typeof value === 'string' ? normalizeGameSlug(value) : value,
+    typeof value === 'string' ? normalizeProjectSlug(value) : value,
   )
   @IsString()
   @MinLength(1)
@@ -193,6 +198,9 @@ export class UpdateGameDto {
   @IsOptional()
   @IsDateString({ strict: true })
   release_date?: string;
+  @IsOptional()
+  @IsEnum(ProjectType)
+  type?: ProjectType;
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -219,21 +227,21 @@ export class UpdateGameDto {
   @IsArray()
   @ArrayMaxSize(20)
   @ValidateNested({ each: true })
-  @Type(() => GameAuthorInputDto)
-  authors?: GameAuthorInputDto[];
+  @Type(() => ProjectAuthorInputDto)
+  authors?: ProjectAuthorInputDto[];
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
   @ValidateNested({ each: true })
-  @Type(() => GameLinkInputDto)
-  links?: GameLinkInputDto[];
+  @Type(() => ProjectLinkInputDto)
+  links?: ProjectLinkInputDto[];
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @Validate(GameHasImageAttachmentConstraint)
+  @Validate(ProjectHasImageAttachmentConstraint)
   @ValidateNested({ each: true })
-  @Type(() => GameAttachmentInputDto)
-  attachments?: GameAttachmentInputDto[];
+  @Type(() => ProjectAttachmentInputDto)
+  attachments?: ProjectAttachmentInputDto[];
 }
 export class PageQueryDto {
   @IsOptional()
@@ -248,9 +256,12 @@ export class PageQueryDto {
   @Min(0)
   offset = 0;
 }
-export class GameListQueryDto extends PageQueryDto {
+export class ProjectListQueryDto extends PageQueryDto {
   @IsOptional() @IsString() tag?: string;
   @IsOptional() @IsNumberString() author_id?: string;
+  @IsOptional()
+  @IsEnum(ProjectType)
+  type?: ProjectType;
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -262,122 +273,127 @@ export class GameListQueryDto extends PageQueryDto {
   @IsDateString({ strict: true })
   release_to?: string;
   @IsOptional()
-  @IsEnum(GameListSort)
-  sort = GameListSort.ReleaseDateDesc;
+  @IsEnum(ProjectListSort)
+  sort = ProjectListSort.ReleaseDateDesc;
 }
-export class MineGamesQueryDto extends PageQueryDto {
+export class MineProjectsQueryDto extends PageQueryDto {
   @IsOptional()
-  @IsEnum(GameRevisionStatus)
-  status?: GameRevisionStatus;
+  @IsEnum(ProjectRevisionStatus)
+  status?: ProjectRevisionStatus;
+  @IsOptional()
+  @IsEnum(ProjectType)
+  type?: ProjectType;
 }
-export class GameReviewListQueryDto extends MineGamesQueryDto {
+export class ProjectReviewListQueryDto extends MineProjectsQueryDto {
   @IsOptional() @IsNumberString() owner_id?: string;
   @IsOptional()
   @IsString()
   @MaxLength(120)
   search?: string;
 }
-export class PublishGameDto {
+export class PublishProjectDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
   comment?: string;
 }
-export class RequestGameChangesDto {
+export class RequestProjectChangesDto {
   @Transform(trim)
   @IsString()
   @MinLength(1)
   @MaxLength(2000)
   comment: string;
 }
-export class TransferGameOwnerDto {
+export class TransferProjectOwnerDto {
   @IsNumberString() owner_id: string;
 }
-export class GamePublicTagDto {
+export class ProjectPublicTagDto {
   slug: string;
   name: string;
 }
-export class GameAuthorDto {
-  type: GameAuthorType;
+export class ProjectAuthorDto {
+  type: ProjectAuthorType;
   discord_user_id?: string;
   name?: string;
   role: string;
 }
-export class GameAttachmentDto {
-  type: GameAttachmentType;
+export class ProjectAttachmentDto {
+  type: ProjectAttachmentType;
   url: string;
 }
-export class GameLinkDto {
+export class ProjectLinkDto {
   icon: string;
   label: string;
   link: string;
 }
-export class GameLikeStateDto {
+export class ProjectLikeStateDto {
   liked: boolean;
   likes_count: number;
 }
-export class GameListItemDto {
+export class ProjectListItemDto {
   id: string;
   slug: string;
   title: string;
+  type: ProjectType;
   release_date: string;
-  tags: GamePublicTagDto[];
-  authors: GameAuthorDto[];
+  tags: ProjectPublicTagDto[];
+  authors: ProjectAuthorDto[];
   thumbnail: string | null;
   likes_count: number;
   published_at: Date;
 }
-export class GameListResponseDto {
-  items: GameListItemDto[];
+export class ProjectListResponseDto {
+  items: ProjectListItemDto[];
   total: number;
   limit: number;
   offset: number;
 }
-export class GameCreditsDto {
+export class ProjectCreditsDto {
   owner_id: string | null;
   hide_owner: boolean;
-  authors: GameAuthorDto[];
+  authors: ProjectAuthorDto[];
 }
-export class GameResourcesDto {
-  attachments: GameAttachmentDto[];
-  links: GameLinkDto[];
+export class ProjectResourcesDto {
+  attachments: ProjectAttachmentDto[];
+  links: ProjectLinkDto[];
 }
-export class GameMetadataDto {
+export class ProjectMetadataDto {
   release_date: string;
+  type: ProjectType;
   promo: string | null;
   published_at: Date | null;
   updated_at: Date;
 }
-export class GameStatsDto {
+export class ProjectStatsDto {
   likes_count: number;
 }
-export class GameDetailsDto {
+export class ProjectDetailsDto {
   id: string;
   slug: string;
   title: string;
   description: string;
   thumbnail: string | null;
-  tags: GamePublicTagDto[];
-  credits: GameCreditsDto;
-  resources: GameResourcesDto;
-  metadata: GameMetadataDto;
-  stats: GameStatsDto;
+  tags: ProjectPublicTagDto[];
+  credits: ProjectCreditsDto;
+  resources: ProjectResourcesDto;
+  metadata: ProjectMetadataDto;
+  stats: ProjectStatsDto;
 }
-export class GameReviewEventDto {
+export class ProjectReviewEventDto {
   id: string;
   revision_id: string;
-  action: GameReviewAction;
+  action: ProjectReviewAction;
   actor_id: string;
   comment: string | null;
   created_at: Date;
 }
-export class GameWorkflowDto {
-  status: GameRevisionStatus;
+export class ProjectWorkflowDto {
+  status: ProjectRevisionStatus;
   version: number;
   has_published_version: boolean;
   published_version: number | null;
-  review_events: GameReviewEventDto[];
+  review_events: ProjectReviewEventDto[];
 }
-export class GameEditorDto extends GameDetailsDto {
-  workflow: GameWorkflowDto;
+export class ProjectEditorDto extends ProjectDetailsDto {
+  workflow: ProjectWorkflowDto;
 }

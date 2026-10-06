@@ -13,14 +13,15 @@ import {
 import { BaseEntity } from '#common/entities/base.entity';
 
 import {
-  GameAttachmentType,
-  GameAuthorType,
-  GameReviewAction,
-  GameRevisionStatus,
-} from '../games.types';
+  ProjectAttachmentType,
+  ProjectAuthorType,
+  ProjectReviewAction,
+  ProjectRevisionStatus,
+  ProjectType,
+} from '../projects.types';
 
-@Entity({ tableName: 'games' })
-export class GameEntity extends BaseEntity {
+@Entity({ tableName: 'projects' })
+export class ProjectEntity extends BaseEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
@@ -30,63 +31,66 @@ export class GameEntity extends BaseEntity {
   @Property({ length: 160, unique: true })
   slug: string;
 
-  @ManyToOne(() => GameRevisionEntity, {
+  @ManyToOne(() => ProjectRevisionEntity, {
     fieldName: 'published_revision_id',
     nullable: true,
     deleteRule: 'set null',
   })
-  publishedRevision: Rel<GameRevisionEntity> | null = null;
+  publishedRevision: Rel<ProjectRevisionEntity> | null = null;
 
-  @ManyToOne(() => GameRevisionEntity, {
+  @ManyToOne(() => ProjectRevisionEntity, {
     fieldName: 'working_revision_id',
     nullable: true,
     deleteRule: 'set null',
   })
-  workingRevision: Rel<GameRevisionEntity> | null = null;
+  workingRevision: Rel<ProjectRevisionEntity> | null = null;
 
   @OneToMany(
-    () => GameRevisionEntity,
-    (revision) => revision.game,
+    () => ProjectRevisionEntity,
+    (revision) => revision.project,
     {
       orphanRemoval: true,
     },
   )
-  revisions = new Collection<GameRevisionEntity>(this);
+  revisions = new Collection<ProjectRevisionEntity>(this);
 
   @OneToMany(
-    () => GameLikeEntity,
-    (like) => like.game,
+    () => ProjectLikeEntity,
+    (like) => like.project,
     {
       orphanRemoval: true,
     },
   )
-  likes = new Collection<GameLikeEntity>(this);
+  likes = new Collection<ProjectLikeEntity>(this);
 
   @OneToMany(
-    () => GameReviewEventEntity,
-    (event) => event.game,
+    () => ProjectReviewEventEntity,
+    (event) => event.project,
     {
       orphanRemoval: true,
     },
   )
-  reviewEvents = new Collection<GameReviewEventEntity>(this);
+  reviewEvents = new Collection<ProjectReviewEventEntity>(this);
 }
 
-@Entity({ tableName: 'game_revisions' })
-@Unique({ properties: ['game', 'version'] })
+@Entity({ tableName: 'project_revisions' })
+@Unique({ properties: ['project', 'version'] })
 @Index({ properties: ['status', 'updatedAt'] })
-export class GameRevisionEntity extends BaseEntity {
+export class ProjectRevisionEntity extends BaseEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
-  @ManyToOne(() => GameEntity, { fieldName: 'game_id', deleteRule: 'cascade' })
-  game: Rel<GameEntity>;
+  @ManyToOne(() => ProjectEntity, {
+    fieldName: 'project_id',
+    deleteRule: 'cascade',
+  })
+  project: Rel<ProjectEntity>;
 
   @Property({ type: 'integer' })
   version: number;
 
-  @Enum({ items: () => GameRevisionStatus })
-  status = GameRevisionStatus.Draft;
+  @Enum({ items: () => ProjectRevisionStatus })
+  status = ProjectRevisionStatus.Draft;
 
   @Property({ length: 120 })
   title: string;
@@ -96,6 +100,9 @@ export class GameRevisionEntity extends BaseEntity {
 
   @Property({ type: 'date', index: true })
   release_date: string;
+
+  @Enum({ items: () => ProjectType })
+  type = ProjectType.Game;
 
   @Property({ length: 100, nullable: true })
   promo: string | null = null;
@@ -113,56 +120,56 @@ export class GameRevisionEntity extends BaseEntity {
   published_at: Date | null = null;
 
   @OneToMany(
-    () => GameAuthorEntity,
+    () => ProjectAuthorEntity,
     (author) => author.revision,
     {
       orphanRemoval: true,
     },
   )
-  authors = new Collection<GameAuthorEntity>(this);
+  authors = new Collection<ProjectAuthorEntity>(this);
 
   @OneToMany(
-    () => GameRevisionTagEntity,
+    () => ProjectRevisionTagEntity,
     (link) => link.revision,
     {
       orphanRemoval: true,
     },
   )
-  tagLinks = new Collection<GameRevisionTagEntity>(this);
+  tagLinks = new Collection<ProjectRevisionTagEntity>(this);
 
   @OneToMany(
-    () => GameLinkEntity,
+    () => ProjectLinkEntity,
     (link) => link.revision,
     {
       orphanRemoval: true,
     },
   )
-  links = new Collection<GameLinkEntity>(this);
+  links = new Collection<ProjectLinkEntity>(this);
 
   @OneToMany(
-    () => GameAttachmentEntity,
+    () => ProjectAttachmentEntity,
     (attachment) => attachment.revision,
     {
       orphanRemoval: true,
     },
   )
-  attachments = new Collection<GameAttachmentEntity>(this);
+  attachments = new Collection<ProjectAttachmentEntity>(this);
 }
 
-@Entity({ tableName: 'game_authors' })
+@Entity({ tableName: 'project_authors' })
 @Unique({ properties: ['revision', 'position'] })
-export class GameAuthorEntity {
+export class ProjectAuthorEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
-  @ManyToOne(() => GameRevisionEntity, {
+  @ManyToOne(() => ProjectRevisionEntity, {
     fieldName: 'revision_id',
     deleteRule: 'cascade',
   })
-  revision: GameRevisionEntity;
+  revision: ProjectRevisionEntity;
 
-  @Enum({ items: () => GameAuthorType })
-  type: GameAuthorType;
+  @Enum({ items: () => ProjectAuthorType })
+  type: ProjectAuthorType;
 
   @Property({ type: 'bigint', nullable: true })
   discord_user_id: bigint | null = null;
@@ -177,8 +184,8 @@ export class GameAuthorEntity {
   position: number;
 }
 
-@Entity({ tableName: 'game_tags' })
-export class GameTagEntity extends BaseEntity {
+@Entity({ tableName: 'project_tags' })
+export class ProjectTagEntity extends BaseEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
@@ -189,40 +196,40 @@ export class GameTagEntity extends BaseEntity {
   name: string;
 
   @OneToMany(
-    () => GameRevisionTagEntity,
+    () => ProjectRevisionTagEntity,
     (link) => link.tag,
   )
-  revisionLinks = new Collection<GameRevisionTagEntity>(this);
+  revisionLinks = new Collection<ProjectRevisionTagEntity>(this);
 }
 
-@Entity({ tableName: 'game_revision_tags' })
-export class GameRevisionTagEntity {
-  @ManyToOne(() => GameRevisionEntity, {
+@Entity({ tableName: 'project_revision_tags' })
+export class ProjectRevisionTagEntity {
+  @ManyToOne(() => ProjectRevisionEntity, {
     fieldName: 'revision_id',
     primary: true,
     deleteRule: 'cascade',
   })
-  revision: GameRevisionEntity;
+  revision: ProjectRevisionEntity;
 
-  @ManyToOne(() => GameTagEntity, {
+  @ManyToOne(() => ProjectTagEntity, {
     fieldName: 'tag_id',
     primary: true,
     deleteRule: 'restrict',
   })
-  tag: GameTagEntity;
+  tag: ProjectTagEntity;
 }
 
-@Entity({ tableName: 'game_links' })
+@Entity({ tableName: 'project_links' })
 @Unique({ properties: ['revision', 'position'] })
-export class GameLinkEntity {
+export class ProjectLinkEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
-  @ManyToOne(() => GameRevisionEntity, {
+  @ManyToOne(() => ProjectRevisionEntity, {
     fieldName: 'revision_id',
     deleteRule: 'cascade',
   })
-  revision: GameRevisionEntity;
+  revision: ProjectRevisionEntity;
 
   @Property({ length: 64 })
   icon: string;
@@ -237,20 +244,20 @@ export class GameLinkEntity {
   position: number;
 }
 
-@Entity({ tableName: 'game_attachments' })
+@Entity({ tableName: 'project_attachments' })
 @Unique({ properties: ['revision', 'position'] })
-export class GameAttachmentEntity {
+export class ProjectAttachmentEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
-  @ManyToOne(() => GameRevisionEntity, {
+  @ManyToOne(() => ProjectRevisionEntity, {
     fieldName: 'revision_id',
     deleteRule: 'cascade',
   })
-  revision: GameRevisionEntity;
+  revision: ProjectRevisionEntity;
 
-  @Enum({ items: () => GameAttachmentType })
-  type: GameAttachmentType;
+  @Enum({ items: () => ProjectAttachmentType })
+  type: ProjectAttachmentType;
 
   @Property({ length: 2048 })
   url: string;
@@ -259,15 +266,15 @@ export class GameAttachmentEntity {
   position: number;
 }
 
-@Entity({ tableName: 'game_likes' })
+@Entity({ tableName: 'project_likes' })
 @Index({ properties: ['user_id', 'created_at'] })
-export class GameLikeEntity {
-  @ManyToOne(() => GameEntity, {
-    fieldName: 'game_id',
+export class ProjectLikeEntity {
+  @ManyToOne(() => ProjectEntity, {
+    fieldName: 'project_id',
     primary: true,
     deleteRule: 'cascade',
   })
-  game: GameEntity;
+  project: ProjectEntity;
 
   @PrimaryKey({ type: 'bigint' })
   user_id: bigint;
@@ -276,25 +283,25 @@ export class GameLikeEntity {
   created_at = new Date();
 }
 
-@Entity({ tableName: 'game_review_events' })
-export class GameReviewEventEntity {
+@Entity({ tableName: 'project_review_events' })
+export class ProjectReviewEventEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
-  @ManyToOne(() => GameEntity, {
-    fieldName: 'game_id',
+  @ManyToOne(() => ProjectEntity, {
+    fieldName: 'project_id',
     deleteRule: 'cascade',
   })
-  game: GameEntity;
+  project: ProjectEntity;
 
-  @ManyToOne(() => GameRevisionEntity, {
+  @ManyToOne(() => ProjectRevisionEntity, {
     fieldName: 'revision_id',
     deleteRule: 'cascade',
   })
-  revision: GameRevisionEntity;
+  revision: ProjectRevisionEntity;
 
-  @Enum({ items: () => GameReviewAction })
-  action: GameReviewAction;
+  @Enum({ items: () => ProjectReviewAction })
+  action: ProjectReviewAction;
 
   @Property({ type: 'bigint' })
   actor_id: bigint;

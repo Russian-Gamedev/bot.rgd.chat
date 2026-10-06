@@ -29,13 +29,8 @@ import { Migration20260612007000 } from './Migration20260612007000';
 import { Migration20260612008000 } from './Migration20260612008000';
 import { Migration20260705000000 } from './Migration20260705000000';
 import { Migration20260706000000 } from './Migration20260706000000';
-import { Migration20260711000000 } from './Migration20260711000000';
-import { Migration20260712000000 } from './Migration20260712000000';
 import { Migration20260713000000 } from './Migration20260713000000';
 import { Migration20260713001000 } from './Migration20260713001000';
-import { Migration20260713002000 } from './Migration20260713002000';
-import { Migration20260715000000 } from './Migration20260715000000';
-import { Migration20260715001000 } from './Migration20260715001000';
 import { Migration20260724000000 } from './Migration20260724000000';
 import { Migration20260726125300 } from './Migration20260726125300';
 import { Migration20260816000000 } from './Migration20260816000000';
@@ -44,6 +39,7 @@ import { Migration20260909000000 } from './Migration20260909000000';
 import { Migration20260913000000 } from './Migration20260913000000';
 import { Migration20260923122255 } from './Migration20260923122255';
 import { Migration20260924045715 } from './Migration20260924045715';
+import { Migration20261006000000 } from './Migration20261006000000';
 export const migrations = [
   Migration20251008130615,
   Migration20251008183605,
@@ -76,13 +72,8 @@ export const migrations = [
   Migration20260612008000,
   Migration20260705000000,
   Migration20260706000000,
-  Migration20260711000000,
-  Migration20260712000000,
   Migration20260713000000,
   Migration20260713001000,
-  Migration20260713002000,
-  Migration20260715000000,
-  Migration20260715001000,
   Migration20260724000000,
   Migration20260726125300,
   Migration20260816000000,
@@ -91,4 +82,5 @@ export const migrations = [
   Migration20260913000000,
   Migration20260923122255,
   Migration20260924045715,
+  Migration20261006000000,
 ];

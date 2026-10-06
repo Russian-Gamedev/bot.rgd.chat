@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateGameDto } from './games.dto';
+import { CreateProjectDto } from './projects.dto';
 
 const valid = {
-  title: 'Community Game',
+  title: 'Community Project',
   description: '# Description',
   release_date: '2026-07-11',
+  type: 'game',
   promo: 'Скоро релиз!',
   tags: ['Action'],
   authors: [
@@ -16,22 +17,42 @@ const valid = {
       role: 'Программист',
     },
   ],
-  links: [{ icon: 'steam', label: 'Steam', link: 'https://example.com/game' }],
+  links: [
+    { icon: 'steam', label: 'Steam', link: 'https://example.com/project' },
+  ],
   attachments: [{ type: 'image', url: 'https://example.com/image.png' }],
 };
 
-describe('games DTO validation', () => {
-  it('accepts a valid game payload', async () => {
-    const dto = plainToInstance(CreateGameDto, {
+describe('projects DTO validation', () => {
+  it('accepts a valid project payload', async () => {
+    const dto = plainToInstance(CreateProjectDto, {
       ...valid,
-      slug: ' Custom Game URL ',
+      slug: ' Custom Project URL ',
     });
     expect(await validate(dto)).toHaveLength(0);
-    expect(dto.slug).toBe('custom-game-url');
+    expect(dto.slug).toBe('custom-project-url');
+  });
+
+  it('rejects an unknown project type', async () => {
+    const dto = plainToInstance(CreateProjectDto, {
+      ...valid,
+      type: 'mod',
+    });
+    expect(
+      (await validate(dto)).some((error) => error.property === 'type'),
+    ).toBe(true);
+  });
+
+  it('requires a project type', async () => {
+    const { type: _type, ...withoutType } = valid;
+    const dto = plainToInstance(CreateProjectDto, withoutType);
+    expect(
+      (await validate(dto)).some((error) => error.property === 'type'),
+    ).toBe(true);
   });
 
   it('rejects more than five links and non-HTTPS URLs', async () => {
-    const dto = plainToInstance(CreateGameDto, {
+    const dto = plainToInstance(CreateProjectDto, {
       ...valid,
       links: Array.from({ length: 6 }, () => ({
         icon: 'web',
@@ -45,7 +66,7 @@ describe('games DTO validation', () => {
   });
 
   it('rejects an author containing both Discord ID and text name', async () => {
-    const dto = plainToInstance(CreateGameDto, {
+    const dto = plainToInstance(CreateProjectDto, {
       ...valid,
       authors: [
         {
@@ -61,7 +82,7 @@ describe('games DTO validation', () => {
   });
 
   it('requires a non-empty author role', async () => {
-    const dto = plainToInstance(CreateGameDto, {
+    const dto = plainToInstance(CreateProjectDto, {
       ...valid,
       authors: [
         {
@@ -78,7 +99,7 @@ describe('games DTO validation', () => {
   });
 
   it('rejects promo text longer than 100 characters', async () => {
-    const dto = plainToInstance(CreateGameDto, {
+    const dto = plainToInstance(CreateProjectDto, {
       ...valid,
       promo: 'x'.repeat(101),
     });
@@ -89,11 +110,11 @@ describe('games DTO validation', () => {
   });
 
   it('requires at least one image attachment', async () => {
-    const missing = plainToInstance(CreateGameDto, {
+    const missing = plainToInstance(CreateProjectDto, {
       ...valid,
       attachments: undefined,
     });
-    const videoOnly = plainToInstance(CreateGameDto, {
+    const videoOnly = plainToInstance(CreateProjectDto, {
       ...valid,
       attachments: [
         { type: 'external_video', url: 'https://example.com/video' },

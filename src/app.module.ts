@@ -16,7 +16,6 @@ import { BirthdayModule } from '#core/birthday/birthday.module';
 import { BotsModule } from '#core/bots/bots.module';
 import { DiscordModule } from '#core/discord/discord.module';
 import { FunModule } from '#core/fun/fun.module';
-import { GamesModule } from '#core/games/games.module';
 import { GolderModule } from '#core/golder/golder.module';
 import { GuildModule } from '#core/guilds/guild.module';
 import { ItemsModule } from '#core/items/items.module';
@@ -24,6 +23,7 @@ import { MahoragaModule } from '#core/mahoraga/mahoraga.module';
 import { MiniGamesModule } from '#core/mini-games/mini-games.module';
 import { NicknameModule } from '#core/nickname/nickname.module';
 import { PortalsModule } from '#core/portals/portals.module';
+import { ProjectsModule } from '#core/projects/projects.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
 import { UserModule } from '#core/users/users.module';
 import { UtilsModule } from '#core/utils/utils.module';
@@ -44,7 +44,7 @@ type MikroOrmRootOptions = Record<string, unknown>;
     DiscordModule,
     UserModule,
     GuildModule,
-    GamesModule,
+    ProjectsModule,
     BirthdayModule,
     ActivityModule,
     BotsModule,

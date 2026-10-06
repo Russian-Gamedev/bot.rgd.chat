@@ -20,32 +20,32 @@ import {
 } from '@nestjs/common';
 
 import type {
-  CreateGameDto,
-  GameListQueryDto,
-  MineGamesQueryDto,
-  UpdateGameDto,
-} from './dto/games.dto';
+  CreateProjectDto,
+  MineProjectsQueryDto,
+  ProjectListQueryDto,
+  UpdateProjectDto,
+} from './dto/projects.dto';
 import {
-  GameAttachmentEntity,
-  GameAuthorEntity,
-  GameEntity,
-  GameLikeEntity,
-  GameLinkEntity,
-  GameReviewEventEntity,
-  GameRevisionEntity,
-  GameRevisionTagEntity,
-} from './entities/games.entity';
-import { GameTagsService } from './game-tags.service';
-import { createGameSlug, normalizeGameSlug } from './games.slug';
+  ProjectAttachmentEntity,
+  ProjectAuthorEntity,
+  ProjectEntity,
+  ProjectLikeEntity,
+  ProjectLinkEntity,
+  ProjectReviewEventEntity,
+  ProjectRevisionEntity,
+  ProjectRevisionTagEntity,
+} from './entities/projects.entity';
+import { ProjectTagsService } from './project-tags.service';
+import { createProjectSlug, normalizeProjectSlug } from './projects.slug';
 import {
-  GameAttachmentType,
-  GameAuthorType,
-  GameListSort,
-  GameReviewAction,
-  GameRevisionStatus,
-} from './games.types';
+  ProjectAttachmentType,
+  ProjectAuthorType,
+  ProjectListSort,
+  ProjectReviewAction,
+  ProjectRevisionStatus,
+} from './projects.types';
 
-const GAME_POPULATE = [
+const PROJECT_POPULATE = [
   'publishedRevision.authors',
   'publishedRevision.tagLinks.tag',
   'publishedRevision.links',
@@ -55,30 +55,31 @@ const GAME_POPULATE = [
   'workingRevision.links',
   'workingRevision.attachments',
 ] as const;
-const EDITOR_POPULATE = [...GAME_POPULATE, 'reviewEvents.revision'] as const;
+const EDITOR_POPULATE = [...PROJECT_POPULATE, 'reviewEvents.revision'] as const;
 
 type PopulatedRevision = Loaded<
-  GameRevisionEntity,
+  ProjectRevisionEntity,
   'authors' | 'tagLinks.tag' | 'links' | 'attachments'
 >;
 
 @Injectable()
-export class GamesService {
+export class ProjectsService {
   constructor(
     private readonly em: PostgreSqlEntityManager,
-    @InjectRepository(GameEntity)
-    private readonly games: EntityRepository<GameEntity>,
-    @InjectRepository(GameLikeEntity)
-    private readonly likes: EntityRepository<GameLikeEntity>,
-    private readonly tags: GameTagsService,
+    @InjectRepository(ProjectEntity)
+    private readonly projects: EntityRepository<ProjectEntity>,
+    @InjectRepository(ProjectLikeEntity)
+    private readonly likes: EntityRepository<ProjectLikeEntity>,
+    private readonly tags: ProjectTagsService,
   ) {}
 
-  async list(query: GameListQueryDto, userId?: string) {
-    const revisionWhere: FilterQuery<GameRevisionEntity> = {};
+  async list(query: ProjectListQueryDto, userId?: string) {
+    const revisionWhere: FilterQuery<ProjectRevisionEntity> = {};
     if (query.tag) revisionWhere.tagLinks = { tag: { slug: query.tag } };
     if (query.author_id) {
       revisionWhere.authors = { discord_user_id: BigInt(query.author_id) };
     }
+    if (query.type) revisionWhere.type = query.type;
     if (query.search) revisionWhere.title = { $ilike: `%${query.search}%` };
     if (query.release_from || query.release_to) {
       revisionWhere.release_date = {
@@ -86,7 +87,7 @@ export class GamesService {
         ...(query.release_to ? { $lte: query.release_to } : {}),
       };
     }
-    const where: FilterQuery<GameEntity> = {
+    const where: FilterQuery<ProjectEntity> = {
       publishedRevision: { $ne: null, ...revisionWhere },
     };
     if (userId) {
@@ -103,18 +104,18 @@ export class GamesService {
         },
       ];
     }
-    const [games, total] = await this.games.findAndCount(where, {
-      populate: GAME_POPULATE,
+    const [projects, total] = await this.projects.findAndCount(where, {
+      populate: PROJECT_POPULATE,
       limit: query.limit,
       offset: query.offset,
       orderBy: this.publicOrder(query.sort),
     });
-    const counts = await this.likeCounts(games);
+    const counts = await this.likeCounts(projects);
     return {
-      items: games.map((game) =>
+      items: projects.map((project) =>
         this.listItem(
-          game,
-          game.publishedRevision as PopulatedRevision,
+          project,
+          project.publishedRevision as PopulatedRevision,
           counts,
         ),
       ),
@@ -124,7 +125,7 @@ export class GamesService {
     };
   }
 
-  listByUser(userId: string, query: Omit<GameListQueryDto, 'author_id'>) {
+  listByUser(userId: string, query: Omit<ProjectListQueryDto, 'author_id'>) {
     return this.list(query, userId);
   }
 
@@ -132,81 +133,86 @@ export class GamesService {
     const lookup = isUuid(idOrSlug)
       ? { id: idOrSlug }
       : { slug: idOrSlug.toLocaleLowerCase('ru-RU') };
-    const game = await this.games.findOne(
+    const project = await this.projects.findOne(
       { ...lookup, publishedRevision: { $ne: null } },
-      { populate: GAME_POPULATE },
+      { populate: PROJECT_POPULATE },
     );
-    if (!game?.publishedRevision)
-      throw new NotFoundException('Game not found.');
+    if (!project?.publishedRevision)
+      throw new NotFoundException('Project not found.');
     return this.details(
-      game,
-      game.publishedRevision as PopulatedRevision,
-      await this.likes.count({ game }),
+      project,
+      project.publishedRevision as PopulatedRevision,
+      await this.likes.count({ project }),
     );
   }
 
-  async create(ownerId: string, dto: CreateGameDto) {
+  async create(ownerId: string, dto: CreateProjectDto) {
     this.assertImageAttachmentInput(dto.attachments, true);
     try {
       return await this.em.transactional(async (em) => {
-        const slug = normalizeGameSlug(dto.slug ?? createGameSlug(dto.title));
+        const slug = normalizeProjectSlug(
+          dto.slug ?? createProjectSlug(dto.title),
+        );
         await this.assertSlugAvailable(em, slug);
-        const game = Object.assign(new GameEntity(), {
+        const project = Object.assign(new ProjectEntity(), {
           owner_id: BigInt(ownerId),
           slug,
         });
-        const revision = Object.assign(new GameRevisionEntity(), {
-          game,
+        const revision = Object.assign(new ProjectRevisionEntity(), {
+          project,
           version: 1,
-          status: GameRevisionStatus.Draft,
+          status: ProjectRevisionStatus.Draft,
           title: dto.title,
           description: dto.description,
           release_date: dto.release_date,
+          type: dto.type,
           promo: dto.promo ?? null,
           hide_owner: dto.hide_owner ?? false,
           created_by: BigInt(ownerId),
         });
-        game.revisions.add(revision);
-        game.workingRevision = revision;
+        project.revisions.add(revision);
+        project.workingRevision = revision;
         await this.applyChildren(em, revision, dto);
-        em.persist(game);
+        em.persist(project);
         await em.flush();
-        return this.editorDto(game, revision as PopulatedRevision, [], 0);
+        return this.editorDto(project, revision as PopulatedRevision, [], 0);
       });
     } catch (error) {
       this.rethrowSlugConflict(error);
     }
   }
 
-  async listMine(ownerId: string, query: MineGamesQueryDto) {
-    const where: FilterQuery<GameEntity> = { owner_id: BigInt(ownerId) };
-    if (query.status) {
+  async listMine(ownerId: string, query: MineProjectsQueryDto) {
+    const where: FilterQuery<ProjectEntity> = { owner_id: BigInt(ownerId) };
+    if (query.status || query.type) {
+      const shownRevision = {
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.type ? { type: query.type } : {}),
+      };
       where.$or = [
-        { workingRevision: { status: query.status } },
-        {
-          workingRevision: null,
-          publishedRevision: { status: query.status },
-        },
+        { workingRevision: shownRevision },
+        { workingRevision: null, publishedRevision: shownRevision },
       ];
     }
-    const [games, total] = await this.games.findAndCount(where, {
-      populate: GAME_POPULATE,
+    const [projects, total] = await this.projects.findAndCount(where, {
+      populate: PROJECT_POPULATE,
       orderBy: { updatedAt: 'desc' },
       limit: query.limit,
       offset: query.offset,
     });
     return {
-      items: games.map((game) => {
-        const revision = game.workingRevision ?? game.publishedRevision;
+      items: projects.map((project) => {
+        const revision = project.workingRevision ?? project.publishedRevision;
         return {
-          id: game.id,
-          slug: game.slug,
-          owner_id: game.owner_id.toString(),
+          id: project.id,
+          slug: project.slug,
+          owner_id: project.owner_id.toString(),
           revision_id: revision?.id,
           title: revision?.title,
+          type: revision?.type,
           status: revision?.status,
           version: revision?.version,
-          has_published_version: Boolean(game.publishedRevision),
+          has_published_version: Boolean(project.publishedRevision),
         };
       }),
       total,
@@ -222,70 +228,72 @@ export class GamesService {
     em?: EntityManager,
   ) {
     const manager = em ?? this.em;
-    const game = await manager.findOne(GameEntity, id, {
+    const project = await manager.findOne(ProjectEntity, id, {
       populate: EDITOR_POPULATE,
     });
-    if (!game) throw new NotFoundException('Game not found.');
-    this.assertOwner(game, actorId, reviewer);
-    const revision = game.workingRevision ?? game.publishedRevision;
-    if (!revision) throw new NotFoundException('Game revision not found.');
-    const events = game.reviewEvents
+    if (!project) throw new NotFoundException('Project not found.');
+    this.assertOwner(project, actorId, reviewer);
+    const revision = project.workingRevision ?? project.publishedRevision;
+    if (!revision) throw new NotFoundException('Project revision not found.');
+    const events = project.reviewEvents
       .getItems()
       .sort(
         (left, right) => left.created_at.getTime() - right.created_at.getTime(),
       );
     return this.editorDto(
-      game,
+      project,
       revision as PopulatedRevision,
       events,
-      await manager.count(GameLikeEntity, { game }),
+      await manager.count(ProjectLikeEntity, { project }),
     );
   }
 
-  async update(id: string, ownerId: string, dto: UpdateGameDto) {
+  async update(id: string, ownerId: string, dto: UpdateProjectDto) {
     this.assertImageAttachmentInput(dto.attachments, false);
     try {
       return await this.em.transactional(async (em) => {
-        const game = await em.findOne(GameEntity, id, {
+        const project = await em.findOne(ProjectEntity, id, {
           populate: EDITOR_POPULATE,
           lockMode: LockMode.PESSIMISTIC_WRITE,
         });
-        if (!game) throw new NotFoundException('Game not found.');
-        this.assertOwner(game, ownerId, false);
+        if (!project) throw new NotFoundException('Project not found.');
+        this.assertOwner(project, ownerId, false);
         if (dto.slug !== undefined) {
-          const slug = normalizeGameSlug(dto.slug);
-          await this.assertSlugAvailable(em, slug, game.id);
-          game.slug = slug;
+          const slug = normalizeProjectSlug(dto.slug);
+          await this.assertSlugAvailable(em, slug, project.id);
+          project.slug = slug;
         }
-        let revision = game.workingRevision as PopulatedRevision | null;
+        let revision = project.workingRevision as PopulatedRevision | null;
         if (!revision) {
-          if (!game.publishedRevision) {
-            throw new ConflictException('Game has no revision to edit.');
+          if (!project.publishedRevision) {
+            throw new ConflictException('Project has no revision to edit.');
           }
-          const published = game.publishedRevision as PopulatedRevision;
-          revision = Object.assign(new GameRevisionEntity(), {
-            game,
+          const published = project.publishedRevision as PopulatedRevision;
+          revision = Object.assign(new ProjectRevisionEntity(), {
+            project,
             version: published.version + 1,
-            status: GameRevisionStatus.Draft,
+            status: ProjectRevisionStatus.Draft,
             title: published.title,
             description: published.description,
             release_date: published.release_date,
+            type: published.type,
             promo: published.promo,
             hide_owner: published.hide_owner,
             created_by: BigInt(ownerId),
           }) as unknown as PopulatedRevision;
-          game.revisions.add(revision);
-          game.workingRevision = revision;
+          project.revisions.add(revision);
+          project.workingRevision = revision;
           await this.cloneChildren(published, revision);
         }
-        if (revision.status === GameRevisionStatus.Review) {
-          throw new ConflictException('Game is currently under review.');
+        if (revision.status === ProjectRevisionStatus.Review) {
+          throw new ConflictException('Project is currently under review.');
         }
         if (dto.title !== undefined) revision.title = dto.title;
         if (dto.description !== undefined)
           revision.description = dto.description;
         if (dto.release_date !== undefined)
           revision.release_date = dto.release_date;
+        if (dto.type !== undefined) revision.type = dto.type;
         if (dto.promo !== undefined) revision.promo = dto.promo;
         if (dto.hide_owner !== undefined) revision.hide_owner = dto.hide_owner;
         await this.applyChildren(em, revision, dto, true);
@@ -299,116 +307,119 @@ export class GamesService {
 
   async submit(id: string, ownerId: string) {
     return this.em.transactional(async (em) => {
-      const game = await em.findOne(GameEntity, id, {
+      const project = await em.findOne(ProjectEntity, id, {
         populate: EDITOR_POPULATE,
         lockMode: LockMode.PESSIMISTIC_WRITE,
       });
-      if (!game) throw new NotFoundException('Game not found.');
-      this.assertOwner(game, ownerId, false);
-      const revision = game.workingRevision as PopulatedRevision | null;
-      if (!revision || revision.status !== GameRevisionStatus.Draft) {
+      if (!project) throw new NotFoundException('Project not found.');
+      this.assertOwner(project, ownerId, false);
+      const revision = project.workingRevision as PopulatedRevision | null;
+      if (!revision || revision.status !== ProjectRevisionStatus.Draft) {
         throw new ConflictException('Only a draft can be submitted.');
       }
       if (revision.authors.length === 0 || revision.tagLinks.length === 0) {
         throw new ConflictException(
-          'A game must have at least one author and one tag before review.',
+          'A project must have at least one author and one tag before review.',
         );
       }
       if (
         !revision.attachments
           .getItems()
-          .some((attachment) => attachment.type === GameAttachmentType.Image)
+          .some((attachment) => attachment.type === ProjectAttachmentType.Image)
       ) {
         throw new ConflictException(
-          'A game must have at least one image attachment before review.',
+          'A project must have at least one image attachment before review.',
         );
       }
-      revision.status = GameRevisionStatus.Review;
+      revision.status = ProjectRevisionStatus.Review;
       revision.submitted_at = new Date();
-      const event = Object.assign(new GameReviewEventEntity(), {
-        game,
+      const event = Object.assign(new ProjectReviewEventEntity(), {
+        project,
         revision,
-        action: GameReviewAction.Submitted,
+        action: ProjectReviewAction.Submitted,
         actor_id: BigInt(ownerId),
       });
-      game.reviewEvents.add(event);
+      project.reviewEvents.add(event);
       await em.flush();
       return this.getEditor(id, ownerId, false, em);
     });
   }
 
   async remove(id: string, actorId: string, reviewer: boolean) {
-    const game = await this.games.findOne(id, {
+    const project = await this.projects.findOne(id, {
       populate: ['publishedRevision'],
     });
-    if (!game) throw new NotFoundException('Game not found.');
-    if (game.publishedRevision && !reviewer) {
+    if (!project) throw new NotFoundException('Project not found.');
+    if (project.publishedRevision && !reviewer) {
       throw new ForbiddenException(
-        'Published games can only be deleted by reviewers.',
+        'Published projects can only be deleted by reviewers.',
       );
     }
-    this.assertOwner(game, actorId, reviewer);
-    this.em.remove(game);
+    this.assertOwner(project, actorId, reviewer);
+    this.em.remove(project);
     await this.em.flush();
   }
 
-  private publicOrder(sort: GameListSort) {
-    if (sort === GameListSort.ReleaseDateAsc) {
+  private publicOrder(sort: ProjectListSort) {
+    if (sort === ProjectListSort.ReleaseDateAsc) {
       return { publishedRevision: { release_date: 'asc' as const } };
     }
-    if (sort === GameListSort.ReleaseDateDesc) {
+    if (sort === ProjectListSort.ReleaseDateDesc) {
       return { publishedRevision: { release_date: 'desc' as const } };
     }
     return { publishedRevision: { published_at: 'desc' as const } };
   }
 
-  private async likeCounts(games: GameEntity[]) {
+  private async likeCounts(projects: ProjectEntity[]) {
     const counts = new Map<string, number>();
-    if (!games.length) return counts;
+    if (!projects.length) return counts;
     const rows = await this.likes
       .createQueryBuilder('like')
-      .select(['like.game', raw('count(*) as count')])
-      .where({ game: { $in: games } })
-      .groupBy('like.game')
-      .execute<{ game: string; count: string }[]>();
-    for (const row of rows) counts.set(row.game, Number(row.count));
+      .select(['like.project', raw('count(*) as count')])
+      .where({ project: { $in: projects } })
+      .groupBy('like.project')
+      .execute<{ project: string; count: string }[]>();
+    for (const row of rows) counts.set(row.project, Number(row.count));
     return counts;
   }
 
   private listItem(
-    game: GameEntity,
+    project: ProjectEntity,
     revision: PopulatedRevision,
     counts: Map<string, number>,
   ) {
     return {
-      id: game.id,
-      slug: game.slug,
+      id: project.id,
+      slug: project.slug,
       title: revision.title,
+      type: revision.type,
       release_date: String(revision.release_date).slice(0, 10),
       tags: this.publicTagDtos(revision),
       authors: this.authorDtos(revision),
       thumbnail: this.thumbnail(revision),
-      likes_count: counts.get(game.id) ?? 0,
+      likes_count: counts.get(project.id) ?? 0,
       published_at: revision.published_at,
     };
   }
 
   private details(
-    game: GameEntity,
+    project: ProjectEntity,
     revision: PopulatedRevision,
     likes: number,
     exposeOwner = false,
   ) {
     return {
-      id: game.id,
-      slug: game.slug,
+      id: project.id,
+      slug: project.slug,
       title: revision.title,
       description: revision.description,
       thumbnail: this.thumbnail(revision),
       tags: this.publicTagDtos(revision),
       credits: {
         owner_id:
-          exposeOwner || !revision.hide_owner ? game.owner_id.toString() : null,
+          exposeOwner || !revision.hide_owner
+            ? project.owner_id.toString()
+            : null,
         hide_owner: revision.hide_owner,
         authors: this.authorDtos(revision),
       },
@@ -418,6 +429,7 @@ export class GamesService {
       },
       metadata: {
         release_date: String(revision.release_date).slice(0, 10),
+        type: revision.type,
         promo: revision.promo,
         published_at: revision.published_at,
         updated_at: revision.updatedAt,
@@ -427,18 +439,18 @@ export class GamesService {
   }
 
   private editorDto(
-    game: GameEntity,
+    project: ProjectEntity,
     revision: PopulatedRevision,
-    events: GameReviewEventEntity[],
+    events: ProjectReviewEventEntity[],
     likes: number,
   ) {
     return {
-      ...this.details(game, revision, likes, true),
+      ...this.details(project, revision, likes, true),
       workflow: {
         status: revision.status,
         version: revision.version,
-        has_published_version: Boolean(game.publishedRevision),
-        published_version: game.publishedRevision?.version ?? null,
+        has_published_version: Boolean(project.publishedRevision),
+        published_version: project.publishedRevision?.version ?? null,
         review_events: events.map((event) => ({
           id: event.id,
           revision_id: event.revision.id,
@@ -456,7 +468,7 @@ export class GamesService {
       .getItems()
       .sort((a, b) => a.position - b.position)
       .map((author) =>
-        author.type === GameAuthorType.Discord
+        author.type === ProjectAuthorType.Discord
           ? {
               type: author.type,
               discord_user_id: author.discord_user_id?.toString(),
@@ -478,7 +490,7 @@ export class GamesService {
       revision.attachments
         .getItems()
         .sort((a, b) => a.position - b.position)
-        .find((attachment) => attachment.type === GameAttachmentType.Image)
+        .find((attachment) => attachment.type === ProjectAttachmentType.Image)
         ?.url ?? null
     );
   }
@@ -499,28 +511,30 @@ export class GamesService {
 
   private async applyChildren(
     em: EntityManager,
-    revision: GameRevisionEntity,
-    dto: UpdateGameDto,
+    revision: ProjectRevisionEntity,
+    dto: UpdateProjectDto,
     partial = false,
   ) {
     if (!partial || dto.tags !== undefined) {
       const tags = await this.tags.ensure(dto.tags ?? [], em);
       if (revision.id) {
-        await em.nativeDelete(GameRevisionTagEntity, { revision: revision.id });
+        await em.nativeDelete(ProjectRevisionTagEntity, {
+          revision: revision.id,
+        });
       }
       revision.tagLinks.set(
         tags.map((tag) =>
-          Object.assign(new GameRevisionTagEntity(), { revision, tag }),
+          Object.assign(new ProjectRevisionTagEntity(), { revision, tag }),
         ),
       );
     }
     if (!partial || dto.authors !== undefined) {
       if (revision.id) {
-        await em.nativeDelete(GameAuthorEntity, { revision: revision.id });
+        await em.nativeDelete(ProjectAuthorEntity, { revision: revision.id });
       }
       revision.authors.set(
         (dto.authors ?? []).map((author, position) =>
-          Object.assign(new GameAuthorEntity(), {
+          Object.assign(new ProjectAuthorEntity(), {
             revision,
             type: author.type,
             discord_user_id: author.discord_user_id
@@ -535,22 +549,28 @@ export class GamesService {
     }
     if (!partial || dto.links !== undefined) {
       if (revision.id) {
-        await em.nativeDelete(GameLinkEntity, { revision: revision.id });
+        await em.nativeDelete(ProjectLinkEntity, { revision: revision.id });
       }
       revision.links.set(
         (dto.links ?? []).map((link, position) =>
-          Object.assign(new GameLinkEntity(), { revision, ...link, position }),
+          Object.assign(new ProjectLinkEntity(), {
+            revision,
+            ...link,
+            position,
+          }),
         ),
       );
     }
     if (!partial || dto.attachments !== undefined) {
       const attachments = dto.attachments ?? [];
       if (revision.id) {
-        await em.nativeDelete(GameAttachmentEntity, { revision: revision.id });
+        await em.nativeDelete(ProjectAttachmentEntity, {
+          revision: revision.id,
+        });
       }
       revision.attachments.set(
         attachments.map((attachment, position) =>
-          Object.assign(new GameAttachmentEntity(), {
+          Object.assign(new ProjectAttachmentEntity(), {
             revision,
             ...attachment,
             position,
@@ -562,11 +582,11 @@ export class GamesService {
 
   private async cloneChildren(
     source: PopulatedRevision,
-    target: GameRevisionEntity,
+    target: ProjectRevisionEntity,
   ) {
     target.tagLinks.set(
       source.tagLinks.getItems().map(({ tag }) =>
-        Object.assign(new GameRevisionTagEntity(), {
+        Object.assign(new ProjectRevisionTagEntity(), {
           revision: target,
           tag,
         }),
@@ -574,7 +594,7 @@ export class GamesService {
     );
     target.authors.set(
       source.authors.getItems().map((author) =>
-        Object.assign(new GameAuthorEntity(), {
+        Object.assign(new ProjectAuthorEntity(), {
           revision: target,
           type: author.type,
           discord_user_id: author.discord_user_id,
@@ -586,7 +606,7 @@ export class GamesService {
     );
     target.links.set(
       source.links.getItems().map((link) =>
-        Object.assign(new GameLinkEntity(), {
+        Object.assign(new ProjectLinkEntity(), {
           revision: target,
           icon: link.icon,
           label: link.label,
@@ -597,7 +617,7 @@ export class GamesService {
     );
     target.attachments.set(
       source.attachments.getItems().map((attachment) =>
-        Object.assign(new GameAttachmentEntity(), {
+        Object.assign(new ProjectAttachmentEntity(), {
           revision: target,
           type: attachment.type,
           url: attachment.url,
@@ -607,20 +627,24 @@ export class GamesService {
     );
   }
 
-  private assertOwner(game: GameEntity, actorId: string, reviewer: boolean) {
-    if (!reviewer && game.owner_id.toString() !== actorId) {
-      throw new ForbiddenException('Only the owner can access this game.');
+  private assertOwner(
+    project: ProjectEntity,
+    actorId: string,
+    reviewer: boolean,
+  ) {
+    if (!reviewer && project.owner_id.toString() !== actorId) {
+      throw new ForbiddenException('Only the owner can access this project.');
     }
   }
 
   private assertImageAttachmentInput(
-    attachments: UpdateGameDto['attachments'],
+    attachments: UpdateProjectDto['attachments'],
     required: boolean,
   ) {
     if (!required && attachments === undefined) return;
     if (
       !(attachments ?? []).some(
-        (attachment) => attachment.type === GameAttachmentType.Image,
+        (attachment) => attachment.type === ProjectAttachmentType.Image,
       )
     ) {
       throw new BadRequestException(
@@ -632,23 +656,23 @@ export class GamesService {
   private async assertSlugAvailable(
     em: EntityManager,
     slug: string,
-    currentGameId?: string,
+    currentProjectId?: string,
   ) {
-    const existing = await em.findOne(GameEntity, {
+    const existing = await em.findOne(ProjectEntity, {
       slug,
-      ...(currentGameId ? { id: { $ne: currentGameId } } : {}),
+      ...(currentProjectId ? { id: { $ne: currentProjectId } } : {}),
     });
     if (existing) {
-      throw new ConflictException('Game slug is already in use.');
+      throw new ConflictException('Project slug is already in use.');
     }
   }
 
   private rethrowSlugConflict(error: unknown): never {
     if (
       error instanceof UniqueConstraintViolationException &&
-      error.message.includes('games_slug_unique')
+      error.message.includes('projects_slug_unique')
     ) {
-      throw new ConflictException('Game slug is already in use.');
+      throw new ConflictException('Project slug is already in use.');
     }
     throw error;
   }

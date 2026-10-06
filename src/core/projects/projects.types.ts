@@ -1,22 +1,28 @@
-export enum GameRevisionStatus {
+export enum ProjectType {
+  Game = 'game',
+  Service = 'service',
+  Tool = 'tool',
+  Other = 'other',
+}
+export enum ProjectRevisionStatus {
   Draft = 'draft',
   Review = 'review',
   Published = 'published',
 }
-export enum GameAuthorType {
+export enum ProjectAuthorType {
   Discord = 'discord',
   Text = 'text',
 }
-export enum GameAttachmentType {
+export enum ProjectAttachmentType {
   Image = 'image',
   ExternalVideo = 'external_video',
 }
-export enum GameReviewAction {
+export enum ProjectReviewAction {
   Submitted = 'submitted',
   Published = 'published',
   ChangesRequested = 'changes_requested',
 }
-export enum GameListSort {
+export enum ProjectListSort {
   ReleaseDateDesc = 'release_date_desc',
   ReleaseDateAsc = 'release_date_asc',
   LikesDesc = 'likes_desc',

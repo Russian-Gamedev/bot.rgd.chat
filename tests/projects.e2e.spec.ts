@@ -13,27 +13,28 @@ import OpenAI from 'openai';
 import { pgliteOrmConfig } from '#common/mikro-orm.pglite.config';
 import { RedisConnectionService } from '#common/redis.module';
 import { DiscordModule } from '#core/discord/discord.module';
-import { GameAttachmentEntity } from '#core/games/entities/games.entity';
-import { GamesController } from '#core/games/games.controller';
-import { GamesService } from '#core/games/games.service';
-import {
-  GameAttachmentType,
-  GameAuthorType,
-  GameListSort,
-  GameRevisionStatus,
-} from '#core/games/games.types';
 import { PermissionService } from '#core/permissions/permissions.service';
 import type { AuthenticatedActor } from '#core/permissions/permissions.types';
 import { ActorType } from '#core/permissions/permissions.types';
+import { ProjectAttachmentEntity } from '#core/projects/entities/projects.entity';
+import { ProjectsController } from '#core/projects/projects.controller';
+import { ProjectsService } from '#core/projects/projects.service';
+import {
+  ProjectAttachmentType,
+  ProjectAuthorType,
+  ProjectListSort,
+  ProjectRevisionStatus,
+  ProjectType,
+} from '#core/projects/projects.types';
 import { AppModule } from '#root/app.module';
 import { MockExternalServicesModule } from './helpers/mock-modules';
 import { MockRedis } from './helpers/mock-redis';
 import { ensureUuidv7Function } from './helpers/pglite-setup';
 
-describe('Games full integration flow', () => {
+describe('Projects full integration flow', () => {
   let orm: MikroORM;
-  let controller: GamesController;
-  let gamesService: GamesService;
+  let controller: ProjectsController;
+  let projectsService: ProjectsService;
 
   const owner: AuthenticatedActor = {
     type: ActorType.User,
@@ -85,8 +86,8 @@ describe('Games full integration flow', () => {
 
     await orm.schema.refresh();
 
-    controller = moduleRef.get(GamesController);
-    gamesService = moduleRef.get(GamesService);
+    controller = moduleRef.get(ProjectsController);
+    projectsService = moduleRef.get(ProjectsService);
 
     expect(
       (controller as unknown as Record<string, unknown>).createTag,
@@ -113,17 +114,18 @@ describe('Games full integration flow', () => {
       title: 'Version One',
       description: '# Initial markdown',
       release_date: '2026-07-11',
+      type: ProjectType.Game,
       promo: 'Скоро релиз!',
       hide_owner: true,
       tags: ['Action', 'Puzzle'],
       authors: [
         {
-          type: GameAuthorType.Discord,
+          type: ProjectAuthorType.Discord,
           discord_user_id: owner.id,
           role: 'Программист',
         },
         {
-          type: GameAuthorType.Text,
+          type: ProjectAuthorType.Text,
           name: 'External Team',
           role: 'Художник',
         },
@@ -132,22 +134,22 @@ describe('Games full integration flow', () => {
         {
           icon: 'website',
           label: 'Website',
-          link: 'https://example.com/game',
+          link: 'https://example.com/project',
         },
       ],
       attachments: [
         {
-          type: GameAttachmentType.Image,
+          type: ProjectAttachmentType.Image,
           url: 'https://example.com/cover.png',
         },
         {
-          type: GameAttachmentType.ExternalVideo,
+          type: ProjectAttachmentType.ExternalVideo,
           url: 'https://example.com/trailer',
         },
       ],
     });
 
-    expect(created.workflow.status).toBe(GameRevisionStatus.Draft);
+    expect(created.workflow.status).toBe(ProjectRevisionStatus.Draft);
     expect(created.workflow.version).toBe(1);
     expect(created.slug).toBe('version-one');
     expect(created.credits.authors).toHaveLength(2);
@@ -165,7 +167,9 @@ describe('Games full integration flow', () => {
     expect(await controller.reviewOne(created.id, reviewer)).toEqual(
       editorUnderReview,
     );
-    expect(editorUnderReview.workflow.status).toBe(GameRevisionStatus.Review);
+    expect(editorUnderReview.workflow.status).toBe(
+      ProjectRevisionStatus.Review,
+    );
     expect(editorUnderReview.resources.attachments).toHaveLength(2);
     expect(editorUnderReview.credits.owner_id).toBe(owner.id);
     expect(editorUnderReview.credits.hide_owner).toBe(true);
@@ -193,7 +197,7 @@ describe('Games full integration flow', () => {
     const returned = await controller.changes(created.id, reviewer, {
       comment: 'Please improve the title.',
     });
-    expect(returned.workflow.status).toBe(GameRevisionStatus.Draft);
+    expect(returned.workflow.status).toBe(ProjectRevisionStatus.Draft);
     expect(
       returned.workflow.review_events.map(
         (event) => (event as unknown as { action: string }).action,
@@ -212,25 +216,28 @@ describe('Games full integration flow', () => {
     expect(published.thumbnail).toBe('https://example.com/cover.png');
     expect(published.credits.authors).toEqual([
       {
-        type: GameAuthorType.Discord,
+        type: ProjectAuthorType.Discord,
         discord_user_id: owner.id,
         role: 'Программист',
       },
       {
-        type: GameAuthorType.Text,
+        type: ProjectAuthorType.Text,
         name: 'External Team',
         role: 'Художник',
       },
     ]);
     expect(published.credits.owner_id).toBeNull();
     expect(published.credits.hide_owner).toBe(true);
-    expect(published.resources.links[0].link).toBe('https://example.com/game');
+    expect(published.resources.links[0].link).toBe(
+      'https://example.com/project',
+    );
     expect(
       published.resources.attachments.map(
         (item) => (item as unknown as { type: string }).type,
       ),
     ).toEqual(['image', 'external_video']);
     expect(published.metadata.release_date).toBe('2026-07-11');
+    expect(published.metadata.type).toBe(ProjectType.Game);
     expect(published.metadata.promo).toBe('Скоро релиз!');
     expect(published.stats.likes_count).toBe(0);
     expect(published.tags.every((tag) => !('id' in tag))).toBe(true);
@@ -248,9 +255,9 @@ describe('Games full integration flow', () => {
       expect(oldField in published).toBe(false);
     }
 
-    await orm.em.nativeDelete(GameAttachmentEntity, {
-      revision: { game: created.id },
-      type: GameAttachmentType.Image,
+    await orm.em.nativeDelete(ProjectAttachmentEntity, {
+      revision: { project: created.id },
+      type: ProjectAttachmentType.Image,
     });
     orm.em.clear();
     expect((await controller.get(created.id)).thumbnail).toBeNull();
@@ -278,14 +285,14 @@ describe('Games full integration flow', () => {
       hide_owner: false,
       authors: [
         {
-          type: GameAuthorType.Text,
+          type: ProjectAuthorType.Text,
           name: 'New Team',
           role: 'Разработчик',
         },
       ],
       attachments: [
         {
-          type: GameAttachmentType.Image,
+          type: ProjectAttachmentType.Image,
           url: 'https://example.com/version-two.png',
         },
       ],
@@ -305,7 +312,7 @@ describe('Games full integration flow', () => {
     expect(republished.title).toBe('Version Two');
     expect(republished.credits.authors).toEqual([
       {
-        type: GameAuthorType.Text,
+        type: ProjectAuthorType.Text,
         name: 'New Team',
         role: 'Разработчик',
       },
@@ -315,20 +322,21 @@ describe('Games full integration flow', () => {
     expect(republished.metadata.promo).toBe('Релиз уже состоялся!');
     expect(republished.resources.attachments).toEqual([
       {
-        type: GameAttachmentType.Image,
+        type: ProjectAttachmentType.Image,
         url: 'https://example.com/version-two.png',
       },
     ]);
 
     const textOnly = await controller.create(owner, {
-      title: 'Text Team Game',
+      title: 'Text Team Project',
       description: 'Second project',
       release_date: '2026-08-01',
+      type: ProjectType.Tool,
       hide_owner: true,
       tags: ['Puzzle'],
       authors: [
         {
-          type: GameAuthorType.Text,
+          type: ProjectAuthorType.Text,
           name: 'No Discord Studio',
           role: 'Команда разработки',
         },
@@ -336,7 +344,7 @@ describe('Games full integration flow', () => {
       links: [],
       attachments: [
         {
-          type: GameAttachmentType.Image,
+          type: ProjectAttachmentType.Image,
           url: 'https://example.com/text-team.png',
         },
       ],
@@ -347,7 +355,7 @@ describe('Games full integration flow', () => {
     const catalog = await controller.list({
       limit: 20,
       offset: 0,
-      sort: GameListSort.PublishedDesc,
+      sort: ProjectListSort.PublishedDesc,
       tag: 'puzzle',
     });
     expect(catalog.total).toBe(2);
@@ -356,6 +364,7 @@ describe('Games full integration flow', () => {
       { name: 'Puzzle', slug: 'puzzle' },
     ]);
     expect(catalog.items[0].id).toBe(textOnly.id);
+    expect(catalog.items[0].type).toBe(ProjectType.Tool);
     expect(catalog.items[0].thumbnail).toBe(
       'https://example.com/text-team.png',
     );
@@ -363,17 +372,48 @@ describe('Games full integration flow', () => {
     expect('image' in catalog.items[0]).toBe(false);
     expect(
       (catalog.items as unknown as Array<{ id: string }>).map(
-        (game) => game.id,
+        (project) => project.id,
       ),
     ).toContain(textOnly.id);
 
-    const profileGames = await gamesService.listByUser(owner.id, {
+    const toolCatalog = await controller.list({
       limit: 20,
       offset: 0,
-      sort: GameListSort.PublishedDesc,
+      sort: ProjectListSort.PublishedDesc,
+      type: ProjectType.Tool,
     });
-    expect(profileGames.items.map((game) => game.id)).toContain(created.id);
-    expect(profileGames.items.map((game) => game.id)).not.toContain(
+    expect(toolCatalog.items.map((project) => project.id)).toEqual([
+      textOnly.id,
+    ]);
+    const gameCatalog = await controller.list({
+      limit: 20,
+      offset: 0,
+      sort: ProjectListSort.PublishedDesc,
+      type: ProjectType.Game,
+    });
+    expect(gameCatalog.items.map((project) => project.id)).toEqual([
+      created.id,
+    ]);
+
+    const mineTools = await controller.mine(owner, {
+      limit: 20,
+      offset: 0,
+      type: ProjectType.Tool,
+    });
+    expect(mineTools.items.map((item) => item.id)).toEqual([textOnly.id]);
+    expect(
+      (await controller.mine(fan, { limit: 20, offset: 0 })).items,
+    ).toHaveLength(0);
+
+    const profileProjects = await projectsService.listByUser(owner.id, {
+      limit: 20,
+      offset: 0,
+      sort: ProjectListSort.PublishedDesc,
+    });
+    expect(profileProjects.items.map((project) => project.id)).toContain(
+      created.id,
+    );
+    expect(profileProjects.items.map((project) => project.id)).not.toContain(
       textOnly.id,
     );
 

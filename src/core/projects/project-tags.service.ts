@@ -3,13 +3,13 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 
-import { GameTagEntity } from './entities/games.entity';
+import { ProjectTagEntity } from './entities/projects.entity';
 
 @Injectable()
-export class GameTagsService {
+export class ProjectTagsService {
   constructor(
-    @InjectRepository(GameTagEntity)
-    private readonly tags: EntityRepository<GameTagEntity>,
+    @InjectRepository(ProjectTagEntity)
+    private readonly tags: EntityRepository<ProjectTagEntity>,
   ) {}
 
   async list() {
@@ -20,7 +20,7 @@ export class GameTagsService {
   async ensure(
     names: string[],
     em: CoreEntityManager,
-  ): Promise<GameTagEntity[]> {
+  ): Promise<ProjectTagEntity[]> {
     const values = [
       ...new Map(
         names.map((value) => {
@@ -31,19 +31,19 @@ export class GameTagsService {
     ].map(([slug, name]) => ({ slug, name }));
     if (values.length === 0) return [];
 
-    await em.upsertMany(GameTagEntity, values, {
+    await em.upsertMany(ProjectTagEntity, values, {
       onConflictFields: ['slug'],
       onConflictAction: 'ignore',
     });
-    const stored = await em.find(GameTagEntity, {
+    const stored = await em.find(ProjectTagEntity, {
       slug: { $in: values.map(({ slug }) => slug) },
     });
     const bySlug = new Map(stored.map((tag) => [tag.slug, tag]));
-    return values.map(({ slug }) => bySlug.get(slug) as GameTagEntity);
+    return values.map(({ slug }) => bySlug.get(slug) as ProjectTagEntity);
   }
 }
 
-function tagDto({ name, slug }: GameTagEntity) {
+function tagDto({ name, slug }: ProjectTagEntity) {
   return { name, slug };
 }
 
