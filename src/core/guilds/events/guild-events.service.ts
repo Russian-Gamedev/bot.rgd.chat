@@ -1,3 +1,4 @@
+import { raw } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
@@ -40,7 +41,7 @@ export class GuildEventService {
       .createQueryBuilder('events')
       .select('*')
       .where({ event })
-      .orderBy({ updatedAt: 'ASC' })
+      .orderBy([{ triggered_count: 'ASC' }, { [raw('random()')]: 'ASC' }])
       .limit(limit)
       .execute();
 
