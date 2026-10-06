@@ -47,11 +47,4 @@ export class AddEventDto {
     description: 'The URL of an attachment for the event message',
   })
   attachmentUrl?: string;
-
-  @BooleanOption({
-    name: 'global',
-    required: false,
-    description: 'Whether the event is global or guild-specific',
-  })
-  global?: boolean;
 }

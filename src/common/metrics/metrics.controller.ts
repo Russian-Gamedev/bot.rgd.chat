@@ -7,7 +7,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { Environment, EnvironmentVariables } from '#config/env';
@@ -26,7 +25,6 @@ export class MetricsController {
   ) {}
 
   @Get(METRICS_ROUTE)
-  @ApiExcludeEndpoint()
   async getMetrics(@Req() request: Request, @Res() response: Response) {
     if (!this.config.get<boolean>('METRICS_ENABLED', true)) {
       throw new NotFoundException();

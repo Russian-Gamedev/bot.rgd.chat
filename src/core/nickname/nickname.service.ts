@@ -1,13 +1,21 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Client } from 'discord.js';
 import { Redis } from 'ioredis';
 
+import { WalletService } from '#core/wallet/wallet.service';
+
 import { NicknameHistoryEntity } from './entities/nickname-history.entity';
 
+export interface NicknameLock {
+  nickname: string;
+  cost: bigint;
+  expiresAt: number;
+}
+
 @Injectable()
-export class NicknameService {
+export class NicknameService implements OnModuleInit {
   private readonly logger = new Logger(NicknameService.name);
 
   constructor(
@@ -17,7 +25,12 @@ export class NicknameService {
     @Inject(Redis)
     private readonly redis: Redis,
     private readonly client: Client,
+    readonly _walletService: WalletService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    ///
+  }
 
   private getRedisKey(guildId: bigint, userId: bigint): string {
     return `nickname:locked:${guildId}:${userId}`;
@@ -48,13 +61,15 @@ export class NicknameService {
     nickname: string,
     ttlSeconds: number,
     setBy: bigint,
+    cost: bigint,
   ): Promise<void> {
     const key = this.getRedisKey(guildId, userId);
 
     const member = await this.getMember(guildId, userId);
     const originalNickname = member?.nickname ?? member?.user.username ?? null;
 
-    await this.redis.set(key, nickname, 'EX', ttlSeconds);
+    const lock = { nickname, cost: cost.toString() };
+    await this.redis.set(key, JSON.stringify(lock), 'EX', ttlSeconds);
 
     if (member) {
       await member.setNickname(nickname, `Locked nickname set by ${setBy}`);
@@ -63,35 +78,53 @@ export class NicknameService {
     await this.recordChange(guildId, userId, originalNickname, nickname, setBy);
 
     this.logger.log(
-      `Locked nickname set for user ${userId} in guild ${guildId}: ${nickname} (TTL: ${ttlSeconds}s)`,
+      `Locked nickname set for user ${userId} in guild ${guildId}: ${nickname} (TTL: ${ttlSeconds}s, cost: ${cost})`,
     );
   }
 
-  async hasLockedNickname(guildId: bigint, userId: bigint): Promise<boolean> {
+  async getLockInfo(
+    guildId: bigint,
+    userId: bigint,
+  ): Promise<NicknameLock | null> {
     const key = this.getRedisKey(guildId, userId);
-    const exists = await this.redis.exists(key);
-    return exists === 1;
+    const data = await this.redis.get(key);
+    if (!data) return null;
+
+    const parsed = this.parseLock(data);
+    if (!parsed) return null;
+
+    const ttlSeconds = await this.redis.ttl(key);
+    const expiresAt =
+      ttlSeconds > 0 ? Math.floor(Date.now() / 1000) + ttlSeconds : 0;
+
+    return { ...parsed, expiresAt };
+  }
+
+  async hasLockedNickname(guildId: bigint, userId: bigint): Promise<boolean> {
+    return (await this.getLockInfo(guildId, userId)) !== null;
   }
 
   async getLockedNickname(
     guildId: bigint,
     userId: bigint,
   ): Promise<string | null> {
-    const key = this.getRedisKey(guildId, userId);
-    const data = await this.redis.get(key);
-    if (!data) return null;
-    return data;
+    return (await this.getLockInfo(guildId, userId))?.nickname ?? null;
   }
 
   async clearLockedNickname(guildId: bigint, userId: bigint): Promise<boolean> {
-    const key = this.getRedisKey(guildId, userId);
-    const lockedNickname = await this.getLockedNickname(guildId, userId);
+    return (await this.redis.del(this.getRedisKey(guildId, userId))) > 0;
+  }
 
-    if (!lockedNickname) return true; // No locked nickname to clear
-
-    await this.redis.del(key);
-
-    return true;
+  private parseLock(data: string): { nickname: string; cost: bigint } | null {
+    try {
+      const lock = JSON.parse(data) as { nickname: unknown; cost: unknown };
+      if (typeof lock.nickname !== 'string' || typeof lock.cost !== 'string') {
+        return null;
+      }
+      return { nickname: lock.nickname, cost: BigInt(lock.cost) };
+    } catch {
+      return null;
+    }
   }
 
   async getHistory(

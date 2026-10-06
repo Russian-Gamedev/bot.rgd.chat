@@ -1,4 +1,3 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
@@ -13,29 +12,24 @@ import { MahoragaCaseEntity } from '../entities/mahoraga-case.entity';
 import { MahoragaCaseStatus, MahoragaReason } from '../mahoraga.types';
 
 export class MahoragaListQueryDto {
-  @ApiPropertyOptional({ enum: MahoragaCaseStatus })
   @IsOptional()
   @IsEnum(MahoragaCaseStatus)
   status?: MahoragaCaseStatus;
 
-  @ApiPropertyOptional()
   @IsOptional()
   @IsNumberString()
   guild_id?: string;
 
-  @ApiPropertyOptional({ enum: MahoragaReason })
   @IsOptional()
   @IsEnum(MahoragaReason)
   reason?: MahoragaReason;
 
-  @ApiPropertyOptional({ default: 50 })
   @IsOptional()
   @Type(() => Number)
   @Min(1)
   @Max(100)
   limit = 50;
 
-  @ApiPropertyOptional({ default: 0 })
   @IsOptional()
   @Type(() => Number)
   @Min(0)
@@ -43,23 +37,19 @@ export class MahoragaListQueryDto {
 }
 
 export class ManualMahoragaCaseDto {
-  @ApiProperty({ description: 'Discord User ID' })
   @IsNumberString()
   user_id: string;
 
-  @ApiPropertyOptional({ description: 'Discord Guild ID for audit context' })
   @IsOptional()
   @IsNumberString()
   guild_id?: string;
 
-  @ApiPropertyOptional({ description: 'Manual softban note' })
   @IsOptional()
   @IsString()
   reason?: string;
 }
 
 export class MahoragaUnbanDto {
-  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   reason?: string;

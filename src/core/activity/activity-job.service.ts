@@ -7,23 +7,32 @@ import {
   EmbedBuilder,
   Guild,
   InteractionContextType,
+  type SendableChannels,
 } from 'discord.js';
 import { Context, SlashCommand, type SlashCommandContext } from 'necord';
 
 import { MetricsService } from '#common/metrics/metrics.service';
 import { Colors } from '#config/constants';
-import { GuildSettings } from '#config/guilds';
+import { Emojis } from '#config/emojis';
+import { GuildEvents, GuildSettings } from '#config/guilds';
+import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
 import { UserService } from '#core/users/users.service';
 import { WalletService } from '#core/wallet/wallet.service';
-import { formatTime, pickRandom, pluralize } from '#lib/utils';
+import { formatCoins, formatTime, pickRandom, pluralize } from '#lib/utils';
 import { ActivityService, ActivityStats } from './activity.service';
 import {
   ActivityPeriod,
   getActivityPeriodRange,
   moscowDateKeyToStartDate,
 } from './activity-period';
+
+const ACTIVITY_RAFFLE_PRIZES: Record<ActivityPeriod, bigint> = {
+  [ActivityPeriod.Day]: 10_000n,
+  [ActivityPeriod.Week]: 100_000n,
+  [ActivityPeriod.Month]: 1_000_000n,
+};
 
 @Injectable()
 export class ActivityJobService {
@@ -37,6 +46,7 @@ export class ActivityJobService {
     private readonly walletService: WalletService,
     private readonly guildSettings: GuildSettingsService,
     private readonly guildMemberRolesService: GuildMemberRolesService,
+    private readonly guildEventService: GuildEventService,
     @Optional() private readonly metrics?: MetricsService,
   ) {}
 
@@ -226,7 +236,7 @@ export class ActivityJobService {
         if (!checkAutoRole) continue;
 
         if (user.activeStreak >= activeRoleThreshold!) {
-          this.logger.log(
+          this.logger.debug(
             `User ${user.user_id} in guild ${guild.id} has an active streak of ${user.activeStreak} days!`,
           );
 
@@ -342,12 +352,63 @@ export class ActivityJobService {
 
     const embed = await this.buildEmbed(activities, period, BigInt(guild.id));
 
-    await channel.send({ embeds: [embed] }).catch((err) => {
+    const sent = await channel
+      .send({ embeds: [embed] })
+      .then(() => true)
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Failed to send activity summary for guild ${guild.id} and period ${period}: ${message}`,
+        );
+        return false;
+      });
+
+    if (!sent) return;
+
+    await this.raffleActivityCoins(guild, channel, activities, period).catch(
+      (err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `Failed to raffle activity coins for guild ${guild.id} and period ${period}: ${message}`,
+        );
+      },
+    );
+  }
+
+  private async raffleActivityCoins(
+    guild: Guild,
+    channel: SendableChannels,
+    activities: ActivityStats[],
+    period: ActivityPeriod,
+  ) {
+    const winner = pickRandom(activities);
+    const prize = ACTIVITY_RAFFLE_PRIZES[period];
+    const userStr = `<@${winner.user_id}>`;
+    const money = `${formatCoins(prize)} ${Emojis.CoinAnimated}`;
+
+    try {
+      const user = await this.userService.findOrCreateMember(
+        BigInt(guild.id),
+        winner.user_id,
+      );
+      await this.walletService.credit(user.user_id, prize, 'activity-raffle', {
+        guildId: user.guild_id,
+        metadata: { period },
+      });
+    } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `Failed to send activity summary for guild ${guild.id} and period ${period}: ${message}`,
+        `Failed to credit raffle prize to user ${winner.user_id} in guild ${guild.id}: ${message}`,
       );
-    });
+      return;
+    }
+
+    const message = await this.guildEventService.getRandom(
+      GuildEvents.ACTIVITY_RAFFLE,
+      { user: userStr, money },
+    );
+
+    await channel.send(message ?? `${userStr} выиграл ${money}`);
   }
 
   private async buildEmbed(
@@ -362,7 +423,7 @@ export class ActivityJobService {
     );
     const usersStreak = await this.activityService.getTopMemberStreaks(
       guildId,
-      15,
+      10,
     );
 
     const embed = new EmbedBuilder();
@@ -385,7 +446,7 @@ export class ActivityJobService {
       data
         .sort((a, b) => b[key] - a[key])
         .map((value) => ({ user: value.user_id, value: value[key] }))
-        .slice(0, 15)
+        .slice(0, 10)
         .filter((a) => a.value > 0);
 
     const buildLine = (
@@ -412,7 +473,7 @@ export class ActivityJobService {
 
     const topVoice = buildTop(
       sort(activities, 'voice_seconds'),
-      (item, rank) => buildLine(item.user, formatTime(item.value, 3), rank),
+      (item, rank) => buildLine(item.user, formatTime(item.value, 2), rank),
       'никто не заходил в войс :(',
     );
 
@@ -429,7 +490,7 @@ export class ActivityJobService {
     const lastReactions = reactionsRaw.at(-1);
     const reactions = reactionsRaw
       .filter((a) => a.reaction_count > 0)
-      .slice(0, 15);
+      .slice(0, 10);
 
     /// shit code to always show the last user in the list
     if (
@@ -459,14 +520,6 @@ export class ActivityJobService {
       'никто не реагировал :(',
     );
 
-    const topNewRegs = buildTop(
-      newRegs.slice(0, 15),
-      (item, rank) => `${rank}. <@${item.user_id}>\n`,
-      'никто не пришел к нам :(',
-    );
-
-    const totalActives = activities.length.toLocaleString('ru-RU');
-
     const topStreaks = buildTop(
       usersStreak,
       (item, rank) =>
@@ -479,14 +532,36 @@ export class ActivityJobService {
     );
 
     embed.addFields(
-      { name: 'Стата по войсу', value: topVoice, inline: true },
-      { name: 'Стата по чату', value: topMessages, inline: true },
+      {
+        name: `${Emojis.Volume} Стата по войсу`,
+        value: topVoice,
+        inline: true,
+      },
+      {
+        name: `${Emojis.Message} Стата по чату`,
+        value: topMessages,
+        inline: true,
+      },
       { name: '\u200b', value: '\u200b' },
-      { name: 'Подсчёт неплохих цифр', value: topReactions, inline: true },
-      { name: 'Новореги', value: topNewRegs, inline: true },
+      {
+        name: `${Emojis.Madlaugh} Подсчёт неплохих цифр`,
+        value: topReactions,
+        inline: true,
+      },
+      { name: '🔥 Активные пользователи', value: topStreaks, inline: true },
       { name: '\u200b', value: '\u200b' },
-      { name: 'Активные пользователи', value: topStreaks, inline: true },
-      { name: 'Писало в чате', value: totalActives, inline: false },
+      ...(newRegs.length > 0
+        ? [
+            {
+              name: '👋 Новореги',
+              value: newRegs
+                .slice(0, 10)
+                .map((item) => `<@${item.user_id}>`)
+                .join(','),
+              inline: true,
+            },
+          ]
+        : []),
     );
 
     embed.setColor(Colors.Primary);

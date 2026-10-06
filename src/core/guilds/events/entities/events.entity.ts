@@ -8,8 +8,8 @@ export class GuildEventEntity extends BaseEntity {
   @PrimaryKey({ type: 'uuid', defaultRaw: 'uuidv7()' })
   id: string;
 
-  @Property({ type: 'bigint', index: true })
-  guild_id: bigint;
+  @Property({ type: 'bigint', nullable: true })
+  author_id?: bigint;
 
   @Property({ type: 'varchar', index: true })
   event: GuildEvents;

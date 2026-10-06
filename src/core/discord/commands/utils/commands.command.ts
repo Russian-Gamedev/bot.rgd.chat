@@ -1,7 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Client, MessageFlags } from 'discord.js';
+import {
+  type ApplicationCommandOption,
+  ApplicationCommandOptionType,
+  Client,
+  MessageFlags,
+} from 'discord.js';
 import { Context, SlashCommand, type SlashCommandContext } from 'necord';
+
+type SubcommandOption = Extract<
+  ApplicationCommandOption,
+  {
+    type:
+      | ApplicationCommandOptionType.Subcommand
+      | ApplicationCommandOptionType.SubcommandGroup;
+  }
+>;
+
+function isSubcommandOption(
+  option: ApplicationCommandOption,
+): option is SubcommandOption {
+  return (
+    option.type === ApplicationCommandOptionType.Subcommand ||
+    option.type === ApplicationCommandOptionType.SubcommandGroup
+  );
+}
 
 @Injectable()
 export class CommandsCommand {
@@ -36,9 +59,30 @@ export class CommandsCommand {
 
     const commands = await app.commands.fetch();
 
-    const lines = commands.map(
-      (cmd) => `${cmd.name} - ${cmd.id} - </${cmd.name}:${cmd.id}>`,
-    );
+    const lines: string[] = [];
+    for (const cmd of commands.values()) {
+      const subs = (cmd.options ?? []).filter(isSubcommandOption);
+
+      if (subs.length === 0) {
+        lines.push(`${cmd.name} - ${cmd.id} - </${cmd.name}:${cmd.id}>`);
+        continue;
+      }
+
+      for (const sub of subs) {
+        if (sub.type === ApplicationCommandOptionType.Subcommand) {
+          lines.push(
+            `${cmd.name} ${sub.name} - ${cmd.id} - </${cmd.name} ${sub.name}:${cmd.id}>`,
+          );
+          continue;
+        }
+
+        for (const nested of sub.options ?? []) {
+          lines.push(
+            `${cmd.name} ${sub.name} ${nested.name} - ${cmd.id} - </${cmd.name} ${sub.name} ${nested.name}:${cmd.id}>`,
+          );
+        }
+      }
+    }
 
     const wrap = (text: string) => `\`\`\`\n${text}\n\`\`\``;
     const joined = lines.join('\n');

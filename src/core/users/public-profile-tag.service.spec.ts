@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityRepository } from '@mikro-orm/postgresql';
 import { Client, Collection, type Role } from 'discord.js';
 
@@ -14,8 +14,14 @@ describe('PublicProfileTagService', () => {
   let memberProfileRepository: EntityRepository<MemberProfileEntity>;
   let userProfileTagRepository: EntityRepository<UserProfileTagEntity>;
   let client: Client;
+  let previousFetch: typeof fetch;
 
   beforeEach(() => {
+    previousFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify([]), { status: 200 }),
+    ) as unknown as typeof fetch;
+
     memberProfileRepository = {
       find: mock(() => Promise.resolve([])),
     } as unknown as EntityRepository<MemberProfileEntity>;
@@ -33,6 +39,10 @@ describe('PublicProfileTagService', () => {
       userProfileTagRepository,
       client,
     );
+  });
+
+  afterEach(() => {
+    globalThis.fetch = previousFetch;
   });
 
   it('returns the highest current non-managed role per active guild as a public tag', async () => {
@@ -82,7 +92,6 @@ describe('PublicProfileTagService', () => {
     (client.guilds.fetch as ReturnType<typeof mock>).mockResolvedValue(
       createGuild([createRole('1', 'Admin', 10, '#ff0000')]),
     );
-    const previousFetch = globalThis.fetch;
     globalThis.fetch = mock(
       async () =>
         new Response(JSON.stringify([{ user: { id: '123' }, value: 1500 }]), {
@@ -100,38 +109,33 @@ describe('PublicProfileTagService', () => {
       userProfileTagRepository.find as ReturnType<typeof mock>
     ).mockResolvedValue([customTag]);
 
-    try {
-      await expect(service.getPublicProfileTags(123n)).resolves.toEqual([
-        {
-          name: 'Admin',
-          color: '#ffffff',
-          background: '#ff0000',
-          description: 'Роль на сервере RGD',
-        },
-        {
-          name: '1\u00A0500\u00A0\u20BD',
-          color: '#5C87E7',
-          background: '#FEFEFE',
-          description: 'Донат',
-        },
-        {
-          name: 'Founder',
-          color: '#ffffff',
-          background: '#111827',
-          description: 'Кастомный тег',
-        },
-      ]);
-      expect(userProfileTagRepository.find).toHaveBeenCalledWith(
-        { user_id: 123n },
-        { orderBy: { id: 'ASC' } },
-      );
-    } finally {
-      globalThis.fetch = previousFetch;
-    }
+    await expect(service.getPublicProfileTags(123n)).resolves.toEqual([
+      {
+        name: 'Admin',
+        color: '#ffffff',
+        background: '#ff0000',
+        description: 'Роль на сервере RGD',
+      },
+      {
+        name: '1\u00A0500\u00A0\u20BD',
+        color: '#5C87E7',
+        background: '#FEFEFE',
+        description: 'Донат',
+      },
+      {
+        name: 'Founder',
+        color: '#ffffff',
+        background: '#111827',
+        description: 'Кастомный тег',
+      },
+    ]);
+    expect(userProfileTagRepository.find).toHaveBeenCalledWith(
+      { user_id: 123n },
+      { orderBy: { id: 'ASC' } },
+    );
   });
 
   it('does not add patron tag for missing or non-positive patron value', async () => {
-    const previousFetch = globalThis.fetch;
     globalThis.fetch = mock(
       async () =>
         new Response(JSON.stringify([{ user: { id: '123' }, value: 0 }]), {
@@ -139,11 +143,7 @@ describe('PublicProfileTagService', () => {
         }),
     ) as unknown as typeof fetch;
 
-    try {
-      await expect(service.getPublicProfileTags(123n)).resolves.toEqual([]);
-    } finally {
-      globalThis.fetch = previousFetch;
-    }
+    await expect(service.getPublicProfileTags(123n)).resolves.toEqual([]);
   });
 
   it('skips Discord role tags when guild fetch fails', async () => {

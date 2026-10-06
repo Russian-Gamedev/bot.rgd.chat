@@ -70,6 +70,19 @@ export class ActorAuthGuard implements CanActivate {
 }
 
 @Injectable()
+export class OptionalActorAuthGuard extends ActorAuthGuard {
+  override async canActivate(context: ExecutionContext) {
+    const request = context.switchToHttp().getRequest();
+    try {
+      request.actor = await this.authenticateRequest(request);
+    } catch {
+      request.actor = null;
+    }
+    return true;
+  }
+}
+
+@Injectable()
 export class PermissionGuard extends ActorAuthGuard {
   constructor(
     permissionService: PermissionService,

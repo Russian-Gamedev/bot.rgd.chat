@@ -13,8 +13,11 @@ import {
 } from 'necord';
 
 import { GuildEventsParameters } from '#config/guilds';
-import { cast } from '#lib/utils';
+import { UserService } from '#core/users/users.service';
+import { WalletService } from '#core/wallet/wallet.service';
+import { cast, formatCoins } from '#lib/utils';
 
+import { GUILD_EVENT_COST } from '../guild-events.constants';
 import { GuildEventService } from '../guild-events.service';
 
 import { AddEventDto, FakeEventDto } from './events.dto';
@@ -29,7 +32,11 @@ const EventsGroupDecorator = createCommandGroupDecorator({
 @Injectable()
 @EventsGroupDecorator()
 export class GuildEventsCommands {
-  constructor(private readonly guildEventService: GuildEventService) {}
+  constructor(
+    private readonly guildEventService: GuildEventService,
+    private readonly userService: UserService,
+    private readonly walletService: WalletService,
+  ) {}
 
   @Subcommand({
     name: 'fake',
@@ -39,11 +46,9 @@ export class GuildEventsCommands {
     @Context() [interaction]: SlashCommandContext,
     @Options() dto: FakeEventDto,
   ) {
-    const event = await this.guildEventService.getRandom(
-      interaction.guild!.id,
-      dto.event,
-      { user: `<@${interaction.user.id}>` },
-    );
+    const event = await this.guildEventService.getRandom(dto.event, {
+      user: `<@${interaction.user.id}>`,
+    });
     const silent = Boolean(dto.silent);
 
     if (!event) {
@@ -66,12 +71,15 @@ export class GuildEventsCommands {
 
   @Subcommand({
     name: 'add',
-    description: 'Add a new event template',
+    description: `Добавить новое событие за ${GUILD_EVENT_COST} монет`,
   })
   async addEvent(
     @Context() [interaction]: SlashCommandContext,
     @Options() dto: AddEventDto,
   ) {
+    const guildId = interaction.guildId;
+    if (!guildId) return null;
+
     const missingParams = GuildEventService.validateTemplate(
       dto.template,
       GuildEventsParameters[dto.event],
@@ -87,20 +95,34 @@ export class GuildEventsCommands {
       return;
     }
 
+    const user = await this.userService.findOrCreate(
+      guildId,
+      interaction.user.id,
+    );
+    const balance = await this.walletService.getBalance(user.user_id);
+
+    if (balance < GUILD_EVENT_COST) {
+      return interaction.reply({
+        content: `У вас недостаточно монет. Добавление события стоит ${formatCoins(GUILD_EVENT_COST)} монет, а у вас ${formatCoins(balance)}.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    await this.walletService.debit(
+      user.user_id,
+      GUILD_EVENT_COST,
+      'events:add',
+      {
+        guildId: user.guild_id,
+      },
+    );
+
     const template = await this.guildEventService.addEvent(
       dto.event,
       dto.template,
-      dto.attachmentUrl ? [dto.attachmentUrl] : [],
-      dto?.global ? undefined : interaction.guild!.id,
+      dto.attachmentUrl ? [dto.attachmentUrl] : null,
+      BigInt(interaction.user.id),
     );
-
-    if (!template) {
-      await interaction.reply({
-        content: `Failed to add new event template.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
 
     let response = `New event \`${template.event}\` added with \`${template.message}\``;
 
@@ -108,7 +130,7 @@ export class GuildEventsCommands {
       response += ` and attachment \`${dto.attachmentUrl}\``;
     }
 
-    response += dto?.global ? ` as a global template.` : ' for this guild.';
+    response += `. Списано ${formatCoins(GUILD_EVENT_COST)} монет.`;
 
     await interaction.reply({
       content: response,

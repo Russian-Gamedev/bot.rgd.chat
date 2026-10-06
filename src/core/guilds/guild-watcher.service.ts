@@ -72,7 +72,7 @@ export class GuildWatcherService {
       ? GuildEvents.MEMBER_FIRST_JOIN
       : GuildEvents.MEMBER_JOIN;
 
-    let message = await this.guildEventsService.getRandom(guild.id, event, {
+    let message = await this.guildEventsService.getRandom(event, {
       user: `<@${member.id}>`,
     });
 
@@ -141,11 +141,7 @@ export class GuildWatcherService {
         ? { user: userStr }
         : { user: userStr, moderator: moderatorStr };
 
-    let message = await this.guildEventsService.getRandom(
-      guild.id,
-      event,
-      params,
-    );
+    let message = await this.guildEventsService.getRandom(event, params);
 
     if (!message) {
       switch (event) {

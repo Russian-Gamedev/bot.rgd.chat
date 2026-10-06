@@ -72,6 +72,13 @@ export class UserProfileEntity extends BaseEntity {
   })
   lastActiveAt: Date;
 
+  @Property({
+    fieldName: 'activity_public',
+    type: 'boolean',
+    defaultRaw: 'false',
+  })
+  activityPublic = false;
+
   @Property({ fieldName: 'active_streak', type: 'integer', default: 0 })
   activeStreak = 0;
 

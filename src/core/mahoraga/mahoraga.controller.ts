@@ -7,7 +7,6 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import {
   Actor,
@@ -28,7 +27,6 @@ import {
 } from './dto/mahoraga.dto';
 import { MahoragaService } from './mahoraga.service';
 
-@ApiTags('Mahoraga')
 @Controller('mahoraga')
 @UseGuards(PermissionGuard)
 export class MahoragaController {
@@ -36,7 +34,6 @@ export class MahoragaController {
 
   @Get('spammers')
   @RequirePermissions(Permission.MahoragaManage)
-  @ApiOperation({ summary: 'List Mahoraga spammer cases' })
   async listCases(@Query() query: MahoragaListQueryDto) {
     const cases = await this.mahoragaService.listCases(query);
     return cases.map((mahoragaCase) =>
@@ -46,7 +43,6 @@ export class MahoragaController {
 
   @Get('spammers/:user_id')
   @RequirePermissions(Permission.MahoragaManage)
-  @ApiOperation({ summary: 'Get Mahoraga spammer case by Discord user ID' })
   async getCase(@Param('user_id') userId: string) {
     const mahoragaCase = await this.mahoragaService.getCaseByUserId(userId);
     return MahoragaCaseResponseDto.fromEntity(mahoragaCase);
@@ -54,7 +50,6 @@ export class MahoragaController {
 
   @Post('spammers')
   @RequirePermissions(Permission.MahoragaManage)
-  @ApiOperation({ summary: 'Create or reopen a manual Mahoraga softban' })
   async createManualCase(
     @Body() dto: ManualMahoragaCaseDto,
     @Actor() actor: AuthenticatedActor,
@@ -68,7 +63,6 @@ export class MahoragaController {
 
   @Post('spammers/:user_id/unban')
   @RequirePermissions(Permission.MahoragaManage)
-  @ApiOperation({ summary: 'Pardon Mahoraga case' })
   async unban(
     @Param('user_id') userId: string,
     @Body() dto: MahoragaUnbanDto,
@@ -86,7 +80,6 @@ export class MahoragaController {
 
   @Post('spammers/:user_id/sync-softban')
   @RequirePermissions(Permission.MahoragaManage)
-  @ApiOperation({ summary: 'Apply temporary Mahoraga ban in source guild' })
   async syncSoftban(@Param('user_id') userId: string) {
     return {
       result: await this.mahoragaService.syncSoftban(userId),

@@ -7,6 +7,7 @@ import { AppConfigModule } from '#common/config/config.module';
 import { DatabaseModule } from '#common/database.module';
 import { MetricsModule } from '#common/metrics/metrics.module';
 import { RedisModule } from '#common/redis.module';
+import { S3Module } from '#common/s3/s3.module';
 import { ScheduleLoggerService } from '#common/schedule-logger.service';
 import { ActivityModule } from '#core/activity/activity.module';
 import { AuthModule } from '#core/auth/auth.module';
@@ -16,6 +17,7 @@ import { BotsModule } from '#core/bots/bots.module';
 import { DiscordModule } from '#core/discord/discord.module';
 import { FunModule } from '#core/fun/fun.module';
 import { GamesModule } from '#core/games/games.module';
+import { GolderModule } from '#core/golder/golder.module';
 import { GuildModule } from '#core/guilds/guild.module';
 import { ItemsModule } from '#core/items/items.module';
 import { MahoragaModule } from '#core/mahoraga/mahoraga.module';
@@ -24,6 +26,7 @@ import { NicknameModule } from '#core/nickname/nickname.module';
 import { PortalsModule } from '#core/portals/portals.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
 import { UserModule } from '#core/users/users.module';
+import { UtilsModule } from '#core/utils/utils.module';
 import { WalletModule } from '#core/wallet/wallet.module';
 
 import { AppController } from './app.controller';
@@ -37,6 +40,7 @@ type MikroOrmRootOptions = Record<string, unknown>;
     ScheduleModule.forRoot(),
     MetricsModule,
     RedisModule,
+    S3Module,
     DiscordModule,
     UserModule,
     GuildModule,
@@ -47,6 +51,7 @@ type MikroOrmRootOptions = Record<string, unknown>;
     MiniGamesModule,
     AuthModule,
     ItemsModule,
+    GolderModule,
     MahoragaModule,
     WalletModule,
     BarModule,
@@ -54,6 +59,7 @@ type MikroOrmRootOptions = Record<string, unknown>;
     FunModule,
     NicknameModule,
     PortalsModule,
+    UtilsModule,
   ],
   controllers: [AppController],
   providers: [ScheduleLoggerService],

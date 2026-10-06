@@ -5,6 +5,7 @@ import {
   getAvatarUrl,
   getDefaultAvatar,
   getDisplayAvatar,
+  getEmojiId,
   replaceImageExtension,
 } from './discord';
 
@@ -74,5 +75,21 @@ describe('discord utilities', () => {
     expect(replaceImageExtension(url, 'webp')).toBe(
       'https://cdn.discordapp.com/embed/avatars/0.webp',
     );
+  });
+
+  it('extracts id from a custom emoji tag', () => {
+    expect(getEmojiId('<:coin:1428759054402191482>')).toBe(
+      '1428759054402191482',
+    );
+  });
+
+  it('extracts id from an animated custom emoji tag', () => {
+    expect(getEmojiId('<a:coin_flip:1428758842602426560>')).toBe(
+      '1428758842602426560',
+    );
+  });
+
+  it('throws on a unicode emoji', () => {
+    expect(() => getEmojiId('🥇')).toThrow('Not a custom emoji tag: 🥇');
   });
 });

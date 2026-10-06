@@ -1,5 +1,5 @@
 import { GuildMember } from 'discord.js';
-import { MemberOption, NumberOption } from 'necord';
+import { IntegerOption, MemberOption, NumberOption } from 'necord';
 
 export class CoinTransferDto {
   @MemberOption({
@@ -15,6 +15,23 @@ export class CoinTransferDto {
     required: true,
   })
   amount: number;
+}
+
+export class CoinRequestDto {
+  @MemberOption({
+    name: 'member',
+    description: 'У кого запросить монеты',
+    required: true,
+  })
+  member: GuildMember;
+
+  @IntegerOption({
+    name: 'value',
+    description: 'Количество монет для запроса',
+    required: true,
+    min_value: 1,
+  })
+  value: number;
 }
 
 export class CoinHistoryDto {

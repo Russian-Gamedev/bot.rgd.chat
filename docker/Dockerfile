@@ -1,4 +1,4 @@
-FROM oven/bun:1.3.14-alpine AS builder
+FROM oven/bun:1.4.2-alpine AS builder
 
 WORKDIR /app
 
@@ -14,6 +14,8 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
+ENV NODE_ENV=production
+
 # Build a Linux Bun standalone executable inside the container.
 RUN bun run build.ts
 
@@ -24,7 +26,6 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates tini libstdc++ libgcc tzdata curl
 
 COPY --from=builder /app/dist/bot ./bot
-COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/assets ./assets
 
 # Set git information as environment variables

@@ -7,6 +7,11 @@ import { NecordModule } from 'necord';
 import { AppConfigModule } from '#common/config/config.module';
 import { RedisModule } from '#common/redis.module';
 import { Environment, EnvironmentVariables } from '#config/env';
+import { GuildEventsModule } from '#core/guilds/events/guild-events.module';
+import { GuildSettingsModule } from '#core/guilds/settings/guild-settings.module';
+import { NicknameModule } from '#core/nickname/nickname.module';
+import { UserModule } from '#core/users/users.module';
+import { WalletModule } from '#core/wallet/wallet.module';
 
 import { commands } from './commands';
 import { DiscordController } from './discord.controller';
@@ -67,6 +72,11 @@ import { DiscordService } from './discord.service';
     }),
     NecordPaginationModule.forRoot({}),
     RedisModule,
+    GuildEventsModule,
+    GuildSettingsModule,
+    NicknameModule,
+    UserModule,
+    WalletModule,
   ],
   providers: [DiscordService, ...commands],
   controllers: [DiscordController],

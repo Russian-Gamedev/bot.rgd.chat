@@ -1,92 +1,120 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
+  Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiNotFoundResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiParam,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
 
-import { GuildEvents } from '#config/guilds';
-import { ApiActorAuth } from '#core/permissions/openapi-auth.decorator';
-import { RequirePermissions } from '#core/permissions/permissions.decorator';
-import { PermissionGuard } from '#core/permissions/permissions.guard';
-import { Permission } from '#core/permissions/permissions.types';
+import { GuildEvents, GuildEventsParameters } from '#config/guilds';
+import { getActorUserId } from '#core/permissions/actor-user-id';
+import { Actor } from '#core/permissions/permissions.decorator';
+import { ActorAuthGuard } from '#core/permissions/permissions.guard';
+import { type AuthenticatedActor } from '#core/permissions/permissions.types';
+import { WalletService } from '#core/wallet/wallet.service';
 
-import { GuildEventMessageDto } from './dto/guild-event.dto';
+import { CreateEventDto, UpdateEventDto } from './dto/guild-event.dto';
+import { GUILD_EVENT_COST } from './guild-events.constants';
 import { GuildEventService } from './guild-events.service';
 
-@ApiTags('Guild Events')
-@Controller('guilds/:guild_id/events')
+@Controller('events')
+@UseGuards(ActorAuthGuard)
 export class GuildEventsController {
-  constructor(private readonly guildEventService: GuildEventService) {}
+  constructor(
+    private readonly guildEventService: GuildEventService,
+    private readonly walletService: WalletService,
+  ) {}
 
   @Get()
-  @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GuildEventsRead)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Get supported guild event names',
-    description:
-      'User or bot endpoint. Requires `guild_events:read` permission.',
-  })
-  @ApiParam({ name: 'guild_id', description: 'Discord Guild ID.' })
-  @ApiOkResponse({
-    description: 'Array of event names.',
-    schema: {
-      items: { enum: Object.values(GuildEvents), type: 'string' },
-      type: 'array',
-    },
-  })
   async getEventsList() {
     return Object.values(GuildEvents);
   }
 
-  @Get('/:event')
-  @UseGuards(PermissionGuard)
-  @RequirePermissions(Permission.GuildEventsRead)
-  @ApiActorAuth()
-  @ApiOperation({
-    summary: 'Get a random message template for a guild event',
-    description:
-      'User or bot endpoint. Requires `guild_events:read` permission. Extra query parameters are passed to the event template renderer.',
-  })
-  @ApiParam({ name: 'guild_id', description: 'Discord Guild ID.' })
-  @ApiParam({ name: 'event', enum: GuildEvents })
-  @ApiQuery({
-    name: 'params',
-    required: false,
-    description:
-      'Optional template parameters. Any query key is accepted by the renderer.',
-    style: 'form',
-  })
-  @ApiOkResponse({ type: GuildEventMessageDto })
-  @ApiNotFoundResponse({
-    description: 'No templates found for the requested event in this guild.',
-  })
+  @Get('list')
+  async listEvents() {
+    return this.guildEventService.listEvents();
+  }
+
+  @Get(':event')
   async getRandomEvent(
-    @Param('guild_id') guild_id: string,
     @Param('event') event: string,
     @Query() params: Record<string, string>,
   ) {
     const eventTemplate = await this.guildEventService.getRandom(
-      guild_id,
       event as GuildEvents,
       params,
     );
     if (!eventTemplate)
-      throw new NotFoundException(
-        `No templates found for event "${event}" in this guild`,
-      );
+      throw new NotFoundException(`No templates found for event "${event}"`);
 
     return { message: eventTemplate };
+  }
+
+  @Post()
+  async addEvent(
+    @Actor() actor: AuthenticatedActor,
+    @Body() dto: CreateEventDto,
+  ) {
+    const missingParams = GuildEventService.validateTemplate(
+      dto.message,
+      GuildEventsParameters[dto.event],
+    );
+
+    if (missingParams.length) {
+      throw new BadRequestException(
+        `The template is missing the following parameters: ${missingParams.join(', ')}`,
+      );
+    }
+
+    const userId = getActorUserId(actor);
+    const tx = await this.walletService.debit(
+      userId,
+      GUILD_EVENT_COST,
+      'events:add',
+    );
+    const template = await this.guildEventService.addEvent(
+      dto.event,
+      dto.message,
+      dto.attachments ?? null,
+      BigInt(userId),
+    );
+
+    return {
+      id: template.id,
+      event: template.event,
+      message: template.message,
+      attachments: template.attachments,
+      author: template.author,
+      balance_after: tx.balance_after.toString(),
+    };
+  }
+
+  @Patch(':id')
+  async updateEvent(
+    @Actor() actor: AuthenticatedActor,
+    @Param('id') id: string,
+    @Body() dto: UpdateEventDto,
+  ) {
+    const authorId = BigInt(getActorUserId(actor));
+    const updated = await this.guildEventService.updateEvent(id, dto, authorId);
+    if (!updated) throw new NotFoundException('Event template not found');
+    return updated;
+  }
+
+  @Delete(':id')
+  async removeEvent(
+    @Actor() actor: AuthenticatedActor,
+    @Param('id') id: string,
+  ) {
+    const authorId = BigInt(getActorUserId(actor));
+    const removed = await this.guildEventService.removeEvent(id, authorId);
+    if (!removed) throw new NotFoundException('Event template not found');
+    return { removed };
   }
 }

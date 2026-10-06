@@ -1,13 +1,31 @@
+import { raw } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
-import { Client } from 'discord.js';
 
 import { GuildEvents } from '#config/guilds';
+import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { pickRandom } from '#lib/utils';
-import type { DiscordID } from '#root/lib/types';
 
 import { GuildEventEntity } from './entities/events.entity';
+import {
+  GUILD_EVENT_DEFAULT_POOL_SIZE,
+  GUILD_EVENT_POOL_SIZE,
+} from './guild-events.constants';
+
+export interface EventAuthorView {
+  id: string;
+  username: string;
+  avatar_url: string;
+}
+
+export interface GuildEventView {
+  id: string;
+  event: GuildEvents;
+  message: string;
+  attachments: string[] | null;
+  author: EventAuthorView;
+}
 
 @Injectable()
 export class GuildEventService {
@@ -15,20 +33,16 @@ export class GuildEventService {
     @InjectRepository(GuildEventEntity)
     private readonly guildEventRepository: EntityRepository<GuildEventEntity>,
     private readonly entityManager: EntityManager,
-    private readonly discord: Client,
   ) {}
 
-  async getRandom(
-    guild_id: bigint | number | string,
-    event: GuildEvents,
-    params: Record<string, string> = {},
-  ) {
+  async getRandom(event: GuildEvents, params: Record<string, string> = {}) {
+    const limit = GUILD_EVENT_POOL_SIZE[event] ?? GUILD_EVENT_DEFAULT_POOL_SIZE;
     const events = await this.guildEventRepository
       .createQueryBuilder('events')
       .select('*')
-      .where({ event, guild_id: BigInt(guild_id) })
-      .orderBy({ updatedAt: 'ASC' })
-      .limit(10)
+      .where({ event })
+      .orderBy([{ triggered_count: 'ASC' }, { [raw('random()')]: 'ASC' }])
+      .limit(limit)
       .execute();
 
     if (!events.length) return null;
@@ -46,33 +60,46 @@ export class GuildEventService {
     event: GuildEvents,
     message: string,
     attachments: string[] | null,
-    guild_id?: DiscordID,
-  ) {
-    const guilds: bigint[] = [];
-    if (guild_id) {
-      guilds.push(BigInt(guild_id));
-    } else {
-      const allGuilds = this.discord.guilds.cache.map((g) => BigInt(g.id));
-      guilds.push(...allGuilds);
-    }
-    let newEvent: GuildEventEntity | null = null;
-    for (const gid of guilds) {
-      newEvent = new GuildEventEntity();
-      newEvent.guild_id = gid;
-      newEvent.event = event;
-      newEvent.message = message;
-      newEvent.attachments = attachments;
+    authorId?: bigint,
+  ): Promise<GuildEventView> {
+    const newEvent = new GuildEventEntity();
+    newEvent.event = event;
+    newEvent.message = message;
+    newEvent.attachments = attachments;
+    newEvent.author_id = authorId;
 
-      this.entityManager.persist(newEvent);
-    }
-    await this.entityManager.flush();
-    return newEvent;
+    await this.entityManager.persist(newEvent).flush();
+    const [view] = await this.enrichAuthors([newEvent]);
+    return view;
   }
 
-  async removeEvent(guild_id: bigint, event_id: string) {
+  async updateEvent(
+    id: string,
+    data: { message?: string; attachments?: string[] | null },
+    authorId: bigint,
+  ): Promise<GuildEventView | null> {
     const event = await this.guildEventRepository.findOne({
-      id: event_id,
-      guild_id,
+      id,
+      author_id: authorId,
+    });
+    if (!event) return null;
+
+    if (data.message !== undefined) {
+      event.message = data.message;
+    }
+    if (data.attachments !== undefined) {
+      event.attachments = data.attachments;
+    }
+
+    await this.entityManager.persist(event).flush();
+    const [view] = await this.enrichAuthors([event]);
+    return view;
+  }
+
+  async removeEvent(id: string, authorId: bigint) {
+    const event = await this.guildEventRepository.findOne({
+      id,
+      author_id: authorId,
     });
     if (!event) return false;
 
@@ -80,18 +107,47 @@ export class GuildEventService {
     return true;
   }
 
-  async listEvents(guild_id: bigint, event: GuildEvents) {
-    return this.guildEventRepository.find(
-      { guild_id, event },
-      { orderBy: { createdAt: 'DESC' } },
+  async listEvents(event?: GuildEvents): Promise<GuildEventView[]> {
+    const events = await this.guildEventRepository.find(
+      event ? { event } : {},
+      {
+        orderBy: { createdAt: 'DESC' },
+      },
     );
+    return this.enrichAuthors(events);
   }
 
-  async listAllEvents(guild_id: bigint) {
-    return this.guildEventRepository.find(
-      { guild_id },
-      { orderBy: { createdAt: 'DESC' } },
-    );
+  private async enrichAuthors(
+    events: GuildEventEntity[],
+  ): Promise<GuildEventView[]> {
+    const userIds = [
+      ...new Set(events.filter((e) => e.author_id).map((e) => e.author_id!)),
+    ];
+
+    const users =
+      userIds.length > 0
+        ? await this.entityManager.find(UserProfileEntity, {
+            user_id: { $in: userIds },
+          })
+        : [];
+    const usersById = new Map(users.map((u) => [u.user_id.toString(), u]));
+
+    return events.map((event) => {
+      const authorId = event.author_id?.toString();
+      const user = authorId ? usersById.get(authorId) : undefined;
+
+      return {
+        id: event.id,
+        event: event.event,
+        message: event.message,
+        attachments: event.attachments,
+        author: {
+          id: authorId ?? '',
+          username: user?.username ?? 'Unknown',
+          avatar_url: user?.avatar_url ?? '',
+        },
+      };
+    });
   }
 
   static buildTemplate(

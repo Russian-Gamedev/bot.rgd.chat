@@ -10,7 +10,7 @@ import {
   type TextCommandContext,
 } from 'necord';
 
-import { EmojiCoin } from '#config/emojies';
+import { Emojis } from '#config/emojis';
 import { GuildEvents, GuildSettings } from '#config/guilds';
 import { GuildEventService } from '#core/guilds/events/guild-events.service';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
@@ -20,7 +20,7 @@ import { InsufficientFundsException } from '#core/wallet/wallet.exception';
 import { WalletService } from '#core/wallet/wallet.service';
 import { formatCoins, getErrorMessage, hideEmbedLink } from '#lib/utils';
 
-import { RenameUserDto } from '../dto/rename.dto';
+import { RenameUserDto } from './rename.dto';
 
 const RENAME_BOT_COST = 10_000n;
 
@@ -171,7 +171,6 @@ export class RenameCommands {
       target_member.nickname ?? target_member.user.username;
 
     let message = await this.guildEventService.getRandom(
-      BigInt(guild.id),
       GuildEvents.MEMBER_SET_NAME,
       {
         user: `**${previous_nickname}**`,
@@ -256,7 +255,7 @@ export class RenameCommands {
 
     return {
       error: false,
-      message: `Бот переименован в \`${new_nickname}\` за ${formatCoins(RENAME_BOT_COST)} ${EmojiCoin.Animated}`,
+      message: `Бот переименован в \`${new_nickname}\` за ${formatCoins(RENAME_BOT_COST)} ${Emojis.CoinAnimated}`,
       attachments: [
         'https://tenor.com/view/when-the-money-vince-mcmahon-big-chungus-wwe-gif-16018373',
       ],
@@ -304,13 +303,14 @@ export class RenameCommands {
       new_nickname,
       lockDuration * 3600,
       BigInt(executor_member.id),
+      lockCost,
     );
 
     const durationText = `<t:${Math.floor(Date.now() / 1000) + lockDuration * 3600}:R>`;
 
     return {
       error: false,
-      message: `Участник <@${target_member.user.id}> изменён на \`${new_nickname}\` и заблокирован до ${durationText} за ${formatCoins(lockCost)} ${EmojiCoin.Animated}`,
+      message: `Участник <@${target_member.user.id}> изменён на \`${new_nickname}\` и заблокирован до ${durationText} за ${formatCoins(lockCost)} ${Emojis.CoinAnimated}`,
     };
   }
 }

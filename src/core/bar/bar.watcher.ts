@@ -111,7 +111,7 @@ export class BarWatcher {
   @Once('clientReady')
   @EnsureRequestContext()
   async onInit() {
-    this.logger.log(generateDependencyReport());
+    this.logger.debug(generateDependencyReport());
 
     await this.refreshGuilds();
     this.logger.log('BarGateway initialized');
