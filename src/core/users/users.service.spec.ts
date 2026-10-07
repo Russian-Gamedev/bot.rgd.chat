@@ -144,6 +144,63 @@ describe('UserService', () => {
     expect(qb.getSingleResult).toHaveBeenCalled();
   });
 
+  it('searches profiles with a normalized query and maps raw rows', async () => {
+    em.execute = mock(async () => [
+      {
+        user_id: '123',
+        username: 'Damir',
+        nickname: 'Дамир',
+        avatar_url: 'https://cdn.discordapp.com/a.png',
+      },
+    ]);
+
+    const results = await service.searchProfiles('  Дам  ');
+
+    expect(em.execute).toHaveBeenCalledTimes(1);
+    const [sql, params] = (em.execute as ReturnType<typeof mock>).mock
+      .calls[0] as [string, unknown[], string];
+    expect(sql).toContain('%>');
+    expect(sql).toContain('word_similarity');
+    expect(params).toEqual([
+      'дам',
+      'дам',
+      'дам',
+      'дам',
+      'дам',
+      'дам',
+      'дам',
+      'дам',
+      'дам',
+      'дам',
+      5,
+    ]);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: '123',
+      username: 'Damir',
+      nickname: 'Дамир',
+      avatarUrl: 'https://cdn.discordapp.com/a.png',
+    });
+  });
+
+  it('passes a custom limit to the search query', async () => {
+    em.execute = mock(async () => []);
+
+    await service.searchProfiles('dam', 3);
+
+    const [, params] = (em.execute as ReturnType<typeof mock>).mock
+      .calls[0] as [string, unknown[], string];
+    expect(params?.at(-1)).toBe(3);
+  });
+
+  it('returns an empty list for short queries without hitting the database', async () => {
+    em.execute = mock(async () => []);
+
+    expect(await service.searchProfiles('д')).toEqual([]);
+    expect(await service.searchProfiles('   ')).toEqual([]);
+    expect(em.execute).not.toHaveBeenCalled();
+  });
+
   it('updates profile info while preserving future profileInfo keys', async () => {
     const profile = createUserProfile(123n);
     profile.banner_alt = 'old banner';

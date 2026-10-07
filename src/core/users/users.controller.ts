@@ -20,6 +20,8 @@ import { replaceImageExtension } from '#lib/utils/discord';
 
 import { CurrentUserProfileDto } from './dto/current-user-profile.dto';
 import { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
+import { UserSearchQueryDto } from './dto/user-search-query.dto';
+import { UserSearchResultDto } from './dto/user-search-result.dto';
 import { PublicProfileService } from './public-profile.service';
 import { UserService } from './users.service';
 
@@ -50,6 +52,11 @@ export class UsersController {
     const profile = await this.userService.updateProfileInfo(userId, dto);
     await this.publicProfileService.invalidateProfileCache(profile);
     return this.publicProfileService.getCurrentUserProfile(userId, actor);
+  }
+
+  @Get('search')
+  search(@Query() query: UserSearchQueryDto): Promise<UserSearchResultDto[]> {
+    return this.userService.searchProfiles(query.q);
   }
 
   @Get(':id_or_username/projects')

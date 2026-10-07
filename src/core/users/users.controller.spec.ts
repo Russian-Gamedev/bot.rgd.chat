@@ -11,6 +11,7 @@ import type { ProjectsService } from '#core/projects/projects.service';
 import type { CurrentUserProfileDto } from './dto/current-user-profile.dto';
 import { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
 import type { PublicUserProfileDto } from './dto/public-user-profile.dto';
+import { UserSearchQueryDto } from './dto/user-search-query.dto';
 import { UserProfileEntity } from './entities/user-profile.entity';
 import type { PublicProfileService } from './public-profile.service';
 import { UsersController } from './users.controller';
@@ -271,6 +272,38 @@ describe('UsersController', () => {
       ),
     ).rejects.toThrow(NotFoundException);
     expect(projectsService.listByUser).not.toHaveBeenCalled();
+  });
+
+  it('searches users by query and returns the results', async () => {
+    const expected = [
+      {
+        id: '123',
+        username: 'Damir',
+        nickname: null,
+        avatarUrl: 'https://cdn.discordapp.com/a.png',
+      },
+    ];
+    const userService = createUserService({
+      searchProfiles: mock(async () => expected),
+    });
+    const controller = new UsersController(
+      userService,
+      createPublicProfileService(),
+      createProjectsService(),
+    );
+
+    const result = await controller.search(
+      plainToInstance(UserSearchQueryDto, { q: '  Dam ' }),
+    );
+
+    expect(userService.searchProfiles).toHaveBeenCalledWith('Dam');
+    expect(result).toBe(expected);
+  });
+
+  it('validates search query length', () => {
+    const query = plainToInstance(UserSearchQueryDto, { q: ' д ' });
+
+    expect(validateSync(query).length).toBeGreaterThan(0);
   });
 
   it('returns current user profile for user actor', async () => {
