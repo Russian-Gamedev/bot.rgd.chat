@@ -98,8 +98,8 @@ export class ProjectRevisionEntity extends BaseEntity {
   @Property({ type: 'text' })
   description: string;
 
-  @Property({ type: 'date', index: true })
-  release_date: string;
+  @Property({ type: 'date', index: true, nullable: true })
+  release_date: string | null = null;
 
   @Enum({ items: () => ProjectType })
   type = ProjectType.Game;

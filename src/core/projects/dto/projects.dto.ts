@@ -158,8 +158,9 @@ export class CreateProjectDto {
   @Matches(/^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u)
   slug?: string;
   @IsString() @MaxLength(20_000) description: string;
+  @IsOptional()
   @IsDateString({ strict: true })
-  release_date: string;
+  release_date?: string;
   @IsOptional()
   @IsEnum(ProjectType)
   type?: ProjectType;
@@ -383,7 +384,7 @@ export class ProjectListItemDto {
   slug: string;
   title: string;
   type: ProjectType;
-  release_date: string;
+  release_date: string | null;
   tags: ProjectPublicTagDto[];
   authors: ProjectAuthorDto[];
   thumbnail: string | null;
@@ -407,7 +408,7 @@ export class ProjectResourcesDto {
   links: ProjectLinkDto[];
 }
 export class ProjectMetadataDto {
-  release_date: string;
+  release_date: string | null;
   type: ProjectType;
   promo: string | null;
   published_at: Date | null;

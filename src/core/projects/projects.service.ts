@@ -173,7 +173,7 @@ export class ProjectsService {
           status: ProjectRevisionStatus.Draft,
           title: dto.title,
           description: dto.description,
-          release_date: dto.release_date,
+          release_date: dto.release_date ?? null,
           type: dto.type ?? ProjectType.Game,
           promo: dto.promo ?? null,
           hide_owner: dto.hide_owner ?? false,
@@ -411,7 +411,9 @@ export class ProjectsService {
       slug: project.slug,
       title: revision.title,
       type: revision.type,
-      release_date: String(revision.release_date).slice(0, 10),
+      release_date: revision.release_date
+        ? String(revision.release_date).slice(0, 10)
+        : null,
       tags: this.publicTagDtos(revision),
       authors: this.authorDtos(revision),
       thumbnail: this.thumbnail(revision),
@@ -449,7 +451,9 @@ export class ProjectsService {
         links: this.linkDtos(revision),
       },
       metadata: {
-        release_date: String(revision.release_date).slice(0, 10),
+        release_date: revision.release_date
+          ? String(revision.release_date).slice(0, 10)
+          : null,
         type: revision.type,
         promo: revision.promo,
         published_at: revision.published_at,

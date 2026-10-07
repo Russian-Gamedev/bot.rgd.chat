@@ -37,6 +37,14 @@ describe('projects DTO validation', () => {
     expect(dto.slug).toBe('custom-project-url');
   });
 
+  it('accepts a missing release date', async () => {
+    const { release_date: _date, ...withoutDate } = valid;
+    const dto = plainToInstance(CreateProjectDto, withoutDate);
+    expect(
+      (await validate(dto)).some((error) => error.property === 'release_date'),
+    ).toBe(false);
+  });
+
   it('rejects an unknown project type', async () => {
     const dto = plainToInstance(CreateProjectDto, {
       ...valid,
