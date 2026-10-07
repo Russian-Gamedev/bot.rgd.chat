@@ -47,12 +47,12 @@ describe('projects DTO validation', () => {
     ).toBe(true);
   });
 
-  it('requires a project type', async () => {
+  it('defaults a missing project type without validation errors', async () => {
     const { type: _type, ...withoutType } = valid;
     const dto = plainToInstance(CreateProjectDto, withoutType);
     expect(
       (await validate(dto)).some((error) => error.property === 'type'),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('rejects more than five links and non-HTTPS URLs', async () => {
@@ -113,28 +113,22 @@ describe('projects DTO validation', () => {
     ).toBe(true);
   });
 
-  it('requires at least one image attachment', async () => {
-    const missing = plainToInstance(CreateProjectDto, {
-      ...valid,
-      attachments: undefined,
-    });
+  it('accepts a partial payload without tags, authors or attachments', async () => {
+    const { attachments: _a, authors: _b, tags: _c, ...minimal } = valid;
+    const dto = plainToInstance(CreateProjectDto, minimal);
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
     const videoOnly = plainToInstance(CreateProjectDto, {
       ...valid,
       attachments: [
         { type: 'external_video', url: 'https://example.com/video' },
       ],
     });
-
-    expect(
-      (await validate(missing)).some(
-        (error) => error.property === 'attachments',
-      ),
-    ).toBe(true);
     expect(
       (await validate(videoOnly)).some(
         (error) => error.property === 'attachments',
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('rejects an image attachment with a url or a missing upload_id', async () => {

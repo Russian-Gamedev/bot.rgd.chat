@@ -133,15 +133,42 @@ describe('Projects full integration flow', () => {
   };
 
   it('covers creation variants, review, publication, likes and republishing', async () => {
-    const cover = await upload(owner);
+    const banner = await upload(owner, ProjectUploadKind.Banner);
+    // Шаг 1: черновик создаётся с минимальными данными мастера.
     const created = await controller.create(owner, {
       title: 'Version One',
       description: '# Initial markdown',
       release_date: '2026-07-11',
-      type: ProjectType.Game,
       promo: 'Скоро релиз!',
       hide_owner: true,
-      tags: ['Action', 'Puzzle'],
+      banner_upload_id: banner.id,
+    });
+
+    expect(created.workflow.status).toBe(ProjectRevisionStatus.Draft);
+    expect(created.workflow.version).toBe(1);
+    expect(created.slug).toBe('version-one');
+    expect(created.metadata.type).toBe(ProjectType.Game);
+    expect(created.credits.authors).toEqual([]);
+    expect(created.resources.attachments).toEqual([]);
+    expect(created.banner_url).toBe(banner.url);
+    expect(created.thumbnail).toBe(banner.url);
+    expect(created.metadata.published_at).toBeNull();
+    expect(created.metadata.promo).toBe('Скоро релиз!');
+    await expect(controller.get(created.id)).rejects.toThrow();
+
+    // До категоризации и команды сабмит невозможен.
+    await expect(controller.submit(created.id, owner)).rejects.toThrow(
+      'A project must have at least one author and one tag before review.',
+    );
+
+    // Шаг 2: категоризация.
+    await controller.update(created.id, owner, { tags: ['Action', 'Puzzle'] });
+    await expect(controller.submit(created.id, owner)).rejects.toThrow(
+      'A project must have at least one author and one tag before review.',
+    );
+
+    // Шаг 3: команда. Вложений нет — обложки из шага 1 достаточно.
+    await controller.update(created.id, owner, {
       authors: [
         {
           type: ProjectAuthorType.Discord,
@@ -154,48 +181,6 @@ describe('Projects full integration flow', () => {
           role: 'Художник',
         },
       ],
-      links: [
-        {
-          icon: 'website',
-          label: 'Website',
-          link: 'https://example.com/project',
-        },
-      ],
-      attachments: [
-        {
-          type: ProjectAttachmentType.Image,
-          upload_id: cover.id,
-        },
-        {
-          type: ProjectAttachmentType.ExternalVideo,
-          url: 'https://example.com/trailer',
-        },
-      ],
-    });
-
-    expect(created.workflow.status).toBe(ProjectRevisionStatus.Draft);
-    expect(created.workflow.version).toBe(1);
-    expect(created.slug).toBe('version-one');
-    expect(created.credits.authors).toHaveLength(2);
-    expect(created.resources.attachments).toEqual([
-      {
-        type: ProjectAttachmentType.Image,
-        url: cover.url,
-        upload_id: cover.id,
-      },
-      {
-        type: ProjectAttachmentType.ExternalVideo,
-        url: 'https://example.com/trailer',
-      },
-    ]);
-    expect(created.thumbnail).toBe(cover.url);
-    expect(created.metadata.published_at).toBeNull();
-    expect(created.metadata.promo).toBe('Скоро релиз!');
-    expect(created.tags.every((tag) => !('id' in tag))).toBe(true);
-    await expect(controller.get(created.id)).rejects.toThrow();
-
-    await controller.update(created.id, owner, {
-      description: '# Ready for review',
     });
     await controller.submit(created.id, owner);
     const editorUnderReview = await controller.editor(created.id, owner);
@@ -205,7 +190,7 @@ describe('Projects full integration flow', () => {
     expect(editorUnderReview.workflow.status).toBe(
       ProjectRevisionStatus.Review,
     );
-    expect(editorUnderReview.resources.attachments).toHaveLength(2);
+    expect(editorUnderReview.resources.attachments).toHaveLength(0);
     expect(editorUnderReview.credits.owner_id).toBe(owner.id);
     expect(editorUnderReview.credits.hide_owner).toBe(true);
     expect(editorUnderReview.stats.likes_count).toBe(0);
@@ -248,7 +233,8 @@ describe('Projects full integration flow', () => {
     const published = await controller.get(created.id);
     expect(await controller.get(created.slug)).toEqual(published);
     expect(published.title).toBe('Published Version');
-    expect(published.thumbnail).toBe(cover.url);
+    expect(published.thumbnail).toBe(banner.url);
+    expect(published.banner_url).toBe(banner.url);
     expect(published.credits.authors).toEqual([
       {
         type: ProjectAuthorType.Discord,
@@ -263,14 +249,8 @@ describe('Projects full integration flow', () => {
     ]);
     expect(published.credits.owner_id).toBeNull();
     expect(published.credits.hide_owner).toBe(true);
-    expect(published.resources.links[0].link).toBe(
-      'https://example.com/project',
-    );
-    expect(
-      published.resources.attachments.map(
-        (item) => (item as unknown as { type: string }).type,
-      ),
-    ).toEqual(['image', 'external_video']);
+    expect(published.resources.links).toEqual([]);
+    expect(published.resources.attachments).toEqual([]);
     expect(published.metadata.release_date).toBe('2026-07-11');
     expect(published.metadata.type).toBe(ProjectType.Game);
     expect(published.metadata.promo).toBe('Скоро релиз!');
@@ -290,13 +270,6 @@ describe('Projects full integration flow', () => {
       expect(oldField in published).toBe(false);
     }
 
-    await orm.em.nativeDelete(ProjectAttachmentEntity, {
-      revision: { project: created.id },
-      type: ProjectAttachmentType.Image,
-    });
-    orm.em.clear();
-    expect((await controller.get(created.id)).thumbnail).toBeNull();
-
     expect(await controller.like(created.id, fan)).toEqual({
       liked: true,
       likes_count: 1,
@@ -310,17 +283,22 @@ describe('Projects full integration flow', () => {
       likes_count: 0,
     });
 
-    await expect(
-      controller.update(created.id, owner, { attachments: [] }),
-    ).rejects.toThrow('At least one image attachment is required.');
+    // Шаг 4: ссылки; шаг 5: вложения (картинка из S3 + внешнее видео).
     const coverV2 = await upload(owner);
-    const banner = await upload(owner, ProjectUploadKind.Banner);
+    const bannerV2 = await upload(owner, ProjectUploadKind.Banner);
     const draftV2 = await controller.update(created.id, owner, {
       title: 'Version Two',
       slug: 'version-two-custom',
       promo: 'Релиз уже состоялся!',
       hide_owner: false,
-      banner_upload_id: banner.id,
+      banner_upload_id: bannerV2.id,
+      links: [
+        {
+          icon: 'website',
+          label: 'Website',
+          link: 'https://example.com/project',
+        },
+      ],
       authors: [
         {
           type: ProjectAuthorType.Text,
@@ -333,14 +311,18 @@ describe('Projects full integration flow', () => {
           type: ProjectAttachmentType.Image,
           upload_id: coverV2.id,
         },
+        {
+          type: ProjectAttachmentType.ExternalVideo,
+          url: 'https://example.com/trailer',
+        },
       ],
     });
     expect(draftV2.workflow.version).toBe(2);
     expect(draftV2.slug).toBe('version-two-custom');
     expect(draftV2.workflow.has_published_version).toBe(true);
-    expect(draftV2.banner_url).toBe(banner.url);
+    expect(draftV2.banner_url).toBe(bannerV2.url);
     // Баннер имеет приоритет над вложением-обложкой.
-    expect(draftV2.thumbnail).toBe(banner.url);
+    expect(draftV2.thumbnail).toBe(bannerV2.url);
     expect((await controller.get(created.id)).title).toBe('Published Version');
     expect((await controller.get(created.id)).metadata.promo).toBe(
       'Скоро релиз!',
@@ -361,23 +343,28 @@ describe('Projects full integration flow', () => {
     expect(republished.credits.owner_id).toBe(owner.id);
     expect(republished.credits.hide_owner).toBe(false);
     expect(republished.metadata.promo).toBe('Релиз уже состоялся!');
-    expect(republished.banner_url).toBe(banner.url);
-    expect(republished.thumbnail).toBe(banner.url);
+    expect(republished.banner_url).toBe(bannerV2.url);
+    expect(republished.thumbnail).toBe(bannerV2.url);
     expect(republished.resources.attachments).toEqual([
       {
         type: ProjectAttachmentType.Image,
         url: coverV2.url,
         upload_id: coverV2.id,
       },
+      {
+        type: ProjectAttachmentType.ExternalVideo,
+        url: 'https://example.com/trailer',
+      },
     ]);
 
-    const textCover = await upload(owner);
+    const textBanner = await upload(owner, ProjectUploadKind.Banner);
     const textOnly = await controller.create(owner, {
       title: 'Text Team Project',
       description: 'Second project',
       release_date: '2026-08-01',
       type: ProjectType.Tool,
       hide_owner: true,
+      banner_upload_id: textBanner.id,
       tags: ['Puzzle'],
       authors: [
         {
@@ -387,12 +374,6 @@ describe('Projects full integration flow', () => {
         },
       ],
       links: [],
-      attachments: [
-        {
-          type: ProjectAttachmentType.Image,
-          upload_id: textCover.id,
-        },
-      ],
     });
     await controller.submit(textOnly.id, owner);
     await controller.publish(textOnly.id, reviewer, {});
@@ -410,7 +391,8 @@ describe('Projects full integration flow', () => {
     ]);
     expect(catalog.items[0].id).toBe(textOnly.id);
     expect(catalog.items[0].type).toBe(ProjectType.Tool);
-    expect(catalog.items[0].thumbnail).toBe(textCover.url);
+    expect(catalog.items[0].thumbnail).toBe(textBanner.url);
+    expect(catalog.items[0].banner_url).toBe(textBanner.url);
     expect(catalog.items[0].tags.every((tag) => !('id' in tag))).toBe(true);
     expect('image' in catalog.items[0]).toBe(false);
     expect(

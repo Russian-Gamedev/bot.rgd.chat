@@ -47,6 +47,7 @@ import {
   ProjectListSort,
   ProjectReviewAction,
   ProjectRevisionStatus,
+  ProjectType,
   ProjectUploadKind,
   ProjectUploadStatus,
 } from './projects.types';
@@ -156,7 +157,6 @@ export class ProjectsService {
   }
 
   async create(ownerId: string, dto: CreateProjectDto) {
-    this.assertImageAttachmentInput(dto.attachments, true);
     try {
       return await this.em.transactional(async (em) => {
         const slug = normalizeProjectSlug(
@@ -174,7 +174,7 @@ export class ProjectsService {
           title: dto.title,
           description: dto.description,
           release_date: dto.release_date,
-          type: dto.type,
+          type: dto.type ?? ProjectType.Game,
           promo: dto.promo ?? null,
           hide_owner: dto.hide_owner ?? false,
           created_by: BigInt(ownerId),
@@ -264,7 +264,6 @@ export class ProjectsService {
   }
 
   async update(id: string, ownerId: string, dto: UpdateProjectDto) {
-    this.assertImageAttachmentInput(dto.attachments, false);
     try {
       return await this.em.transactional(async (em) => {
         const project = await em.findOne(ProjectEntity, id, {
@@ -345,13 +344,9 @@ export class ProjectsService {
           'A project must have at least one author and one tag before review.',
         );
       }
-      if (
-        !revision.attachments
-          .getItems()
-          .some((attachment) => attachment.type === ProjectAttachmentType.Image)
-      ) {
+      if (!revision.bannerUpload) {
         throw new ConflictException(
-          'A project must have at least one image attachment before review.',
+          'A project must have a cover image before review.',
         );
       }
       revision.status = ProjectRevisionStatus.Review;
@@ -707,22 +702,6 @@ export class ProjectsService {
   ) {
     if (!reviewer && project.owner_id.toString() !== actorId) {
       throw new ForbiddenException('Only the owner can access this project.');
-    }
-  }
-
-  private assertImageAttachmentInput(
-    attachments: UpdateProjectDto['attachments'],
-    required: boolean,
-  ) {
-    if (!required && attachments === undefined) return;
-    if (
-      !(attachments ?? []).some(
-        (attachment) => attachment.type === ProjectAttachmentType.Image,
-      )
-    ) {
-      throw new BadRequestException(
-        'At least one image attachment is required.',
-      );
     }
   }
 

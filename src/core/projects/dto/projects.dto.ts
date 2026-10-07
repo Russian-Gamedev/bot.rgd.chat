@@ -83,26 +83,6 @@ class ProjectAttachmentShapeConstraint implements ValidatorConstraintInterface {
     return 'image attachments require only upload_id; external_video attachments require only url';
   }
 }
-@ValidatorConstraint({ name: 'projectHasImageAttachment' })
-class ProjectHasImageAttachmentConstraint
-  implements ValidatorConstraintInterface
-{
-  validate(value: unknown) {
-    return (
-      Array.isArray(value) &&
-      value.some(
-        (attachment) =>
-          attachment &&
-          typeof attachment === 'object' &&
-          'type' in attachment &&
-          attachment.type === ProjectAttachmentType.Image,
-      )
-    );
-  }
-  defaultMessage() {
-    return 'At least one image attachment is required.';
-  }
-}
 export class ProjectAuthorInputDto {
   @IsEnum(ProjectAuthorType)
   @Validate(ProjectAuthorShapeConstraint)
@@ -180,8 +160,9 @@ export class CreateProjectDto {
   @IsString() @MaxLength(20_000) description: string;
   @IsDateString({ strict: true })
   release_date: string;
+  @IsOptional()
   @IsEnum(ProjectType)
-  type: ProjectType;
+  type?: ProjectType;
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -194,6 +175,7 @@ export class CreateProjectDto {
   @IsOptional()
   @IsUUID()
   banner_upload_id?: string | null;
+  @IsOptional()
   @Transform(({ value }) =>
     Array.isArray(value)
       ? value.map((tag) => (typeof tag === 'string' ? tag.trim() : tag))
@@ -205,24 +187,25 @@ export class CreateProjectDto {
   @IsString({ each: true })
   @MinLength(1, { each: true })
   @MaxLength(80, { each: true })
-  tags: string[];
+  tags?: string[];
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
   @ValidateNested({ each: true })
   @Type(() => ProjectAuthorInputDto)
-  authors: ProjectAuthorInputDto[];
+  authors?: ProjectAuthorInputDto[];
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
   @ValidateNested({ each: true })
   @Type(() => ProjectLinkInputDto)
   links?: ProjectLinkInputDto[];
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @Validate(ProjectHasImageAttachmentConstraint)
   @ValidateNested({ each: true })
   @Type(() => ProjectAttachmentInputDto)
-  attachments: ProjectAttachmentInputDto[];
+  attachments?: ProjectAttachmentInputDto[];
 }
 export class UpdateProjectDto {
   @IsOptional()
@@ -290,7 +273,6 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @Validate(ProjectHasImageAttachmentConstraint)
   @ValidateNested({ each: true })
   @Type(() => ProjectAttachmentInputDto)
   attachments?: ProjectAttachmentInputDto[];
@@ -405,7 +387,6 @@ export class ProjectListItemDto {
   tags: ProjectPublicTagDto[];
   authors: ProjectAuthorDto[];
   thumbnail: string | null;
-  avatar_url: string | null;
   banner_url: string | null;
   likes_count: number;
   published_at: Date;
