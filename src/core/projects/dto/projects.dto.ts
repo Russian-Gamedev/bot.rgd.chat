@@ -346,6 +346,11 @@ export class ProjectPublicTagDto {
   slug: string;
   name: string;
 }
+export class ProjectPopularTagDto {
+  slug: string;
+  name: string;
+  count: number;
+}
 export class ProjectAuthorDto {
   type: ProjectAuthorType;
   discord_user_id?: string;

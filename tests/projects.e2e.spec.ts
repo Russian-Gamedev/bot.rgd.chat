@@ -389,6 +389,10 @@ describe('Projects full integration flow', () => {
       { name: 'Action', slug: 'action' },
       { name: 'Puzzle', slug: 'puzzle' },
     ]);
+    expect(await controller.getPopularTags()).toEqual([
+      { slug: 'puzzle', name: 'Puzzle', count: 3 },
+      { slug: 'action', name: 'Action', count: 2 },
+    ]);
     expect(catalog.items[0].id).toBe(textOnly.id);
     expect(catalog.items[0].type).toBe(ProjectType.Tool);
     expect(catalog.items[0].thumbnail).toBe(textBanner.url);

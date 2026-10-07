@@ -17,6 +17,27 @@ export class ProjectTagsService {
     return tags.map(tagDto);
   }
 
+  /** Самые используемые теги по всем редакциям проектов. */
+  async popular(
+    limit = 15,
+  ): Promise<{ slug: string; name: string; count: number }[]> {
+    const rows = (await this.tags.getEntityManager().execute(
+      `select t.slug as slug, t.name as name, count(*)::int as count
+       from project_revision_tags prt
+       join project_tags t on t.id = prt.tag_id
+       group by t.slug, t.name
+       order by count desc, t.name asc
+       limit ?`,
+      [limit],
+      'all',
+    )) as { slug: string; name: string; count: number }[];
+    return rows.map((row) => ({
+      slug: row.slug,
+      name: row.name,
+      count: Number(row.count),
+    }));
+  }
+
   async ensure(
     names: string[],
     em: CoreEntityManager,

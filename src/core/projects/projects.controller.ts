@@ -93,6 +93,10 @@ export class ProjectsController {
   reviewList(@Query() q: ProjectReviewListQueryDto) {
     return this.review.list(q);
   }
+  @Get('tags/popular')
+  getPopularTags() {
+    return this.tags.popular();
+  }
   @Get('tags')
   getTags() {
     return this.tags.list();
