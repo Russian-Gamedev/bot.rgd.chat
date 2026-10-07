@@ -7,10 +7,12 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsNumberString,
   IsOptional,
   IsString,
   IsUrl,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -23,6 +25,10 @@ import {
   ValidatorConstraint,
   type ValidatorConstraintInterface,
 } from 'class-validator';
+import {
+  PROJECTS_CONTENT_TYPE_PATTERN,
+  PROJECTS_MAX_UPLOAD_BYTES,
+} from '../projects.constants';
 import { normalizeProjectSlug } from '../projects.slug';
 import {
   ProjectAttachmentType,
@@ -31,6 +37,8 @@ import {
   ProjectReviewAction,
   ProjectRevisionStatus,
   ProjectType,
+  ProjectUploadKind,
+  ProjectUploadStatus,
 } from '../projects.types';
 
 const trim = ({ value }: { value: unknown }) =>
@@ -53,6 +61,26 @@ class ProjectAuthorShapeConstraint implements ValidatorConstraintInterface {
   }
   defaultMessage() {
     return 'discord authors require only discord_user_id; text authors require only name';
+  }
+}
+interface ProjectAttachmentShape {
+  type: ProjectAttachmentType;
+  upload_id?: string;
+  url?: string;
+}
+@ValidatorConstraint({ name: 'projectAttachmentShape' })
+class ProjectAttachmentShapeConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args?: ValidationArguments) {
+    if (!args) return false;
+    const attachment = args.object as ProjectAttachmentShape;
+    return attachment.type === ProjectAttachmentType.Image
+      ? attachment.upload_id !== undefined && attachment.url === undefined
+      : attachment.type === ProjectAttachmentType.ExternalVideo
+        ? attachment.url !== undefined && attachment.upload_id === undefined
+        : false;
+  }
+  defaultMessage() {
+    return 'image attachments require only upload_id; external_video attachments require only url';
   }
 }
 @ValidatorConstraint({ name: 'projectHasImageAttachment' })
@@ -111,10 +139,28 @@ export class ProjectLinkInputDto {
 }
 export class ProjectAttachmentInputDto {
   @IsEnum(ProjectAttachmentType)
+  @Validate(ProjectAttachmentShapeConstraint)
   type: ProjectAttachmentType;
+  @ValidateIf((o) => o.type === ProjectAttachmentType.Image)
+  @IsUUID()
+  upload_id?: string;
+  @ValidateIf((o) => o.type === ProjectAttachmentType.ExternalVideo)
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(2048)
-  url: string;
+  url?: string;
+}
+export class CreateProjectUploadDto {
+  @IsEnum(ProjectUploadKind)
+  kind: ProjectUploadKind;
+  @IsString()
+  @Matches(PROJECTS_CONTENT_TYPE_PATTERN, {
+    message: 'Only image content types are allowed.',
+  })
+  content_type: string;
+  @IsNumber()
+  @Min(1)
+  @Max(PROJECTS_MAX_UPLOAD_BYTES)
+  size_bytes: number;
 }
 export class CreateProjectDto {
   @Transform(trim)
@@ -145,6 +191,9 @@ export class CreateProjectDto {
   @IsOptional()
   @IsBoolean()
   hide_owner?: boolean;
+  @IsOptional()
+  @IsUUID()
+  banner_upload_id?: string | null;
   @Transform(({ value }) =>
     Array.isArray(value)
       ? value.map((tag) => (typeof tag === 'string' ? tag.trim() : tag))
@@ -210,6 +259,9 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsBoolean()
   hide_owner?: boolean;
+  @IsOptional()
+  @IsUUID()
+  banner_upload_id?: string | null;
   @IsOptional()
   @Transform(({ value }) =>
     Array.isArray(value)
@@ -320,6 +372,20 @@ export class ProjectAuthorDto {
 export class ProjectAttachmentDto {
   type: ProjectAttachmentType;
   url: string;
+  upload_id?: string;
+}
+export class ProjectUploadDto {
+  id: string;
+  kind: ProjectUploadKind;
+  status: ProjectUploadStatus;
+  url: string;
+}
+export class ProjectUploadCreatedDto {
+  upload: {
+    id: string;
+    url: string;
+    expires_in_seconds: number;
+  };
 }
 export class ProjectLinkDto {
   icon: string;
@@ -339,6 +405,8 @@ export class ProjectListItemDto {
   tags: ProjectPublicTagDto[];
   authors: ProjectAuthorDto[];
   thumbnail: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
   likes_count: number;
   published_at: Date;
 }
@@ -373,6 +441,8 @@ export class ProjectDetailsDto {
   title: string;
   description: string;
   thumbnail: string | null;
+  banner_url: string | null;
+  banner_upload_id: string | null;
   tags: ProjectPublicTagDto[];
   credits: ProjectCreditsDto;
   resources: ProjectResourcesDto;

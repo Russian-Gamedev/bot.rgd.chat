@@ -11,7 +11,6 @@ import {
 } from '@mikro-orm/decorators/legacy';
 
 import { BaseEntity } from '#common/entities/base.entity';
-
 import {
   ProjectAttachmentType,
   ProjectAuthorType,
@@ -19,6 +18,7 @@ import {
   ProjectRevisionStatus,
   ProjectType,
 } from '../projects.types';
+import { ProjectUploadEntity } from './project-upload.entity';
 
 @Entity({ tableName: 'projects' })
 export class ProjectEntity extends BaseEntity {
@@ -118,6 +118,13 @@ export class ProjectRevisionEntity extends BaseEntity {
 
   @Property({ type: 'timestamptz', nullable: true })
   published_at: Date | null = null;
+
+  @ManyToOne(() => ProjectUploadEntity, {
+    fieldName: 'banner_upload_id',
+    nullable: true,
+    deleteRule: 'set null',
+  })
+  bannerUpload: Rel<ProjectUploadEntity> | null = null;
 
   @OneToMany(
     () => ProjectAuthorEntity,
@@ -259,8 +266,15 @@ export class ProjectAttachmentEntity {
   @Enum({ items: () => ProjectAttachmentType })
   type: ProjectAttachmentType;
 
-  @Property({ length: 2048 })
-  url: string;
+  @ManyToOne(() => ProjectUploadEntity, {
+    fieldName: 'upload_id',
+    nullable: true,
+    deleteRule: 'set null',
+  })
+  upload: Rel<ProjectUploadEntity> | null = null;
+
+  @Property({ length: 2048, nullable: true })
+  url: string | null = null;
 
   @Property({ type: 'smallint' })
   position: number;

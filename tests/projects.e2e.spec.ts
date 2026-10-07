@@ -12,6 +12,7 @@ import Redis from 'ioredis';
 import OpenAI from 'openai';
 import { pgliteOrmConfig } from '#common/mikro-orm.pglite.config';
 import { RedisConnectionService } from '#common/redis.module';
+import { S3StorageService } from '#common/s3/s3-storage.service';
 import { DiscordModule } from '#core/discord/discord.module';
 import { PermissionService } from '#core/permissions/permissions.service';
 import type { AuthenticatedActor } from '#core/permissions/permissions.types';
@@ -25,6 +26,7 @@ import {
   ProjectListSort,
   ProjectRevisionStatus,
   ProjectType,
+  ProjectUploadKind,
 } from '#core/projects/projects.types';
 import { AppModule } from '#root/app.module';
 import { MockExternalServicesModule } from './helpers/mock-modules';
@@ -57,6 +59,13 @@ describe('Projects full integration flow', () => {
     hasPermission: async (actor: AuthenticatedActor) =>
       actor.id === reviewer.id,
   } as unknown as PermissionService;
+  const mockStorage = {
+    getPresignedPutUrl: async () => 'https://s3.example/presigned-put',
+    getPublicUrl: (key: string) => `https://cdn.example/${key}`,
+    headObject: async () => ({ contentLength: 1024 }),
+    uploadObject: async () => undefined,
+    deleteObject: async () => undefined,
+  } as unknown as S3StorageService;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -74,6 +83,8 @@ describe('Projects full integration flow', () => {
       .useValue(new RedisConnectionService(mockRedis as unknown as Redis))
       .overrideProvider(OpenAI)
       .useValue({})
+      .overrideProvider(S3StorageService)
+      .useValue(mockStorage)
       .overrideModule(DiscordModule)
       .useModule(class {})
       .overrideProvider(PermissionService)
@@ -109,7 +120,20 @@ describe('Projects full integration flow', () => {
     await orm?.close(true);
   });
 
+  const upload = async (
+    actor: AuthenticatedActor,
+    kind: ProjectUploadKind = ProjectUploadKind.Attachment,
+  ) => {
+    const created = await controller.createUpload(actor, {
+      kind,
+      content_type: 'image/png',
+      size_bytes: 1024,
+    });
+    return controller.completeUpload(created.upload.id, actor);
+  };
+
   it('covers creation variants, review, publication, likes and republishing', async () => {
+    const cover = await upload(owner);
     const created = await controller.create(owner, {
       title: 'Version One',
       description: '# Initial markdown',
@@ -140,7 +164,7 @@ describe('Projects full integration flow', () => {
       attachments: [
         {
           type: ProjectAttachmentType.Image,
-          url: 'https://example.com/cover.png',
+          upload_id: cover.id,
         },
         {
           type: ProjectAttachmentType.ExternalVideo,
@@ -153,7 +177,18 @@ describe('Projects full integration flow', () => {
     expect(created.workflow.version).toBe(1);
     expect(created.slug).toBe('version-one');
     expect(created.credits.authors).toHaveLength(2);
-    expect(created.resources.attachments).toHaveLength(2);
+    expect(created.resources.attachments).toEqual([
+      {
+        type: ProjectAttachmentType.Image,
+        url: cover.url,
+        upload_id: cover.id,
+      },
+      {
+        type: ProjectAttachmentType.ExternalVideo,
+        url: 'https://example.com/trailer',
+      },
+    ]);
+    expect(created.thumbnail).toBe(cover.url);
     expect(created.metadata.published_at).toBeNull();
     expect(created.metadata.promo).toBe('Скоро релиз!');
     expect(created.tags.every((tag) => !('id' in tag))).toBe(true);
@@ -213,7 +248,7 @@ describe('Projects full integration flow', () => {
     const published = await controller.get(created.id);
     expect(await controller.get(created.slug)).toEqual(published);
     expect(published.title).toBe('Published Version');
-    expect(published.thumbnail).toBe('https://example.com/cover.png');
+    expect(published.thumbnail).toBe(cover.url);
     expect(published.credits.authors).toEqual([
       {
         type: ProjectAuthorType.Discord,
@@ -278,11 +313,14 @@ describe('Projects full integration flow', () => {
     await expect(
       controller.update(created.id, owner, { attachments: [] }),
     ).rejects.toThrow('At least one image attachment is required.');
+    const coverV2 = await upload(owner);
+    const banner = await upload(owner, ProjectUploadKind.Banner);
     const draftV2 = await controller.update(created.id, owner, {
       title: 'Version Two',
       slug: 'version-two-custom',
       promo: 'Релиз уже состоялся!',
       hide_owner: false,
+      banner_upload_id: banner.id,
       authors: [
         {
           type: ProjectAuthorType.Text,
@@ -293,13 +331,16 @@ describe('Projects full integration flow', () => {
       attachments: [
         {
           type: ProjectAttachmentType.Image,
-          url: 'https://example.com/version-two.png',
+          upload_id: coverV2.id,
         },
       ],
     });
     expect(draftV2.workflow.version).toBe(2);
     expect(draftV2.slug).toBe('version-two-custom');
     expect(draftV2.workflow.has_published_version).toBe(true);
+    expect(draftV2.banner_url).toBe(banner.url);
+    // Баннер имеет приоритет над вложением-обложкой.
+    expect(draftV2.thumbnail).toBe(banner.url);
     expect((await controller.get(created.id)).title).toBe('Published Version');
     expect((await controller.get(created.id)).metadata.promo).toBe(
       'Скоро релиз!',
@@ -320,13 +361,17 @@ describe('Projects full integration flow', () => {
     expect(republished.credits.owner_id).toBe(owner.id);
     expect(republished.credits.hide_owner).toBe(false);
     expect(republished.metadata.promo).toBe('Релиз уже состоялся!');
+    expect(republished.banner_url).toBe(banner.url);
+    expect(republished.thumbnail).toBe(banner.url);
     expect(republished.resources.attachments).toEqual([
       {
         type: ProjectAttachmentType.Image,
-        url: 'https://example.com/version-two.png',
+        url: coverV2.url,
+        upload_id: coverV2.id,
       },
     ]);
 
+    const textCover = await upload(owner);
     const textOnly = await controller.create(owner, {
       title: 'Text Team Project',
       description: 'Second project',
@@ -345,7 +390,7 @@ describe('Projects full integration flow', () => {
       attachments: [
         {
           type: ProjectAttachmentType.Image,
-          url: 'https://example.com/text-team.png',
+          upload_id: textCover.id,
         },
       ],
     });
@@ -365,9 +410,7 @@ describe('Projects full integration flow', () => {
     ]);
     expect(catalog.items[0].id).toBe(textOnly.id);
     expect(catalog.items[0].type).toBe(ProjectType.Tool);
-    expect(catalog.items[0].thumbnail).toBe(
-      'https://example.com/text-team.png',
-    );
+    expect(catalog.items[0].thumbnail).toBe(textCover.url);
     expect(catalog.items[0].tags.every((tag) => !('id' in tag))).toBe(true);
     expect('image' in catalog.items[0]).toBe(false);
     expect(
@@ -419,5 +462,49 @@ describe('Projects full integration flow', () => {
 
     await controller.remove(textOnly.id, reviewer);
     await expect(controller.get(textOnly.id)).rejects.toThrow();
+  });
+
+  it('enforces upload ownership, completion and kind at bind time', async () => {
+    const foreign = await upload(owner);
+    const payload = (uploadId: string) => ({
+      title: 'Upload Rules',
+      description: 'desc',
+      release_date: '2026-09-01',
+      type: ProjectType.Other,
+      tags: ['Action'],
+      authors: [
+        {
+          type: ProjectAuthorType.Text,
+          name: 'Team',
+          role: 'Автор',
+        },
+      ],
+      attachments: [{ type: ProjectAttachmentType.Image, upload_id: uploadId }],
+    });
+
+    await expect(controller.create(fan, payload(foreign.id))).rejects.toThrow(
+      'Only the uploader can use this upload.',
+    );
+
+    await expect(
+      controller.create(owner, {
+        ...payload(foreign.id),
+        banner_upload_id: foreign.id,
+      }),
+    ).rejects.toThrow('The upload kind does not match its destination.');
+
+    const pending = await controller.createUpload(owner, {
+      kind: ProjectUploadKind.Attachment,
+      content_type: 'image/png',
+      size_bytes: 1024,
+    });
+    await expect(
+      controller.create(owner, payload(pending.upload.id)),
+    ).rejects.toThrow('The file has not been uploaded yet.');
+
+    await controller.deleteUpload(pending.upload.id, owner);
+    await expect(
+      controller.completeUpload(pending.upload.id, owner),
+    ).rejects.toThrow('Project upload was not found.');
   });
 });

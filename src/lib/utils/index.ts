@@ -7,6 +7,7 @@ export * from './error';
 export * from './number';
 export * from './object';
 export * from './rate-limiter';
+export * from './s3';
 export * from './text';
 export * from './time';
 export * from './url';

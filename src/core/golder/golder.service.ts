@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   type FilterQuery,
   UniqueConstraintViolationException,
@@ -19,6 +18,7 @@ import { S3StorageService } from '#common/s3/s3-storage.service';
 import { UserService } from '#core/users/users.service';
 import {
   assertPublicHttpUrl,
+  buildObjectKey,
   parseDiscordMessageUrl,
   slugify,
 } from '#lib/utils';
@@ -91,7 +91,7 @@ export class GolderService {
     media.slug = slug;
     media.tags = dto.tags;
     media.uploaded_by = BigInt(user_id);
-    media.object_key = buildObjectKey(dto.contentType);
+    media.object_key = buildObjectKey('golder', dto.contentType);
     media.content_type = dto.contentType;
     media.size_bytes = BigInt(dto.sizeBytes);
     media.status = GolderMediaStatus.Pending;
@@ -373,7 +373,7 @@ export class GolderService {
     );
     media.tags = normalizeTags(tags);
     media.uploaded_by = BigInt(user_id);
-    media.object_key = buildObjectKey(contentType);
+    media.object_key = buildObjectKey('golder', contentType);
     media.content_type = contentType;
     media.size_bytes = BigInt(body.length);
     media.status = GolderMediaStatus.Ready;
@@ -476,13 +476,6 @@ export class GolderService {
       avatarUrl: profile?.avatar_url || null,
     };
   }
-}
-
-function buildObjectKey(contentType: string): string {
-  const rawExtension = contentType.split('/')[1] ?? '';
-  const extension =
-    rawExtension.replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'bin';
-  return `golder/${randomUUID()}.${extension}`;
 }
 
 interface ImportableMedia {

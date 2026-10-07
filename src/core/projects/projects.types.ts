@@ -17,6 +17,14 @@ export enum ProjectAttachmentType {
   Image = 'image',
   ExternalVideo = 'external_video',
 }
+export enum ProjectUploadKind {
+  Banner = 'banner',
+  Attachment = 'attachment',
+}
+export enum ProjectUploadStatus {
+  Pending = 'pending',
+  Ready = 'ready',
+}
 export enum ProjectReviewAction {
   Submitted = 'submitted',
   Published = 'published',

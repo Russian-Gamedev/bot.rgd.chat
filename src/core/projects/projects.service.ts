@@ -19,12 +19,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
+import { S3StorageService } from '#common/s3/s3-storage.service';
+import { isUuid } from '#lib/utils';
+
 import type {
   CreateProjectDto,
   MineProjectsQueryDto,
   ProjectListQueryDto,
   UpdateProjectDto,
 } from './dto/projects.dto';
+import { ProjectUploadEntity } from './entities/project-upload.entity';
 import {
   ProjectAttachmentEntity,
   ProjectAuthorEntity,
@@ -43,23 +47,27 @@ import {
   ProjectListSort,
   ProjectReviewAction,
   ProjectRevisionStatus,
+  ProjectUploadKind,
+  ProjectUploadStatus,
 } from './projects.types';
 
 const PROJECT_POPULATE = [
   'publishedRevision.authors',
   'publishedRevision.tagLinks.tag',
   'publishedRevision.links',
-  'publishedRevision.attachments',
+  'publishedRevision.attachments.upload',
+  'publishedRevision.bannerUpload',
   'workingRevision.authors',
   'workingRevision.tagLinks.tag',
   'workingRevision.links',
-  'workingRevision.attachments',
+  'workingRevision.attachments.upload',
+  'workingRevision.bannerUpload',
 ] as const;
 const EDITOR_POPULATE = [...PROJECT_POPULATE, 'reviewEvents.revision'] as const;
 
 type PopulatedRevision = Loaded<
   ProjectRevisionEntity,
-  'authors' | 'tagLinks.tag' | 'links' | 'attachments'
+  'authors' | 'tagLinks.tag' | 'links' | 'attachments.upload' | 'bannerUpload'
 >;
 
 @Injectable()
@@ -71,6 +79,7 @@ export class ProjectsService {
     @InjectRepository(ProjectLikeEntity)
     private readonly likes: EntityRepository<ProjectLikeEntity>,
     private readonly tags: ProjectTagsService,
+    private readonly storage: S3StorageService,
   ) {}
 
   async list(query: ProjectListQueryDto, userId?: string) {
@@ -169,10 +178,16 @@ export class ProjectsService {
           promo: dto.promo ?? null,
           hide_owner: dto.hide_owner ?? false,
           created_by: BigInt(ownerId),
+          bannerUpload: await this.requireUpload(
+            em,
+            ownerId,
+            dto.banner_upload_id,
+            ProjectUploadKind.Banner,
+          ),
         });
         project.revisions.add(revision);
         project.workingRevision = revision;
-        await this.applyChildren(em, revision, dto);
+        await this.applyChildren(em, ownerId, revision, dto);
         em.persist(project);
         await em.flush();
         return this.editorDto(project, revision as PopulatedRevision, [], 0);
@@ -296,7 +311,15 @@ export class ProjectsService {
         if (dto.type !== undefined) revision.type = dto.type;
         if (dto.promo !== undefined) revision.promo = dto.promo;
         if (dto.hide_owner !== undefined) revision.hide_owner = dto.hide_owner;
-        await this.applyChildren(em, revision, dto, true);
+        if (dto.banner_upload_id !== undefined) {
+          revision.bannerUpload = await this.requireUpload(
+            em,
+            ownerId,
+            dto.banner_upload_id,
+            ProjectUploadKind.Banner,
+          );
+        }
+        await this.applyChildren(em, ownerId, revision, dto, true);
         await em.flush();
         return this.getEditor(id, ownerId, false, em);
       });
@@ -397,6 +420,7 @@ export class ProjectsService {
       tags: this.publicTagDtos(revision),
       authors: this.authorDtos(revision),
       thumbnail: this.thumbnail(revision),
+      banner_url: this.uploadUrl(revision.bannerUpload),
       likes_count: counts.get(project.id) ?? 0,
       published_at: revision.published_at,
     };
@@ -414,6 +438,8 @@ export class ProjectsService {
       title: revision.title,
       description: revision.description,
       thumbnail: this.thumbnail(revision),
+      banner_url: this.uploadUrl(revision.bannerUpload),
+      banner_upload_id: revision.bannerUpload?.id ?? null,
       tags: this.publicTagDtos(revision),
       credits: {
         owner_id:
@@ -486,12 +512,13 @@ export class ProjectsService {
   }
 
   private thumbnail(revision: PopulatedRevision) {
+    const firstImage = revision.attachments
+      .getItems()
+      .sort((a, b) => a.position - b.position)
+      .find((attachment) => attachment.type === ProjectAttachmentType.Image);
     return (
-      revision.attachments
-        .getItems()
-        .sort((a, b) => a.position - b.position)
-        .find((attachment) => attachment.type === ProjectAttachmentType.Image)
-        ?.url ?? null
+      this.uploadUrl(revision.bannerUpload) ??
+      this.uploadUrl(firstImage?.upload ?? null)
     );
   }
 
@@ -499,7 +526,17 @@ export class ProjectsService {
     return revision.attachments
       .getItems()
       .sort((a, b) => a.position - b.position)
-      .map(({ type, url }) => ({ type, url }));
+      .map(({ type, url, upload }) => ({
+        type,
+        url: upload
+          ? this.storage.getPublicUrl(upload.object_key)
+          : (url as string),
+        ...(upload ? { upload_id: upload.id } : {}),
+      }));
+  }
+
+  private uploadUrl(upload: { object_key: string } | null): string | null {
+    return upload ? this.storage.getPublicUrl(upload.object_key) : null;
   }
 
   private linkDtos(revision: PopulatedRevision) {
@@ -511,6 +548,7 @@ export class ProjectsService {
 
   private async applyChildren(
     em: EntityManager,
+    ownerId: string,
     revision: ProjectRevisionEntity,
     dto: UpdateProjectDto,
     partial = false,
@@ -569,12 +607,21 @@ export class ProjectsService {
         });
       }
       revision.attachments.set(
-        attachments.map((attachment, position) =>
-          Object.assign(new ProjectAttachmentEntity(), {
-            revision,
-            ...attachment,
-            position,
-          }),
+        await Promise.all(
+          attachments.map(async (attachment, position) =>
+            Object.assign(new ProjectAttachmentEntity(), {
+              revision,
+              type: attachment.type,
+              upload: await this.requireUpload(
+                em,
+                ownerId,
+                attachment.upload_id,
+                ProjectUploadKind.Attachment,
+              ),
+              url: attachment.url ?? null,
+              position,
+            }),
+          ),
         ),
       );
     }
@@ -620,11 +667,37 @@ export class ProjectsService {
         Object.assign(new ProjectAttachmentEntity(), {
           revision: target,
           type: attachment.type,
+          upload: attachment.upload,
           url: attachment.url,
           position: attachment.position,
         }),
       ),
     );
+    target.bannerUpload = source.bannerUpload;
+  }
+  private async requireUpload(
+    em: EntityManager,
+    ownerId: string,
+    uploadId: string | null | undefined,
+    kind: ProjectUploadKind,
+  ): Promise<ProjectUploadEntity | null> {
+    if (uploadId == null) return null;
+    const upload = await em.findOne(ProjectUploadEntity, uploadId);
+    if (!upload) {
+      throw new BadRequestException('Project upload was not found.');
+    }
+    if (upload.owner_id.toString() !== ownerId) {
+      throw new ForbiddenException('Only the uploader can use this upload.');
+    }
+    if (upload.status !== ProjectUploadStatus.Ready) {
+      throw new BadRequestException('The file has not been uploaded yet.');
+    }
+    if (upload.kind !== kind) {
+      throw new BadRequestException(
+        'The upload kind does not match its destination.',
+      );
+    }
+    return upload;
   }
 
   private assertOwner(
@@ -676,10 +749,4 @@ export class ProjectsService {
     }
     throw error;
   }
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
 }

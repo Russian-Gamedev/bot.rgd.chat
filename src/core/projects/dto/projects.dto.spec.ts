@@ -1,7 +1,11 @@
+import 'reflect-metadata';
+
 import { describe, expect, it } from 'bun:test';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateProjectDto } from './projects.dto';
+import { CreateProjectDto, CreateProjectUploadDto } from './projects.dto';
+
+const UPLOAD_ID = '01986b4a-1a2b-7c3d-9e4f-5a6b7c8d9e0f';
 
 const valid = {
   title: 'Community Project',
@@ -20,7 +24,7 @@ const valid = {
   links: [
     { icon: 'steam', label: 'Steam', link: 'https://example.com/project' },
   ],
-  attachments: [{ type: 'image', url: 'https://example.com/image.png' }],
+  attachments: [{ type: 'image', upload_id: UPLOAD_ID }],
 };
 
 describe('projects DTO validation', () => {
@@ -130,6 +134,126 @@ describe('projects DTO validation', () => {
       (await validate(videoOnly)).some(
         (error) => error.property === 'attachments',
       ),
+    ).toBe(true);
+  });
+
+  it('rejects an image attachment with a url or a missing upload_id', async () => {
+    const withUrl = plainToInstance(CreateProjectDto, {
+      ...valid,
+      attachments: [{ type: 'image', url: 'https://example.com/image.png' }],
+    });
+    const withBoth = plainToInstance(CreateProjectDto, {
+      ...valid,
+      attachments: [
+        {
+          type: 'image',
+          upload_id: UPLOAD_ID,
+          url: 'https://example.com/image.png',
+        },
+      ],
+    });
+
+    expect(
+      (await validate(withUrl)).some(
+        (error) => error.property === 'attachments',
+      ),
+    ).toBe(true);
+    expect(
+      (await validate(withBoth)).some(
+        (error) => error.property === 'attachments',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects an external_video attachment with an upload_id or a bad url', async () => {
+    const withUpload = plainToInstance(CreateProjectDto, {
+      ...valid,
+      attachments: [
+        { type: 'external_video', upload_id: UPLOAD_ID },
+        { type: 'image', upload_id: UPLOAD_ID },
+      ],
+    });
+    const withHttpUrl = plainToInstance(CreateProjectDto, {
+      ...valid,
+      attachments: [
+        { type: 'external_video', url: 'http://example.com/video' },
+        { type: 'image', upload_id: UPLOAD_ID },
+      ],
+    });
+
+    expect(
+      (await validate(withUpload)).some(
+        (error) => error.property === 'attachments',
+      ),
+    ).toBe(true);
+    expect(
+      (await validate(withHttpUrl)).some(
+        (error) => error.property === 'attachments',
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts a null banner id and rejects a non-uuid one', async () => {
+    const nullable = plainToInstance(CreateProjectDto, {
+      ...valid,
+      banner_upload_id: null,
+    });
+    expect(await validate(nullable)).toHaveLength(0);
+
+    const invalid = plainToInstance(CreateProjectDto, {
+      ...valid,
+      banner_upload_id: 'not-a-uuid',
+    });
+    expect(
+      (await validate(invalid)).some(
+        (error) => error.property === 'banner_upload_id',
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('project upload DTO validation', () => {
+  it('accepts an image upload request', async () => {
+    const dto = plainToInstance(CreateProjectUploadDto, {
+      kind: 'attachment',
+      content_type: 'image/png',
+      size_bytes: 1024,
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects non-image content types and oversized files', async () => {
+    const video = plainToInstance(CreateProjectUploadDto, {
+      kind: 'attachment',
+      content_type: 'video/mp4',
+      size_bytes: 1024,
+    });
+    const oversized = plainToInstance(CreateProjectUploadDto, {
+      kind: 'banner',
+      content_type: 'image/png',
+      size_bytes: 26 * 1024 * 1024,
+    });
+
+    expect(
+      (await validate(video)).some(
+        (error) => error.property === 'content_type',
+      ),
+    ).toBe(true);
+    expect(
+      (await validate(oversized)).some(
+        (error) => error.property === 'size_bytes',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects an unknown kind', async () => {
+    const dto = plainToInstance(CreateProjectUploadDto, {
+      kind: 'sticker',
+      content_type: 'image/png',
+      size_bytes: 1024,
+    });
+    expect(
+      (await validate(dto)).some((error) => error.property === 'kind'),
     ).toBe(true);
   });
 });

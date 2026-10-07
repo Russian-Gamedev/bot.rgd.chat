@@ -20,6 +20,16 @@ export function choose<T>(array: readonly T[]): T {
   return array[index];
 }
 
+/** Checks whether a value looks like a UUID (any version). */
+export function isUuid(value: unknown): boolean {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  );
+}
+
 /** Produces a deterministic non-negative 32-bit-ish integer from a string. */
 export function hashStringToInt(str: string) {
   let hash = 0;

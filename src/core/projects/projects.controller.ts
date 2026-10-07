@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -23,8 +24,10 @@ import {
 import { PermissionService } from '#core/permissions/permissions.service';
 import type { AuthenticatedActor } from '#core/permissions/permissions.types';
 import { Permission } from '#core/permissions/permissions.types';
+import { isUuid } from '#lib/utils';
 import {
   CreateProjectDto,
+  CreateProjectUploadDto,
   MineProjectsQueryDto,
   ProjectListQueryDto,
   ProjectReviewListQueryDto,
@@ -36,6 +39,7 @@ import {
 import { ProjectLikesService } from './project-likes.service';
 import { ProjectReviewService } from './project-review.service';
 import { ProjectTagsService } from './project-tags.service';
+import { ProjectUploadsService } from './project-uploads.service';
 import { ProjectsService } from './projects.service';
 
 @Controller('projects')
@@ -45,6 +49,7 @@ export class ProjectsController {
     private readonly review: ProjectReviewService,
     private readonly likes: ProjectLikesService,
     private readonly tags: ProjectTagsService,
+    private readonly uploads: ProjectUploadsService,
     private readonly permissions: PermissionService,
   ) {}
   @Get()
@@ -55,6 +60,27 @@ export class ProjectsController {
   @UseGuards(ActorAuthGuard)
   create(@Actor() a: AuthenticatedActor, @Body() d: CreateProjectDto) {
     return this.projects.create(getActorUserId(a), d);
+  }
+  @Post('uploads')
+  @UseGuards(ActorAuthGuard)
+  createUpload(
+    @Actor() a: AuthenticatedActor,
+    @Body() d: CreateProjectUploadDto,
+  ) {
+    return this.uploads.create(getActorUserId(a), d);
+  }
+  @Post('uploads/:id/complete')
+  @UseGuards(ActorAuthGuard)
+  completeUpload(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
+    assertUploadId(id);
+    return this.uploads.complete(getActorUserId(a), id);
+  }
+  @Delete('uploads/:id')
+  @UseGuards(ActorAuthGuard)
+  @HttpCode(204)
+  deleteUpload(@Param('id') id: string, @Actor() a: AuthenticatedActor) {
+    assertUploadId(id);
+    return this.uploads.remove(getActorUserId(a), id);
   }
   @Get('mine')
   @UseGuards(ActorAuthGuard)
@@ -157,5 +183,11 @@ export class ProjectsController {
   }
   private isReviewer(a: AuthenticatedActor) {
     return this.permissions.hasPermission(a, Permission.ProjectsReview);
+  }
+}
+
+function assertUploadId(id: string): void {
+  if (!isUuid(id)) {
+    throw new NotFoundException('Project upload was not found.');
   }
 }
