@@ -14,6 +14,24 @@ export function pickRandom<T>(array: readonly T[]): T {
   return array[Math.floor(Math.random() * length)];
 }
 
+/**
+ * Picks an item with probability proportional to its weight.
+ * Weights are expected to be non-negative.
+ */
+export function pickWeighted<T>(
+  items: readonly T[],
+  weight: (item: T) => number,
+): T {
+  const weights = items.map(weight);
+  let roll = Math.random() * weights.reduce((sum, w) => sum + w, 0);
+
+  for (const [index, item] of items.entries()) {
+    roll -= weights[index]!;
+    if (roll < 0) return item;
+  }
+  return items[items.length - 1];
+}
+
 /** Returns a random item from a readonly array. */
 export function choose<T>(array: readonly T[]): T {
   const index = Math.floor(Math.random() * array.length);

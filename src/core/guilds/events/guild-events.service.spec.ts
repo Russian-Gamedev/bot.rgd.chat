@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
+import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
+
+import { GuildEvents } from '#config/guilds';
 
 import { GuildEventEntity } from './entities/events.entity';
 import { GuildEventService } from './guild-events.service';
@@ -14,7 +17,71 @@ function makeEntity(
   return Object.assign(event, overrides);
 }
 
+function makeService(events: GuildEventEntity[]) {
+  const flushed: GuildEventEntity[] = [];
+  const repository = {
+    find: mock(() => Promise.resolve(events)),
+  } as unknown as EntityRepository<GuildEventEntity>;
+  const entityManager = {
+    persist: mock((entity: GuildEventEntity) => ({
+      flush: mock(async () => {
+        flushed.push(entity);
+      }),
+    })),
+  } as unknown as EntityManager;
+
+  return {
+    service: new GuildEventService(repository, entityManager),
+    flushed,
+  };
+}
+
 describe('Template', () => {
+  describe('getRandom', () => {
+    it('returns null when there are no templates', async () => {
+      const { service } = makeService([]);
+      expect(await service.getRandom(GuildEvents.MEMBER_FIRST_JOIN)).toBeNull();
+    });
+
+    it('increments the picked template and persists it', async () => {
+      const entity = makeEntity({
+        message: 'Hello ${name}',
+        triggered_count: 5,
+      });
+      const { service, flushed } = makeService([entity]);
+
+      const message = await service.getRandom(GuildEvents.MEMBER_FIRST_JOIN, {
+        name: 'World',
+      });
+
+      expect(message).toBe('Hello World');
+      expect(entity.triggered_count).toBe(6);
+      expect(flushed).toEqual([entity]);
+    });
+
+    it('strongly prefers the least-picked template', async () => {
+      const fresh = makeEntity({ id: 'fresh', message: 'fresh' });
+      const worn = makeEntity({
+        id: 'worn',
+        message: 'worn',
+        triggered_count: 1000,
+      });
+      const { service } = makeService([fresh, worn]);
+
+      let freshPicks = 0;
+      for (let i = 0; i < 200; i++) {
+        if (
+          (await service.getRandom(GuildEvents.MEMBER_FIRST_JOIN)) === 'fresh'
+        ) {
+          freshPicks++;
+        }
+        fresh.triggered_count = 0;
+        worn.triggered_count = 1000;
+      }
+      expect(freshPicks).toBeGreaterThan(180);
+    });
+  });
+
   describe('buildTemplate', () => {
     it('replaces known ${param} placeholders', () => {
       const entity = makeEntity({

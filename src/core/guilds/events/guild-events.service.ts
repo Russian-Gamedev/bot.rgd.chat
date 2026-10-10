@@ -1,17 +1,13 @@
-import { raw } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 
 import { GuildEvents } from '#config/guilds';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
-import { pickRandom } from '#lib/utils';
+import { pickRandom, pickWeighted } from '#lib/utils';
 
 import { GuildEventEntity } from './entities/events.entity';
-import {
-  GUILD_EVENT_DEFAULT_POOL_SIZE,
-  GUILD_EVENT_POOL_SIZE,
-} from './guild-events.constants';
+import { GUILD_EVENT_PICK_SMOOTHING } from './guild-events.constants';
 
 export interface EventAuthorView {
   id: string;
@@ -36,21 +32,17 @@ export class GuildEventService {
   ) {}
 
   async getRandom(event: GuildEvents, params: Record<string, string> = {}) {
-    const limit = GUILD_EVENT_POOL_SIZE[event] ?? GUILD_EVENT_DEFAULT_POOL_SIZE;
-    const events = await this.guildEventRepository
-      .createQueryBuilder('events')
-      .select('*')
-      .where({ event })
-      .orderBy([{ triggered_count: 'ASC' }, { [raw('random()')]: 'ASC' }])
-      .limit(limit)
-      .execute();
-
+    const events = await this.guildEventRepository.find({ event });
     if (!events.length) return null;
-    const template = this.guildEventRepository.map(pickRandom(events));
-    if (!template) return null;
+
+    // Weighted lottery: less-picked templates are proportionally more likely,
+    // smoothing keeps brand-new (count 0) ones from dominating.
+    const template = pickWeighted(
+      events,
+      (e) => 1 / (e.triggered_count + GUILD_EVENT_PICK_SMOOTHING),
+    );
 
     template.triggered_count++;
-
     await this.entityManager.persist(template).flush();
 
     return GuildEventService.buildTemplate(template, params);
