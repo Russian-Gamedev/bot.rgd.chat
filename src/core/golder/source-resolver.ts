@@ -68,7 +68,7 @@ export async function resolveSourcePage(
 
 /** Extracts media/name/tags from Open Graph meta of a page. */
 export function parseSourcePageHtml(
-  url: string,
+  _url: string,
   html: string,
 ): GolderSourceInfo {
   const meta = extractOpenGraph(html);
@@ -78,7 +78,7 @@ export function parseSourcePageHtml(
     meta['twitter:player:stream'] ??
     meta['og:image'] ??
     null;
-  const tags = parseTagsCsv(meta['keywords'] ?? '').filter(
+  const tags = parseTagsCsv(meta.keywords ?? '').filter(
     (tag) => !NOISE_TAGS.has(tag),
   );
 

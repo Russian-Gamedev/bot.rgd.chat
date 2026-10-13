@@ -238,7 +238,7 @@ export class GolderService {
 
   /** Информация для автозаполнения формы импорта по ссылке. */
   async resolveSource(
-    user_id: DiscordID,
+    _user_id: DiscordID,
     url: string,
   ): Promise<GolderSourceInfo> {
     const link = parseDiscordMessageUrl(url);

@@ -21,9 +21,9 @@
     "compose:dev": "docker compose -f ./docker/docker-compose.dev.yml up",
     "compose:prod": "docker compose -f ./docker/docker-compose.yml up",
     "migration:create": "bunx --bun mikro-orm migration:create",
-    "typecheck": "bunx --bun tsc --noEmit",
+    "typecheck": "bun check",
     "lint": "bunx --bun biome ci",
-    "lint:fix": "bunx --bun biome check --write",
+    "lint:fix": "bunx --bun biome check --write --unsafe",
     "check:all": "bun run typecheck && bun run lint && bun test"
   },
   "mikro-orm": {
@@ -37,7 +37,7 @@
     "@mikro-orm/cli": "^7.2.0",
     "@nestjs/cli": "^12.0.0",
     "@nestjs/testing": "^12.1.2",
-    "@types/bun": "^1.4.2",
+    "@types/bun": "^1.4.3",
     "@types/express": "^5.0.6",
     "typescript": "^7.0.2"
   },

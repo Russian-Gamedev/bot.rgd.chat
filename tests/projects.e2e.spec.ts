@@ -17,7 +17,6 @@ import { DiscordModule } from '#core/discord/discord.module';
 import { PermissionService } from '#core/permissions/permissions.service';
 import type { AuthenticatedActor } from '#core/permissions/permissions.types';
 import { ActorType } from '#core/permissions/permissions.types';
-import { ProjectAttachmentEntity } from '#core/projects/entities/projects.entity';
 import { ProjectsController } from '#core/projects/projects.controller';
 import { ProjectsService } from '#core/projects/projects.service';
 import {
