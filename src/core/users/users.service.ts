@@ -2,6 +2,7 @@ import { raw } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 
 import {
   assertPositiveInteger,
@@ -14,6 +15,7 @@ import type { DiscordID } from '#root/lib/types';
 
 import { DiscordProfileSyncService } from './discord-profile-sync.service';
 import type { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
+import { UserSearchResultDto } from './dto/user-search-result.dto';
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import {
   UserProfileEntity,
@@ -88,6 +90,61 @@ export class UserService {
       .orWhere(raw('lower(u.nickname) = ?', [normalizedName]))
       .limit(1)
       .getSingleResult();
+  }
+
+  /**
+   * Fuzzy-поиск для autocomplete: username и nickname по trigram-сходству,
+   * а числовой ввод — по префиксу id. Выражения в WHERE совпадают с
+   * выражениями trgm-индексов, чтобы планировщик использовал их.
+   */
+  async searchProfiles(
+    query: string,
+    limit = 5,
+  ): Promise<UserSearchResultDto[]> {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) {
+      return [];
+    }
+
+    // execute с mode 'all' возвращает массив строк; обобщённый тип в v7
+    // описывает одну строку, поэтому приводим результат вручную.
+    // Ранжирование: word_similarity + similarity + бонус за префикс, точное
+    // совпадение id всегда первое.
+    const rows = (await this.em.execute(
+      `select c.user_id, c.username, c.nickname, c.avatar_url
+       from (
+         select u.user_id, u.username, u.nickname, u.avatar_url
+         from users u
+         where lower(u.username) %> ? or lower(u.nickname) %> ?
+         union
+         select u.user_id, u.username, u.nickname, u.avatar_url
+         from users u
+         where u.user_id::text like ? || '%'
+       ) c
+       order by
+         (c.user_id::text = ?) desc,
+         greatest(
+           word_similarity(?, lower(c.username))
+             + similarity(?, lower(c.username))
+             + (case when lower(c.username) like ? || '%' then 0.5 else 0 end),
+           word_similarity(?, lower(coalesce(c.nickname, '')))
+             + similarity(?, lower(coalesce(c.nickname, '')))
+             + (case when lower(coalesce(c.nickname, '')) like ? || '%'
+                     then 0.5 else 0 end)
+         ) desc,
+         lower(c.username) asc,
+         c.user_id asc
+       limit ?`,
+      [q, q, q, q, q, q, q, q, q, q, limit],
+      'all',
+    )) as {
+      user_id: string;
+      username: string;
+      nickname: string | null;
+      avatar_url: string;
+    }[];
+
+    return rows.map(toSearchResultDto);
   }
 
   async updateProfileInfo(
@@ -255,6 +312,24 @@ export class UserService {
 
 function isDefaultAvatar(avatar: string): boolean {
   return avatar.includes('/embed/avatars/');
+}
+
+function toSearchResultDto(row: {
+  user_id: string;
+  username: string;
+  nickname: string | null;
+  avatar_url: string;
+}): UserSearchResultDto {
+  return plainToInstance(
+    UserSearchResultDto,
+    {
+      id: row.user_id,
+      username: row.username,
+      nickname: row.nickname,
+      avatarUrl: row.avatar_url,
+    },
+    { excludeExtraneousValues: true },
+  );
 }
 
 function mergeProfileInfoPatch(

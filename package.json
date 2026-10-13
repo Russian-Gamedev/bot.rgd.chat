@@ -21,22 +21,23 @@
     "compose:dev": "docker compose -f ./docker/docker-compose.dev.yml up",
     "compose:prod": "docker compose -f ./docker/docker-compose.yml up",
     "migration:create": "bunx --bun mikro-orm migration:create",
-    "typecheck": "bunx --bun tsc --noEmit",
+    "typecheck": "bun check",
     "lint": "bunx --bun biome ci",
-    "lint:fix": "bunx --bun biome check --write",
+    "lint:fix": "bunx --bun biome check --write --unsafe",
     "check:all": "bun run typecheck && bun run lint && bun test"
   },
   "mikro-orm": {
     "useTsNode": true,
     "configPaths": [
-      "./src/mikro-orm.config.ts"
+      "./src/common/mikro-orm.postgres.config.ts"
     ]
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
     "@mikro-orm/cli": "^7.2.0",
     "@nestjs/cli": "^12.0.0",
-    "@types/bun": "^1.4.2",
+    "@nestjs/testing": "^12.1.2",
+    "@types/bun": "^1.4.3",
     "@types/express": "^5.0.6",
     "typescript": "^7.0.2"
   },
@@ -48,6 +49,7 @@
     "@mikro-orm/decorators": "^7.2.0",
     "@mikro-orm/migrations": "^7.2.0",
     "@mikro-orm/nestjs": "^7.1.0",
+    "@mikro-orm/pglite": "^7.2.0",
     "@mikro-orm/postgresql": "^7.2.0",
     "@necord/pagination": "^3.0.0",
     "@nestjs/common": "^12.0.1",

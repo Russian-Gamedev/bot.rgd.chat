@@ -1,17 +1,20 @@
-import { MikroOrmMiddleware, MikroOrmModule } from '@mikro-orm/nestjs';
-import { MikroORM } from '@mikro-orm/postgresql';
-import { Logger, MiddlewareConsumer, Module, Optional } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
+import { MikroOrmMiddleware } from '@mikro-orm/nestjs';
+import {
+  Logger,
+  type MiddlewareConsumer,
+  Module,
+  type OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { EnvironmentVariables } from '#config/env';
-import config from '#root/mikro-orm.config';
 import { MetricsService } from './metrics/metrics.service';
 
-@Module({
-  imports: [MikroOrmModule.forRoot({ ...config, autoLoadEntities: true })],
-})
-export class DatabaseModule {
-  private logger = new Logger(DatabaseModule.name);
+@Module({})
+export class DatabaseModule implements OnModuleInit {
+  private readonly logger = new Logger(DatabaseModule.name);
 
   constructor(
     private readonly orm: MikroORM,

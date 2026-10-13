@@ -1,0 +1,16 @@
+process.env.NODE_ENV = 'development';
+process.env.PORT = '3001';
+process.env.BASE_URL = 'http://localhost:3001';
+process.env.POSTGRES_URL = 'postgres://localhost:5432/test';
+process.env.REDIS_URL = 'redis://localhost:6379';
+process.env.DISCORD_BOT_TOKEN = 'mock';
+process.env.DISCORD_CLIENT_ID = 'mock';
+process.env.DISCORD_CLIENT_SECRET = 'mock';
+process.env.DISCORD_REDIRECT_URI = 'http://localhost:3001';
+process.env.DISCORD_DEVELOPMENT_GUILD_ID = 'mock';
+process.env.JWT_SECRET = 'test-secret';
+process.env.S3_ENDPOINT = 'http://localhost:9000';
+process.env.S3_REGION = 'us-east-1';
+process.env.S3_BUCKET = 'test-bucket';
+process.env.S3_ACCESS_KEY_ID = 'minioadmin';
+process.env.S3_SECRET_ACCESS_KEY = 'minioadmin';

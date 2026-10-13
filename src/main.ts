@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
+import { postgresOrmConfig } from '#common/mikro-orm.postgres.config';
 import { EnvironmentVariables } from '#config/env';
 
 import './lib/polyfill';
@@ -64,12 +65,15 @@ function registerProcessShutdownHandlers(
 
 async function main() {
   const isProduction = process.env.NODE_ENV === 'production';
-  const app = await NestFactory.create(AppModule, {
-    logger: new ConsoleLogger({
-      json: isProduction,
-      logLevels: isProduction ? ['log', 'warn', 'error', 'fatal'] : undefined,
-    }),
-  });
+  const app = await NestFactory.create(
+    await AppModule.register(postgresOrmConfig),
+    {
+      logger: new ConsoleLogger({
+        json: isProduction,
+        logLevels: isProduction ? ['log', 'warn', 'error', 'fatal'] : undefined,
+      }),
+    },
+  );
   const logger = new Logger('Bootstrap');
 
   const config = app.get(ConfigService<EnvironmentVariables>);

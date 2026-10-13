@@ -6,9 +6,12 @@ import { type Response } from 'express';
 
 import { BotEntity } from '#core/bots/entities/bot.entity';
 import { ActorType } from '#core/permissions/permissions.types';
+import { ProjectListQueryDto } from '#core/projects/dto/projects.dto';
+import type { ProjectsService } from '#core/projects/projects.service';
 import type { CurrentUserProfileDto } from './dto/current-user-profile.dto';
 import { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
 import type { PublicUserProfileDto } from './dto/public-user-profile.dto';
+import { UserSearchQueryDto } from './dto/user-search-query.dto';
 import { UserProfileEntity } from './entities/user-profile.entity';
 import type { PublicProfileService } from './public-profile.service';
 import { UsersController } from './users.controller';
@@ -71,6 +74,20 @@ describe('UsersController', () => {
     } as unknown as UserService;
   }
 
+  function createProjectsService(
+    overrides: Partial<ProjectsService> = {},
+  ): ProjectsService {
+    return {
+      listByUser: mock(async () => ({
+        items: [],
+        total: 0,
+        limit: 20,
+        offset: 0,
+      })),
+      ...overrides,
+    } as unknown as ProjectsService;
+  }
+
   it('returns public profile by id', async () => {
     const expected = createProfileResponse();
     const publicProfileService = createPublicProfileService({
@@ -79,6 +96,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
     const json = mock(() => undefined);
     const res = { json } as unknown as Response;
@@ -97,6 +115,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
     const json = mock(() => undefined);
     const res = { json } as unknown as Response;
@@ -117,6 +136,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
     const json = mock(() => undefined);
     const res = { json } as unknown as Response;
@@ -139,6 +159,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
     const redirect = mock(() => undefined);
     const res = { redirect } as unknown as Response;
@@ -164,6 +185,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
     const redirect = mock(() => undefined);
     const res = { redirect } as unknown as Response;
@@ -188,6 +210,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
 
     await expect(controller.getById('404.png', {} as Response)).rejects.toThrow(
@@ -204,11 +227,83 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
 
     await expect(controller.getById('404', {} as Response)).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  it('returns published projects using the resolved profile id', async () => {
+    const userService = createUserService({
+      lookupProfile: mock(async () => createProfile({ user_id: 456n })),
+    });
+    const projectsService = createProjectsService();
+    const controller = new UsersController(
+      userService,
+      createPublicProfileService(),
+      projectsService,
+    );
+    const query = plainToInstance(ProjectListQueryDto, {
+      limit: 10,
+      offset: 5,
+    });
+
+    const result = await controller.getProjects('Alice', query);
+
+    expect(userService.lookupProfile).toHaveBeenCalledWith('Alice');
+    expect(projectsService.listByUser).toHaveBeenCalledWith('456', query);
+    expect(result).toEqual({ items: [], total: 0, limit: 20, offset: 0 });
+  });
+
+  it('returns 404 for projects when the user lookup does not resolve', async () => {
+    const projectsService = createProjectsService();
+    const controller = new UsersController(
+      createUserService({ lookupProfile: mock(async () => null) }),
+      createPublicProfileService(),
+      projectsService,
+    );
+
+    await expect(
+      controller.getProjects(
+        'missing',
+        plainToInstance(ProjectListQueryDto, {}),
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(projectsService.listByUser).not.toHaveBeenCalled();
+  });
+
+  it('searches users by query and returns the results', async () => {
+    const expected = [
+      {
+        id: '123',
+        username: 'Damir',
+        nickname: null,
+        avatarUrl: 'https://cdn.discordapp.com/a.png',
+      },
+    ];
+    const userService = createUserService({
+      searchProfiles: mock(async () => expected),
+    });
+    const controller = new UsersController(
+      userService,
+      createPublicProfileService(),
+      createProjectsService(),
+    );
+
+    const result = await controller.search(
+      plainToInstance(UserSearchQueryDto, { q: '  Dam ' }),
+    );
+
+    expect(userService.searchProfiles).toHaveBeenCalledWith('Dam');
+    expect(result).toBe(expected);
+  });
+
+  it('validates search query length', () => {
+    const query = plainToInstance(UserSearchQueryDto, { q: ' д ' });
+
+    expect(validateSync(query).length).toBeGreaterThan(0);
   });
 
   it('returns current user profile for user actor', async () => {
@@ -221,6 +316,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
 
     const result = await controller.getMe({
@@ -251,6 +347,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
 
     const result = await controller.getMe({
@@ -268,7 +365,7 @@ describe('UsersController', () => {
       banner_alt: 'https://example.com/banner-alt.png',
       birthDate: new Date('2001-02-03T00:00:00.000Z'),
       profileInfo: {
-        about: 'Game developer.',
+        about: 'Project developer.',
         links: [
           {
             label: 'GitHub',
@@ -282,7 +379,7 @@ describe('UsersController', () => {
       bannerAlt: 'https://example.com/banner-alt.png',
       birthDate: new Date('2001-02-03T00:00:00.000Z'),
       info: {
-        about: 'Game developer.',
+        about: 'Project developer.',
         links: [
           {
             label: 'GitHub',
@@ -303,7 +400,11 @@ describe('UsersController', () => {
     const publicProfileService = createPublicProfileService({
       getCurrentUserProfile: mock(async () => expected),
     });
-    const controller = new UsersController(userService, publicProfileService);
+    const controller = new UsersController(
+      userService,
+      publicProfileService,
+      createProjectsService(),
+    );
 
     const result = await controller.patchMe(
       {
@@ -335,7 +436,11 @@ describe('UsersController', () => {
     const publicProfileService = createPublicProfileService({
       getCurrentUserProfile: mock(async () => expected),
     });
-    const controller = new UsersController(userService, publicProfileService);
+    const controller = new UsersController(
+      userService,
+      publicProfileService,
+      createProjectsService(),
+    );
 
     const result = await controller.patchMe(
       {
@@ -366,6 +471,7 @@ describe('UsersController', () => {
     const controller = new UsersController(
       createUserService(),
       publicProfileService,
+      createProjectsService(),
     );
 
     await expect(
@@ -389,7 +495,11 @@ describe('UsersController', () => {
         );
       }),
     });
-    const controller = new UsersController(userService, publicProfileService);
+    const controller = new UsersController(
+      userService,
+      publicProfileService,
+      createProjectsService(),
+    );
 
     await expect(
       controller.patchMe(

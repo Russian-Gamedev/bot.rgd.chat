@@ -2,8 +2,10 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   Patch,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -12,10 +14,14 @@ import { getActorUserId } from '#core/permissions/actor-user-id';
 import { Actor } from '#core/permissions/permissions.decorator';
 import { ActorAuthGuard } from '#core/permissions/permissions.guard';
 import { type AuthenticatedActor } from '#core/permissions/permissions.types';
+import { ProjectListQueryDto } from '#core/projects/dto/projects.dto';
+import { ProjectsService } from '#core/projects/projects.service';
 import { replaceImageExtension } from '#lib/utils/discord';
 
 import { CurrentUserProfileDto } from './dto/current-user-profile.dto';
 import { PatchCurrentUserProfileDto } from './dto/patch-current-user-profile.dto';
+import { UserSearchQueryDto } from './dto/user-search-query.dto';
+import { UserSearchResultDto } from './dto/user-search-result.dto';
 import { PublicProfileService } from './public-profile.service';
 import { UserService } from './users.service';
 
@@ -26,6 +32,7 @@ export class UsersController {
   constructor(
     private readonly userService: UserService,
     private readonly publicProfileService: PublicProfileService,
+    private readonly projectsService: ProjectsService,
   ) {}
 
   @Get('me')
@@ -45,6 +52,23 @@ export class UsersController {
     const profile = await this.userService.updateProfileInfo(userId, dto);
     await this.publicProfileService.invalidateProfileCache(profile);
     return this.publicProfileService.getCurrentUserProfile(userId, actor);
+  }
+
+  @Get('search')
+  search(@Query() query: UserSearchQueryDto): Promise<UserSearchResultDto[]> {
+    return this.userService.searchProfiles(query.q);
+  }
+
+  @Get(':id_or_username/projects')
+  async getProjects(
+    @Param('id_or_username') lookup: string,
+    @Query() query: ProjectListQueryDto,
+  ) {
+    const profile = await this.userService.lookupProfile(lookup);
+    if (!profile) {
+      throw new NotFoundException('User profile was not found.');
+    }
+    return this.projectsService.listByUser(profile.user_id.toString(), query);
   }
 
   @Get(':id')

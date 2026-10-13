@@ -51,3 +51,4 @@ bin
 
 # DB schema snapshots
 snapshot.json
+.zcode

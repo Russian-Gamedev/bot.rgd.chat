@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { type DynamicModule, Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { CommonServicesModule } from '#common/common-services.module';
@@ -22,6 +23,7 @@ import { MahoragaModule } from '#core/mahoraga/mahoraga.module';
 import { MiniGamesModule } from '#core/mini-games/mini-games.module';
 import { NicknameModule } from '#core/nickname/nickname.module';
 import { PortalsModule } from '#core/portals/portals.module';
+import { ProjectsModule } from '#core/projects/projects.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
 import { UserModule } from '#core/users/users.module';
 import { UtilsModule } from '#core/utils/utils.module';
@@ -29,18 +31,20 @@ import { WalletModule } from '#core/wallet/wallet.module';
 
 import { AppController } from './app.controller';
 
+type MikroOrmRootOptions = Record<string, unknown>;
+
 @Module({
   imports: [
     AppConfigModule,
     CommonServicesModule,
     ScheduleModule.forRoot(),
     MetricsModule,
-    DatabaseModule,
     RedisModule,
     S3Module,
     DiscordModule,
     UserModule,
     GuildModule,
+    ProjectsModule,
     BirthdayModule,
     ActivityModule,
     BotsModule,
@@ -60,4 +64,20 @@ import { AppController } from './app.controller';
   controllers: [AppController],
   providers: [ScheduleLoggerService],
 })
-export class AppModule {}
+// biome-ignore lint/complexity/noStaticOnlyClass: dynamic module pattern
+export class AppModule {
+  static async register(
+    ormOptions: MikroOrmRootOptions,
+  ): Promise<DynamicModule> {
+    const ormModule = await MikroOrmModule.forRoot({
+      ...ormOptions,
+      autoLoadEntities: true,
+      // biome-ignore lint/suspicious/noExplicitAny: MikroOrmModule.forRoot accepts Options<IDatabaseDriver> but we pass driver-agnostic config
+    } as any);
+
+    return {
+      module: AppModule,
+      imports: [ormModule, DatabaseModule],
+    };
+  }
+}
