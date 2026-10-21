@@ -20,6 +20,7 @@ export interface GuildEventView {
   event: GuildEvents;
   message: string;
   attachments: string[] | null;
+  triggered_count: number;
   author: EventAuthorView;
 }
 
@@ -133,6 +134,7 @@ export class GuildEventService {
         event: event.event,
         message: event.message,
         attachments: event.attachments,
+        triggered_count: event.triggered_count,
         author: {
           id: authorId ?? '',
           username: user?.username ?? 'Unknown',
