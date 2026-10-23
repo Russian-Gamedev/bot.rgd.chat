@@ -32,7 +32,7 @@ import { buildSummaryEmbed } from '../summary.embed';
 class SummarizeDto {
   @IntegerOption({
     name: 'count',
-    description: 'Сколько сообщений взять с конца диапазона (1–500)',
+    description: 'Сколько сообщений взять (1–500)',
     required: false,
     min_value: 1,
     max_value: MAX_MESSAGE_COUNT,
@@ -106,7 +106,10 @@ export class SummarizeCommand {
       const toId = toRef?.messageId;
       assertRangeOrder(fromId, toId);
 
-      const count = dto.count ?? DEFAULT_MESSAGE_COUNT;
+      // An explicit from defines the start of the range, so read up to the
+      // hard cap instead of the "last N" default.
+      const count =
+        dto.count ?? (fromId ? MAX_MESSAGE_COUNT : DEFAULT_MESSAGE_COUNT);
       if (!Number.isInteger(count) || count < 1 || count > MAX_MESSAGE_COUNT) {
         throw new SummarizeUserError(
           `Количество сообщений должно быть от 1 до ${MAX_MESSAGE_COUNT}.`,

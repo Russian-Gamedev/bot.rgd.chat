@@ -114,6 +114,25 @@ describe('parseSummaryResult', () => {
     expect(result.decisions[0]).toHaveLength(SUMMARY_MAX_DECISION_CHARS);
   });
 
+  it('splits a long single paragraph into readable paragraphs', () => {
+    const sentence =
+      'Это довольно длинное предложение, которое нужно разбить на абзацы для читаемости.';
+    const summary = Array.from({ length: 4 }, () => sentence).join(' ');
+
+    const result = parseSummaryResult(JSON.stringify({ summary }));
+
+    expect(result.summary).toContain('\n\n');
+    expect(result.summary.split('\n\n')).toHaveLength(2);
+  });
+
+  it('normalizes literal backslash-n sequences', () => {
+    const result = parseSummaryResult(
+      JSON.stringify({ summary: 'Первый абзац.\\nВторой абзац.' }),
+    );
+
+    expect(result.summary).toBe('Первый абзац.\nВторой абзац.');
+  });
+
   it('rejects a response without a summary', () => {
     expect(() => parseSummaryResult('{"topics":[]}')).toThrow(
       'LLM response is missing summary',

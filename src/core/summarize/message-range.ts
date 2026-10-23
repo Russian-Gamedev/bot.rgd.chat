@@ -154,8 +154,9 @@ export async function assertMessageHistoryAccess(
 }
 
 /**
- * Fetches at most `count` messages ending at `to` (or at the latest message),
- * without going older than `from`. The result is chronological.
+ * Fetches at most `count` messages. With `from`, reads forward from that
+ * message; otherwise reads backward from `to` (or the latest message).
+ * The result is chronological.
  */
 export async function fetchMessageRange(
   options: FetchMessageRangeOptions,
@@ -196,13 +197,92 @@ export async function fetchMessageRange(
     messages.push(message);
   };
 
+  if (fromMessage) {
+    add(fromMessage);
+
+    const singleMessage = Boolean(toId && toId === fromMessage.id);
+    let after = fromMessage.id;
+    let reachedTo = false;
+    let reachedEnd = false;
+
+    while (!singleMessage && messages.length < limit) {
+      const requested = Math.min(
+        MESSAGE_FETCH_BATCH_SIZE,
+        limit - messages.length,
+      );
+
+      let batch: Collection<Snowflake, Message>;
+      try {
+        batch = await channel.messages.fetch({ limit: requested, after });
+      } catch (error) {
+        throw new SummarizeUserError(
+          'Не удалось загрузить историю сообщений.',
+          { cause: error },
+        );
+      }
+
+      if (batch.size === 0) {
+        reachedEnd = true;
+        break;
+      }
+
+      const batchMessages = [...batch.values()].reverse();
+
+      for (const message of batchMessages) {
+        if (toId && BigInt(message.id) > BigInt(toId)) {
+          reachedTo = true;
+          break;
+        }
+
+        add(message);
+
+        if (toId && message.id === toId) {
+          reachedTo = true;
+          break;
+        }
+
+        if (messages.length >= limit) break;
+      }
+
+      if (reachedTo || messages.length >= limit) break;
+      if (batch.size < requested) {
+        reachedEnd = true;
+        break;
+      }
+
+      const newestId = batchMessages[batchMessages.length - 1]?.id;
+      if (!newestId || newestId === after) {
+        reachedEnd = true;
+        break;
+      }
+      after = newestId;
+    }
+
+    if (messages.length === 0) {
+      throw new SummarizeUserError('В выбранном диапазоне нет сообщений.');
+    }
+
+    const last = messages[messages.length - 1];
+    const reachedLatest =
+      !toId &&
+      channel.lastMessageId !== null &&
+      last?.id === channel.lastMessageId;
+    const truncatedByCount =
+      messages.length >= limit && !reachedTo && !reachedEnd && !reachedLatest;
+
+    return {
+      messages,
+      channelId: channel.id,
+      guildId: channel.guildId,
+      truncatedByCount,
+    };
+  }
+
   if (toMessage) add(toMessage);
 
-  const singleMessage = Boolean(fromId && toId && fromId === toId);
   let before = toMessage?.id;
-  let reachedFrom = false;
 
-  while (!singleMessage && messages.length < limit) {
+  while (messages.length < limit) {
     const requested = Math.min(
       MESSAGE_FETCH_BATCH_SIZE,
       limit - messages.length,
@@ -221,16 +301,11 @@ export async function fetchMessageRange(
 
     const batchMessages = [...batch.values()];
     for (const message of batchMessages) {
-      if (fromId && BigInt(message.id) < BigInt(fromId)) {
-        reachedFrom = true;
-        break;
-      }
-
       add(message);
       if (messages.length >= limit) break;
     }
 
-    if (reachedFrom || messages.length >= limit) break;
+    if (messages.length >= limit) break;
     if (batch.size < requested) break;
 
     const oldestId = batchMessages[batchMessages.length - 1]?.id;
@@ -242,21 +317,13 @@ export async function fetchMessageRange(
     throw new SummarizeUserError('В выбранном диапазоне нет сообщений.');
   }
 
-  const oldest = messages[messages.length - 1];
-  const truncatedByCount = Boolean(
-    fromId &&
-      oldest &&
-      messages.length >= limit &&
-      BigInt(oldest.id) > BigInt(fromId),
-  );
-
   messages.reverse();
 
   return {
     messages,
     channelId: channel.id,
     guildId: channel.guildId,
-    truncatedByCount,
+    truncatedByCount: false,
   };
 }
 

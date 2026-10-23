@@ -52,12 +52,26 @@ function makeChannel(messages: Message[], guildId = GUILD_ID) {
   );
 
   const fetch = mock(
-    async (arg: string | { limit: number; before?: string }) => {
+    async (
+      arg: string | { limit: number; before?: string; after?: string },
+    ) => {
       if (typeof arg === 'string') {
         const found = messages.find((message) => message.id === arg);
         if (!found) throw new Error('Unknown Message');
 
         return found;
+      }
+
+      if (arg.after) {
+        const candidates = sorted.filter(
+          (message) => BigInt(message.id) > BigInt(arg.after!),
+        );
+
+        return new Collection(
+          candidates
+            .slice(-arg.limit)
+            .map((message) => [message.id, message] as const),
+        );
       }
 
       const candidates = arg.before
@@ -76,6 +90,7 @@ function makeChannel(messages: Message[], guildId = GUILD_ID) {
     id: CHANNEL_ID,
     guildId,
     name: 'general',
+    lastMessageId: sorted[0]?.id ?? null,
     messages: { fetch },
   } as unknown as GuildTextBasedChannel;
 
@@ -306,7 +321,7 @@ describe('fetchMessageRange', () => {
     ]);
   });
 
-  it('truncates a long range from the newest side and flags it', async () => {
+  it('takes the first count messages when from is set', async () => {
     const messages = [1, 2, 3, 4, 5].map((index) => makeMessage(id(index)));
     const { channel } = makeChannel(messages);
 
@@ -317,7 +332,7 @@ describe('fetchMessageRange', () => {
       toId: id(5),
     });
 
-    expect(range.messages.map((message) => message.id)).toEqual([id(4), id(5)]);
+    expect(range.messages.map((message) => message.id)).toEqual([id(1), id(2)]);
     expect(range.truncatedByCount).toBe(true);
   });
 
@@ -386,5 +401,24 @@ describe('fetchMessageRange', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(range.messages[0]!.id).toBe(id(1));
     expect(range.messages[149]!.id).toBe(id(150));
+  });
+
+  it('paginates forward when from is set', async () => {
+    const messages = Array.from({ length: 150 }, (_, index) =>
+      makeMessage(id(index + 1)),
+    );
+    const { channel, fetch } = makeChannel(messages);
+
+    const range = await fetchMessageRange({
+      channel,
+      count: 150,
+      fromId: id(1),
+    });
+
+    expect(range.messages).toHaveLength(150);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(range.messages[0]!.id).toBe(id(1));
+    expect(range.messages[149]!.id).toBe(id(150));
+    expect(range.truncatedByCount).toBe(false);
   });
 });

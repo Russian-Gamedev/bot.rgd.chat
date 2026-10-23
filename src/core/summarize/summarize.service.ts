@@ -127,8 +127,10 @@ export function parseSummaryResult(text: string): SummaryResult {
     throw new Error('LLM response is missing summary');
   }
 
+  const summary = formatSummary(obj.summary.trim());
+
   return {
-    summary: truncateText(obj.summary.trim(), SUMMARY_MAX_SUMMARY_CHARS),
+    summary: truncateText(summary, SUMMARY_MAX_SUMMARY_CHARS),
     topics: normalizeStringArray(
       obj.topics,
       SUMMARY_MAX_TOPICS,
@@ -140,6 +142,24 @@ export function parseSummaryResult(text: string): SummaryResult {
       SUMMARY_MAX_DECISION_CHARS,
     ),
   };
+}
+
+/** Keeps model paragraphs readable, splitting a long single paragraph. */
+function formatSummary(value: string): string {
+  const normalized = value.replace(/\\n/g, '\n');
+  if (normalized.includes('\n') || normalized.length <= 280) {
+    return normalized;
+  }
+
+  const sentences = normalized.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  if (sentences.length < 3) return normalized;
+
+  const paragraphs: string[] = [];
+  for (let index = 0; index < sentences.length; index += 2) {
+    paragraphs.push(sentences.slice(index, index + 2).join(' '));
+  }
+
+  return paragraphs.join('\n\n');
 }
 
 function stripCodeFence(text: string): string {
