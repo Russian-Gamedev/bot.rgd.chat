@@ -25,6 +25,7 @@ import { NicknameModule } from '#core/nickname/nickname.module';
 import { PortalsModule } from '#core/portals/portals.module';
 import { ProjectsModule } from '#core/projects/projects.module';
 import { RoleManagerModule } from '#core/role-manager/role-manager.module';
+import { SummarizeModule } from '#core/summarize/summarize.module';
 import { UserModule } from '#core/users/users.module';
 import { UtilsModule } from '#core/utils/utils.module';
 import { WalletModule } from '#core/wallet/wallet.module';
@@ -57,6 +58,7 @@ type MikroOrmRootOptions = Record<string, unknown>;
     BarModule,
     RoleManagerModule,
     FunModule,
+    SummarizeModule,
     NicknameModule,
     PortalsModule,
     UtilsModule,

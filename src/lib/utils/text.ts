@@ -7,6 +7,13 @@ export function trimString({ value }: { value: unknown }) {
   return typeof value === 'string' ? value.trim() : value;
 }
 
+/** Truncates text to the maximum length, appending an ellipsis when cut. */
+export function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+
+  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
 /** Normalizes user text for stable spam/repeat comparisons. */
 export function normalizeMessageText(content: string): string {
   return content

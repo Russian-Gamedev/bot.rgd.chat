@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'bun:test';
 
-import { slugify } from './text';
+import { slugify, truncateText } from './text';
+
+describe('truncateText', () => {
+  it('keeps text that fits', () => {
+    expect(truncateText('hello', 10)).toBe('hello');
+  });
+
+  it('cuts long text and appends an ellipsis', () => {
+    expect(truncateText('hello world', 6)).toBe('hello…');
+    expect(truncateText('hello world', 6)).toHaveLength(6);
+  });
+});
 
 describe('slugify', () => {
   it('transliterates russian and collapses separators', () => {
