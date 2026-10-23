@@ -5,7 +5,6 @@ Mahoraga - система мягкого антиспама для Discord-се�
 ## Что делает Mahoraga
 
 Mahoraga реагирует на пять типов событий:
-
 - `honeypot` - сообщение отправлено в honeypot-канал.
 - `text_repeat` - пользователь повторяет одинаковый нормализованный текст.
 - `link_repeat` - пользователь повторяет одинаковые нормализованные ссылки.
@@ -17,7 +16,6 @@ Mahoraga реагирует на пять типов событий:
 ## Режимы работы
 
 У типов детектов есть режим работы (`off`, `monitor`, `on`).
-
 - `off` - детекты этого типа полностью отключены.
 - `monitor` - Mahoraga создаёт `observed`-кейс и пишет один лог о том, что sanction был бы применён.
 - `on` - Mahoraga применяет temporary softban.
@@ -26,11 +24,11 @@ Mahoraga реагирует на пять типов событий:
 
 ## Статусы кейса
 
-| Статус | Значение |
-| --- | --- |
-| `observed` | Детект сработал в monitor-режиме. Softban не применяется. |
-| `active` | Активный spammer-кейс. Temporary softban был или должен быть применён в source guild. |
-| `pardoned` | Пользователь разбанен через API или slash-команду. |
+| Статус     | Значение                                                                              |
+| ---------- | ------------------------------------------------------------------------------------- |
+| `observed` | Детект сработал в monitor-режиме. Softban не применяется.                             |
+| `active`   | Активный spammer-кейс. Temporary softban был или должен быть применён в source guild. |
+| `pardoned` | Пользователь разбанен через API или slash-команду.                                    |
 
 На пользователя хранится один кейс в таблице `mahoraga_cases`. Повторные срабатывания обновляют кейс, увеличивают `detection_count` и добавляют evidence.
 
@@ -38,20 +36,20 @@ Mahoraga реагирует на пять типов событий:
 
 Все настройки хранятся как guild settings.
 
-| Key | Тип | Default | Назначение |
-| --- | --- | --- | --- |
-| `mahoraga_enabled` | boolean | `false` | Включает Mahoraga на сервере. |
-| `mahoraga_honeypot_channel_id` | string | `null` | Канал-ловушка. Любое сообщение там создаёт детект. |
-| `mahoraga_honeypot_mode` | string | `on` | Режим honeypot: `off`, `monitor`, `on`. |
-| `mahoraga_repeat_mode` | string | `on` | Режим повторов (text/link/image): `off`, `monitor`, `on`. |
-| `mahoraga_log_channel_id` | string | `null` | Канал для логов Mahoraga. |
-| `mahoraga_text_repeat_limit` | number | `3` | Сколько одинаковых текстов нужно для срабатывания. |
-| `mahoraga_text_window_seconds` | number | `30` | Окно повторов текста. |
-| `mahoraga_link_repeat_limit` | number | `3` | Сколько одинаковых ссылок нужно для срабатывания. |
-| `mahoraga_link_window_seconds` | number | `60` | Окно повторов ссылок. |
-| `mahoraga_image_repeat_limit` | number | `2` | Сколько одинаковых изображений нужно для срабатывания. |
-| `mahoraga_image_window_seconds` | number | `600` | Окно повторов изображений. |
-| `mahoraga_message_tracking_window_seconds` | number | `600` | Окно хранения последних сообщений пользователя для проверки после temporary ban. |
+| Key                                        | Тип     | Default | Назначение                                                                       |
+| ------------------------------------------ | ------- | ------- | -------------------------------------------------------------------------------- |
+| `mahoraga_enabled`                         | boolean | `false` | Включает Mahoraga на сервере.                                                    |
+| `mahoraga_honeypot_channel_id`             | string  | `null`  | Канал-ловушка. Любое сообщение там создаёт детект.                               |
+| `mahoraga_honeypot_mode`                   | string  | `on`    | Режим honeypot: `off`, `monitor`, `on`.                                          |
+| `mahoraga_repeat_mode`                     | string  | `on`    | Режим повторов (text/link/image): `off`, `monitor`, `on`.                        |
+| `mahoraga_log_channel_id`                  | string  | `null`  | Канал для логов Mahoraga.                                                        |
+| `mahoraga_text_repeat_limit`               | number  | `3`     | Сколько одинаковых текстов нужно для срабатывания.                               |
+| `mahoraga_text_window_seconds`             | number  | `30`    | Окно повторов текста.                                                            |
+| `mahoraga_link_repeat_limit`               | number  | `3`     | Сколько одинаковых ссылок нужно для срабатывания.                                |
+| `mahoraga_link_window_seconds`             | number  | `60`    | Окно повторов ссылок.                                                            |
+| `mahoraga_image_repeat_limit`              | number  | `2`     | Сколько одинаковых изображений нужно для срабатывания.                           |
+| `mahoraga_image_window_seconds`            | number  | `600`   | Окно повторов изображений.                                                       |
+| `mahoraga_message_tracking_window_seconds` | number  | `600`   | Окно хранения последних сообщений пользователя для проверки после temporary ban. |
 
 Числовые настройки меньше `1` считаются невалидными и заменяются default-значением.
 
@@ -108,7 +106,6 @@ mahoraga:detector:text:{guildId}:{userId}:{hash}
 ## Softban
 
 Softban - это temporary Discord ban в source guild:
-
 1. `guild.bans.create(userId, { reason, deleteMessageSeconds: 3600 })`.
 2. Через 5 секунд `guild.bans.remove(userId, reason)`.
 3. После unban Mahoraga проверяет Redis-tracked messages для `mahoraga:messages:{guildId}:{userId}`.
@@ -135,7 +132,6 @@ GET /mahoraga/spammers
 ```
 
 Query params:
-
 - `status` - `observed`, `active`, `pardoned`.
 - `guild_id` - Discord guild ID.
 - `reason` - `honeypot`, `text_repeat`, `link_repeat`, `image_repeat`, `manual`.
@@ -199,7 +195,6 @@ POST /mahoraga/spammers/:user_id/sync-softban
 Доступна в guild-контексте пользователям с `Administrator`.
 
 Параметры:
-
 - `user` - Discord user для удаления из Mahoraga.
 - `reason` - опциональная причина.
 
@@ -208,7 +203,6 @@ POST /mahoraga/spammers/:user_id/sync-softban
 ## Логи
 
 Если задан `mahoraga_log_channel_id`, Mahoraga пишет туда события:
-
 - первый detection в `monitor` режиме;
 - агрегированный результат temporary softban;
 - rejoin пользователя с активным Mahoraga case;

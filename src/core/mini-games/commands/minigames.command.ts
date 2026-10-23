@@ -138,6 +138,8 @@ type TotalStatsRow = Omit<MiniGameStatsRow, 'game'> & {
   game: MiniGame | null;
 };
 
+const max = (a: bigint, b: bigint) => (a > b ? a : b);
+
 function sumRows(rows: MiniGameStatsRow[]): TotalStatsRow {
   return rows.reduce<TotalStatsRow>(
     (acc, row) => ({
@@ -146,8 +148,7 @@ function sumRows(rows: MiniGameStatsRow[]): TotalStatsRow {
       wins: acc.wins + row.wins,
       totalBet: acc.totalBet + row.totalBet,
       totalPayout: acc.totalPayout + row.totalPayout,
-      biggestWin:
-        row.biggestWin > acc.biggestWin ? row.biggestWin : acc.biggestWin,
+      biggestWin: max(row.biggestWin, acc.biggestWin),
       net: acc.net + row.net,
     }),
     {
