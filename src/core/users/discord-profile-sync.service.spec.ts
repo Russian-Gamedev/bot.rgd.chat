@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Client, GuildMember, User } from 'discord.js';
+import { Client, Collection, GuildMember, type Role, User } from 'discord.js';
 
 import { DiscordProfileSyncService } from './discord-profile-sync.service';
 import { MemberProfileEntity } from './entities/member-profile.entity';
@@ -82,6 +82,7 @@ describe('DiscordProfileSyncService', () => {
         avatar_url: 'avatar-123',
         banner: 'banner-123',
         banner_color: '#abc',
+        updatedAt: expect.any(Date),
       }),
       expect.objectContaining({
         onConflictFields: ['user_id'],
@@ -96,8 +97,13 @@ describe('DiscordProfileSyncService', () => {
     );
   });
 
-  it('stores guild-specific Discord member fields on member profile', async () => {
-    const member = createMember('123', '456');
+  it('stores guild-specific Discord member fields and the highest role', async () => {
+    const member = createMember('123', '456', [
+      createRole('1', '@everyone', 100),
+      createRole('2', 'Bot', 20, {}),
+      createRole('3', 'Member', 1),
+      createRole('4', 'Admin', 10),
+    ]);
 
     await expect(service.syncMember(member)).resolves.toMatchObject({
       user_id: 123n,
@@ -106,27 +112,68 @@ describe('DiscordProfileSyncService', () => {
       avatar_url: 'member-avatar-123',
       banner: 'member-banner-123',
       display_color: '#123456',
+      highestRoleId: 4n,
       isLeftGuild: false,
       leftAt: null,
     });
 
-    expect(em.upsert).toHaveBeenCalledWith(
-      MemberProfileEntity,
-      expect.objectContaining({
-        user_id: 123n,
-        guild_id: 456n,
-        nickname: 'nick-123',
-        avatar_url: 'member-avatar-123',
-        banner: 'member-banner-123',
-        display_color: '#123456',
-      }),
-      expect.objectContaining({
-        onConflictFields: ['user_id', 'guild_id'],
-      }),
+    const memberUpsert = (em.upsert as ReturnType<typeof mock>).mock.calls.find(
+      ([entity]) => entity === MemberProfileEntity,
     );
+    expect(memberUpsert).toBeDefined();
+
+    const [, memberData, memberOptions] = memberUpsert!;
+    expect(memberData).toMatchObject({
+      user_id: 123n,
+      guild_id: 456n,
+      nickname: 'nick-123',
+      avatar_url: 'member-avatar-123',
+      banner: 'member-banner-123',
+      display_color: '#123456',
+      highestRoleId: 4n,
+    });
+    expect(memberData.roleSyncedAt).toBeInstanceOf(Date);
+    expect(memberData.updatedAt).toBeInstanceOf(Date);
+    expect(memberOptions).toEqual({
+      onConflictFields: ['user_id', 'guild_id'],
+      onConflictMergeFields: [
+        'nickname',
+        'avatar_url',
+        'banner',
+        'display_color',
+        'highestRoleId',
+        'roleSyncedAt',
+        'isLeftGuild',
+        'leftAt',
+        'updatedAt',
+      ],
+    });
   });
 
-  it('syncs fetched guild member by id explicitly', async () => {
+  it('stores a null highest role when only everyone or managed roles exist', async () => {
+    const member = createMember('123', '456', [
+      createRole('1', '@everyone', 100),
+      createRole('2', 'Bot', 20, {}),
+    ]);
+
+    await expect(service.syncMember(member)).resolves.toMatchObject({
+      highestRoleId: null,
+      roleSyncedAt: expect.any(Date),
+    });
+  });
+
+  it('uses a cached guild member without a forced fetch by default', async () => {
+    const cachedMember = createMember('123', '456');
+    const fetchMember = mock(() => Promise.resolve(cachedMember));
+    (client.guilds.fetch as ReturnType<typeof mock>).mockResolvedValue({
+      members: {
+        cache: {
+          get: mock((id: string) => (id === '123' ? cachedMember : undefined)),
+        },
+        fetch: fetchMember,
+      },
+    });
+
     await expect(
       service.syncGuildMemberById(456n, 123n),
     ).resolves.toMatchObject({
@@ -134,7 +181,28 @@ describe('DiscordProfileSyncService', () => {
       guild_id: 456n,
     });
 
-    expect(client.guilds.fetch).toHaveBeenCalledWith('456');
+    expect(fetchMember).not.toHaveBeenCalled();
+  });
+
+  it('force-fetches a guild member when requested', async () => {
+    const cachedMember = createMember('123', '456');
+    const freshMember = createMember('123', '456');
+    const fetchMember = mock(() => Promise.resolve(freshMember));
+    (client.guilds.fetch as ReturnType<typeof mock>).mockResolvedValue({
+      members: {
+        cache: {
+          get: mock((id: string) => (id === '123' ? cachedMember : undefined)),
+        },
+        fetch: fetchMember,
+      },
+    });
+
+    await service.syncGuildMemberById(456n, 123n, { force: true });
+
+    expect(fetchMember).toHaveBeenCalledWith({
+      user: '123',
+      force: true,
+    });
   });
 });
 
@@ -148,7 +216,25 @@ function createUser(id: string): User {
   } as unknown as User;
 }
 
-function createMember(id: string, guildId: string): GuildMember {
+function createRole(
+  id: string,
+  name: string,
+  position: number,
+  tags: Role['tags'] = null,
+): Role {
+  return {
+    id,
+    name,
+    position,
+    tags,
+  } as Role;
+}
+
+function createMember(
+  id: string,
+  guildId: string,
+  roles: Role[] = [createRole('4', 'Admin', 10)],
+): GuildMember {
   return {
     id,
     user: createUser(id),
@@ -158,5 +244,8 @@ function createMember(id: string, guildId: string): GuildMember {
     bannerURL: mock(() => `member-banner-${id}`),
     displayHexColor: '#123456',
     joinedAt: new Date('2026-06-12T00:00:00.000Z'),
+    roles: {
+      cache: new Collection(roles.map((role) => [role.id, role])),
+    },
   } as unknown as GuildMember;
 }

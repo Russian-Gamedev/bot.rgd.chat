@@ -43,6 +43,18 @@ export class MemberProfileEntity extends BaseEntity {
   @Property({ fieldName: 'is_left_guild', type: 'boolean', default: false })
   isLeftGuild = false;
 
+  @Property({ fieldName: 'highest_role_id', type: 'bigint', nullable: true })
+  highestRoleId: bigint | null = null;
+
+  // A null timestamp means roles were never synced; a synced member without
+  // roles keeps highestRoleId null but gets this timestamp set.
+  @Property({
+    fieldName: 'role_synced_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  roleSyncedAt: Date | null = null;
+
   @Property({ fieldName: 'left_at', type: 'timestamptz', nullable: true })
   leftAt: Date | null = null;
 

@@ -1,7 +1,6 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
-
 import { Client, GuildMember, User } from 'discord.js';
 
 import {
@@ -47,6 +46,7 @@ export class DiscordProfileSyncService {
         profileInfo: {},
         birthDate: null,
         lastActiveAt: new Date(),
+        updatedAt: new Date(),
       },
       {
         onConflictFields: ['user_id'],
@@ -68,6 +68,7 @@ export class DiscordProfileSyncService {
     const userId = BigInt(member.user.id);
     const guildId = BigInt(member.guild.id);
     const joinedAt = member.joinedAt ?? new Date();
+    const syncedAt = new Date();
 
     const guildUser = await this.em.upsert(
       MemberProfileEntity,
@@ -79,8 +80,11 @@ export class DiscordProfileSyncService {
         banner: member.bannerURL() ?? null,
         display_color: member.displayHexColor,
         firstJoinedAt: joinedAt,
+        highestRoleId: getHighestRoleId(member),
+        roleSyncedAt: syncedAt,
         isLeftGuild: false,
         leftAt: null,
+        updatedAt: syncedAt,
       },
       {
         onConflictFields: ['user_id', 'guild_id'],
@@ -89,6 +93,8 @@ export class DiscordProfileSyncService {
           'avatar_url',
           'banner',
           'display_color',
+          'highestRoleId',
+          'roleSyncedAt',
           'isLeftGuild',
           'leftAt',
           'updatedAt',
@@ -112,11 +118,16 @@ export class DiscordProfileSyncService {
   async syncGuildMemberById(
     guildId: DiscordID,
     userId: DiscordID,
+    options: { force?: boolean } = {},
   ): Promise<MemberProfileEntity | null> {
     const guild = await this.client.guilds.fetch(guildId.toString());
-    const member = await guild.members
-      .fetch({ user: userId.toString(), force: true })
-      .catch(() => guild.members.cache.get(userId.toString()) ?? null);
+    const cached = guild.members.cache.get(userId.toString()) ?? null;
+    const member =
+      options.force || !cached
+        ? await guild.members
+            .fetch({ user: userId.toString(), force: true })
+            .catch(() => cached)
+        : cached;
     if (!member) return null;
 
     return this.syncMember(member);
@@ -187,4 +198,13 @@ export class DiscordProfileSyncService {
       lastActiveAt: new Date(),
     };
   }
+}
+
+function getHighestRoleId(member: GuildMember): bigint | null {
+  const role = member.roles.cache
+    .filter((candidate) => candidate.name !== '@everyone' && !candidate.tags)
+    .sort((left, right) => right.position - left.position)
+    .first();
+
+  return role ? BigInt(role.id) : null;
 }
