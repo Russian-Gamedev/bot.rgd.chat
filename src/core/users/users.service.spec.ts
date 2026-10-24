@@ -41,12 +41,6 @@ describe('UserService', () => {
         return { member, created: true };
       }),
       syncGuildMemberById: mock(() => Promise.resolve(null)),
-      syncUserById: mock(async (userId: bigint) => {
-        const user = new UserProfileEntity();
-        user.user_id = BigInt(userId);
-        user.username = 'synced';
-        return user;
-      }),
     } as unknown as DiscordProfileSyncService;
 
     service = new UserService(
@@ -304,22 +298,6 @@ describe('UserService', () => {
 
     expect(userRepository.createQueryBuilder).toHaveBeenCalledWith('u');
     assertUsesGuildUsersTable(qb.where.mock.calls[0][0]);
-  });
-
-  it('syncs a user profile from Discord and returns the fresh entity', async () => {
-    const synced = await service.syncUserProfileFromDiscord(123n);
-
-    expect(discordProfileSync.syncUserById).toHaveBeenCalledWith(123n);
-    expect(synced?.user_id).toBe(123n);
-    expect(synced?.username).toBe('synced');
-  });
-
-  it('returns null when the Discord sync fails without throwing', async () => {
-    (
-      discordProfileSync.syncUserById as ReturnType<typeof mock>
-    ).mockRejectedValueOnce(new Error('rate limited'));
-
-    await expect(service.syncUserProfileFromDiscord(123n)).resolves.toBeNull();
   });
 });
 

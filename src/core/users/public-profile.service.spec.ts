@@ -55,7 +55,6 @@ describe('PublicProfileService', () => {
     userService = {
       lookupProfile: mock(() => Promise.resolve(null)),
       getProfile: mock(() => Promise.resolve(null)),
-      syncUserProfileFromDiscord: mock(() => Promise.resolve(null)),
     } as unknown as UserService;
     publicProfileTagService = {
       getPublicProfileTags: mock(() => Promise.resolve([])),
@@ -77,7 +76,7 @@ describe('PublicProfileService', () => {
     );
   });
 
-  it('returns a cached profile response without looking up or syncing', async () => {
+  it('returns a cached profile response without looking up the database', async () => {
     (redis.get as ReturnType<typeof mock>).mockResolvedValueOnce(
       JSON.stringify(createCachedResponse()),
     );
@@ -86,7 +85,6 @@ describe('PublicProfileService', () => {
 
     expect(result.avatarUrl).toBe('https://cdn.discordapp.com/cached.webp');
     expect(userService.lookupProfile).not.toHaveBeenCalled();
-    expect(userService.syncUserProfileFromDiscord).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException for a cached miss marker', async () => {
@@ -112,57 +110,22 @@ describe('PublicProfileService', () => {
     );
   });
 
-  it('force-syncs a stale profile from Discord and serves the fresh data', async () => {
+  it('serves the stored profile and caches it on a miss', async () => {
     (
       userService.lookupProfile as ReturnType<typeof mock>
     ).mockResolvedValueOnce(createProfile(123n));
-    (
-      userService.syncUserProfileFromDiscord as ReturnType<typeof mock>
-    ).mockResolvedValueOnce(
-      createProfile(123n, {
-        username: 'alice',
-        avatar_url: 'https://cdn.discordapp.com/new.webp',
-      }),
-    );
-
-    const result = await service.getPublicProfile('123');
-
-    expect(userService.syncUserProfileFromDiscord).toHaveBeenCalledWith(123n);
-    expect(result.avatarUrl).toBe('https://cdn.discordapp.com/new.webp');
-    // fresh DTO is written to the response cache
-    expect(redis.set).toHaveBeenCalledWith(
-      expect.stringContaining('users:lookup-profile-response'),
-      expect.stringContaining('new.webp'),
-      'EX',
-      60,
-    );
-  });
-
-  it('does not re-sync within the per-user throttle window', async () => {
-    (
-      userService.lookupProfile as ReturnType<typeof mock>
-    ).mockResolvedValueOnce(createProfile(123n));
-    // throttle acquire (SET NX) fails because the key already exists
-    redis.set = mock((...args: unknown[]) =>
-      Promise.resolve(args.includes('NX') ? null : 'OK'),
-    ) as unknown as Redis['set'];
-
-    await service.getPublicProfile('123');
-
-    expect(userService.syncUserProfileFromDiscord).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the stored profile when the Discord sync fails', async () => {
-    (
-      userService.lookupProfile as ReturnType<typeof mock>
-    ).mockResolvedValueOnce(createProfile(123n));
-    // syncUserProfileFromDiscord swallows Discord errors and returns null
-    (
-      userService.syncUserProfileFromDiscord as ReturnType<typeof mock>
-    ).mockResolvedValueOnce(null);
 
     const result = await service.getPublicProfile('123');
 
     expect(result.avatarUrl).toBe('https://cdn.discordapp.com/old.webp');
+    expect(publicProfileTagService.getPublicProfileTags).toHaveBeenCalledWith(
+      123n,
+    );
+    expect(redis.set).toHaveBeenCalledWith(
+      expect.stringContaining('users:lookup-profile-response'),
+      expect.stringContaining('old.webp'),
+      'EX',
+      60,
+    );
   });
 });

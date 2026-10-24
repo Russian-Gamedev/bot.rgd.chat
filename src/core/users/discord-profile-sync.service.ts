@@ -124,13 +124,6 @@ export class DiscordProfileSyncService {
     return this.syncMember(member);
   }
 
-  async syncUserById(userId: DiscordID): Promise<UserProfileEntity> {
-    const user = await this.client.users.fetch(userId.toString(), {
-      force: true,
-    });
-    return this.syncUser(user);
-  }
-
   async syncUsersById(
     userIds: DiscordID[],
     concurrency = DEFAULT_SYNC_CONCURRENCY,

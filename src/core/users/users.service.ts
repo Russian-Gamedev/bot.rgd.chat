@@ -295,19 +295,6 @@ export class UserService {
       );
     }
   }
-
-  async syncUserProfileFromDiscord(
-    userId: DiscordID,
-  ): Promise<UserProfileEntity | null> {
-    try {
-      return await this.discordProfileSync.syncUserById(userId);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to sync Discord user profile ${String(userId)}: ${formatError(error)}`,
-      );
-      return null;
-    }
-  }
 }
 
 function isDefaultAvatar(avatar: string): boolean {
