@@ -40,6 +40,39 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  private readonly appStartups = new Counter({
+    name: 'rgd_bot_app_startup_total',
+    help: 'Application startups by classified reason.',
+    labelNames: ['reason'] as const,
+    registers: [this.registry],
+  });
+
+  private readonly appStartupReason = new Gauge({
+    name: 'rgd_bot_app_startup_reason',
+    help: 'Classified reason of the current application startup.',
+    labelNames: ['reason'] as const,
+    registers: [this.registry],
+  });
+
+  private readonly appStartupTimestamp = new Gauge({
+    name: 'rgd_bot_app_startup_timestamp_seconds',
+    help: 'Unix timestamp of the current application startup.',
+    registers: [this.registry],
+  });
+
+  private readonly appRestartCount = new Gauge({
+    name: 'rgd_bot_app_restart_count',
+    help: 'Consecutive restarts for the current commit.',
+    registers: [this.registry],
+  });
+
+  private readonly buildInfo = new Gauge({
+    name: 'rgd_bot_build_info',
+    help: 'Build information for the running application.',
+    labelNames: ['branch', 'commit'] as const,
+    registers: [this.registry],
+  });
+
   private readonly migrationDuration = new Histogram({
     name: 'rgd_bot_migration_duration_seconds',
     help: 'Database migration check and apply duration in seconds.',
@@ -92,6 +125,41 @@ export class MetricsService {
     help: 'Scheduled job execution duration in seconds.',
     labelNames: ['job', 'status'] as const,
     buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+    registers: [this.registry],
+  });
+
+  private readonly scheduledJobLastSuccess = new Gauge({
+    name: 'rgd_bot_scheduled_job_last_success_timestamp_seconds',
+    help: 'Unix timestamp of the last successful scheduled job run.',
+    labelNames: ['task'] as const,
+    registers: [this.registry],
+  });
+
+  private readonly profileCacheLookups = new Counter({
+    name: 'rgd_bot_profile_cache_lookups_total',
+    help: 'Public profile cache lookups by result.',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  private readonly profileSyncs = new Counter({
+    name: 'rgd_bot_profile_sync_total',
+    help: 'Public profile Discord syncs by result.',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  private readonly profileSyncDuration = new Histogram({
+    name: 'rgd_bot_profile_sync_duration_seconds',
+    help: 'Public profile Discord sync duration in seconds.',
+    labelNames: ['result'] as const,
+    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+    registers: [this.registry],
+  });
+
+  private readonly patronSupporters = new Gauge({
+    name: 'rgd_bot_patron_supporters',
+    help: 'Patrons returned by the supporter API.',
     registers: [this.registry],
   });
 
@@ -206,6 +274,28 @@ export class MetricsService {
     });
   }
 
+  recordAppStartup(reason: string) {
+    const normalizedReason = normalizeMetricLabel(reason);
+    this.appStartups.inc({ reason: normalizedReason });
+    this.appStartupReason.reset();
+    this.appStartupReason.set({ reason: normalizedReason }, 1);
+    this.appStartupTimestamp.set(Date.now() / 1000);
+  }
+
+  setAppRestartCount(count: number) {
+    this.appRestartCount.set(count);
+  }
+
+  setBuildInfo(branch: string, commit: string) {
+    this.buildInfo.set(
+      {
+        branch: normalizeMetricLabel(branch),
+        commit: normalizeMetricLabel(commit),
+      },
+      1,
+    );
+  }
+
   observeMigrationDuration(status: MetricsStatus, durationSeconds: number) {
     this.migrationDuration.observe({ status }, durationSeconds);
   }
@@ -258,6 +348,28 @@ export class MetricsService {
     };
     this.scheduledJobs.inc(labels);
     this.scheduledJobDuration.observe(labels, durationSeconds);
+    if (status === 'success') {
+      this.scheduledJobLastSuccess.set(
+        { task: normalizeMetricLabel(job) },
+        Date.now() / 1000,
+      );
+    }
+  }
+
+  recordProfileCacheLookup(result: 'hit' | 'miss' | 'miss_marker') {
+    this.profileCacheLookups.inc({ result });
+  }
+
+  recordProfileSync(
+    result: 'fresh' | 'none' | 'error',
+    durationSeconds: number,
+  ) {
+    this.profileSyncs.inc({ result });
+    this.profileSyncDuration.observe({ result }, durationSeconds);
+  }
+
+  setPatronSupporters(count: number) {
+    this.patronSupporters.set(count);
   }
 
   setBarClientCount(count: number) {

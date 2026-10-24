@@ -29,6 +29,57 @@ describe('MetricsService', () => {
     expect(output).not.toContain('message_id=');
   });
 
+  it('tracks the last successful scheduled job timestamp', async () => {
+    const metrics = new MetricsService();
+
+    metrics.recordScheduledJob('daily_activity', 'success', 0.1);
+
+    const output = await metrics.getMetrics();
+    expect(output).toContain(
+      'rgd_bot_scheduled_job_last_success_timestamp_seconds',
+    );
+    expect(output).toContain('task="daily_activity"');
+  });
+
+  it('records app startup reason, build info and restart count', async () => {
+    const metrics = new MetricsService();
+
+    metrics.recordAppStartup('crash_restart');
+    metrics.setAppRestartCount(2);
+    metrics.setBuildInfo('main', 'abcdef1');
+
+    const output = await metrics.getMetrics();
+    expect(output).toContain('rgd_bot_app_startup_total');
+    expect(output).toContain('reason="crash_restart"');
+    expect(output).toContain('rgd_bot_app_startup_reason');
+    expect(output).toContain('rgd_bot_app_startup_timestamp_seconds');
+    expect(output).toContain('rgd_bot_app_restart_count');
+    expect(output).toContain('rgd_bot_build_info');
+    expect(output).toContain('commit="abcdef1"');
+  });
+
+  it('records profile cache and sync metrics', async () => {
+    const metrics = new MetricsService();
+
+    metrics.recordProfileCacheLookup('miss');
+    metrics.recordProfileSync('fresh', 0.3);
+
+    const output = await metrics.getMetrics();
+    expect(output).toContain('rgd_bot_profile_cache_lookups_total');
+    expect(output).toContain('result="miss"');
+    expect(output).toContain('rgd_bot_profile_sync_total');
+    expect(output).toContain('result="fresh"');
+  });
+
+  it('tracks the number of cached patron supporters', async () => {
+    const metrics = new MetricsService();
+
+    metrics.setPatronSupporters(12);
+
+    const output = await metrics.getMetrics();
+    expect(output).toContain('rgd_bot_patron_supporters{app="rgd_bot"} 12');
+  });
+
   it('sanitizes free-form labels and unknown role segments', () => {
     expect(normalizeMetricLabel('Coins:Daily Bonus!')).toBe(
       'coins:daily_bonus',
