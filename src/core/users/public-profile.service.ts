@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import Redis from 'ioredis';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import { PermissionService } from '#core/permissions/permissions.service';
 import type { AuthenticatedActor } from '#core/permissions/permissions.types';
 import type { DiscordID } from '#root/lib/types';
@@ -29,6 +30,7 @@ export class PublicProfileService {
     private readonly publicProfileTagService: PublicProfileTagService,
     private readonly permissionService: PermissionService,
     private readonly redis: Redis,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async getPublicProfile(lookup: string): Promise<PublicUserProfileDto> {
@@ -42,18 +44,23 @@ export class PublicProfileService {
 
     const cached = await this.redis.get(cacheKey);
     if (cached === USER_RESPONSE_CACHE_MISS) {
+      this.metrics?.recordProfileCacheLookup('miss_marker');
       throw new NotFoundException('User profile was not found.');
     }
     if (cached) {
       try {
         const response = toCachedPublicUserProfileDto(JSON.parse(cached));
-        if (response) return response;
+        if (response) {
+          this.metrics?.recordProfileCacheLookup('hit');
+          return response;
+        }
 
         await this.redis.del(cacheKey);
       } catch {
         await this.redis.del(cacheKey);
       }
     }
+    this.metrics?.recordProfileCacheLookup('miss');
 
     let profile = await this.userService.lookupProfile(lookup);
     if (!profile) {
