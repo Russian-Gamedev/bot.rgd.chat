@@ -10,6 +10,13 @@ const LINK_FIX_HOSTS: Record<string, string> = {
   'tiktok.com': 'd.tnktok.com',
 };
 
+export interface FixableLink {
+  /** Every spelling of the same link found in the message. */
+  originals: string[];
+  /** Canonical fix-embed URL shared by the originals. */
+  fixed: string;
+}
+
 function fixUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.replace(TRAILING_URL_PUNCTUATION, '');
   const withProtocol = trimmed.startsWith('www.')
@@ -28,13 +35,44 @@ function fixUrl(rawUrl: string): string | null {
   }
 }
 
-/** Extracts fix-embed replacements for a message's links; null when nothing needs fixing. */
-export function fixMessageLinks(content: string): string[] | null {
-  const links = new Set<string>();
+/** Groups fix-embed replacements in a message by their resulting URL. */
+export function findFixableLinks(content: string): FixableLink[] {
+  const byFixed = new Map<string, string[]>();
+
   for (const match of content.matchAll(URL_REGEX)) {
-    const fixed = fixUrl(match[0]);
-    if (fixed) links.add(fixed);
+    const original = match[0].replace(TRAILING_URL_PUNCTUATION, '');
+    const fixed = fixUrl(original);
+    if (!fixed) continue;
+
+    const originals = byFixed.get(fixed);
+    if (!originals) {
+      byFixed.set(fixed, [original]);
+    } else if (!originals.includes(original)) {
+      originals.push(original);
+    }
   }
 
-  return links.size > 0 ? [...links] : null;
+  return [...byFixed].map(([fixed, originals]) => ({ fixed, originals }));
+}
+
+/** Replaces every original link in the content with its fix-embed URL. */
+export function applyFixableLinks(
+  content: string,
+  links: readonly FixableLink[],
+): string {
+  const replacements = new Map<string, string>();
+  for (const link of links) {
+    for (const original of link.originals) {
+      replacements.set(original, link.fixed);
+    }
+  }
+  if (replacements.size === 0) return content;
+
+  return content.replace(URL_REGEX, (match) => {
+    const original = match.replace(TRAILING_URL_PUNCTUATION, '');
+    const fixed = replacements.get(original);
+    if (fixed === undefined) return match;
+
+    return `${fixed}${match.slice(original.length)}`;
+  });
 }

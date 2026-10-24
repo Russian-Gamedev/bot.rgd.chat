@@ -5,5 +5,6 @@ import { UtilsWatcher } from './utils.watcher';
 
 @Module({
   providers: [UtilsService, UtilsWatcher],
+  exports: [UtilsService],
 })
 export class UtilsModule {}

@@ -13,6 +13,7 @@ import {
 } from 'discord.js';
 import Redis from 'ioredis';
 import { Context, type ContextOf, On } from 'necord';
+import { UtilsService } from '#core/utils/utils.service';
 import { PortalEntity } from './entities/portal.entity';
 import { PortalBlacklistEntity } from './entities/portal-blacklist.entity';
 
@@ -49,6 +50,7 @@ export class PortalsService {
     private readonly em: EntityManager,
     private readonly client: Client,
     @Inject(Redis) private readonly redis: Redis,
+    private readonly utilsService: UtilsService,
   ) {}
 
   async createPortal(
@@ -352,6 +354,7 @@ export class PortalsService {
     const content = mapping.replyPrefix
       ? `${mapping.replyPrefix}\n${newContent}`
       : newContent;
+    const fixedContent = await this.applyEmbedFix(content);
 
     const webhook = new WebhookClient({
       id: portalData.targetWebhookId,
@@ -360,7 +363,7 @@ export class PortalsService {
 
     try {
       await webhook.editMessage(mapping.originalMessageId, {
-        content,
+        content: fixedContent,
         allowedMentions: { parse: [] },
       });
       this.logger.debug(
@@ -421,6 +424,8 @@ export class PortalsService {
       );
     }
 
+    content = await this.applyEmbedFix(content);
+
     const avatarURL = message.author.displayAvatarURL();
     const username = message.member?.displayName ?? message.author.username;
 
@@ -459,6 +464,12 @@ export class PortalsService {
         `Failed to relay message via portal #${portalData.portalId}: ${String(error)}`,
       );
     }
+  }
+
+  private async applyEmbedFix(content: string): Promise<string> {
+    const { content: fixedContent } =
+      await this.utilsService.fixVideoEmbeds(content);
+    return fixedContent;
   }
 
   private async resolveReplyLink(message: Message): Promise<string | null> {
