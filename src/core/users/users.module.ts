@@ -7,6 +7,7 @@ import { MemberProfileEntity } from './entities/member-profile.entity';
 import { UserProfileEntity } from './entities/user-profile.entity';
 import { UserProfileTagEntity } from './entities/user-profile-tag.entity';
 import { PatronTagService } from './patron-tag.service';
+import { ProfileSyncWatcher } from './profile-sync.watcher';
 import { PublicProfileService } from './public-profile.service';
 import { PublicProfileTagService } from './public-profile-tag.service';
 import { UsersController } from './users.controller';
@@ -29,6 +30,7 @@ import { UserService } from './users.service';
     PatronTagService,
     PublicProfileTagService,
     PublicProfileService,
+    ProfileSyncWatcher,
   ],
   exports: [UserService, DiscordProfileSyncService],
 })
