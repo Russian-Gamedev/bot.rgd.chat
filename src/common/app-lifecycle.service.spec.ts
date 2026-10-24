@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import Redis from 'ioredis';
 
 import {
@@ -18,8 +18,9 @@ function createStartRecord(
   overrides: Partial<AppLifecycleStartRecord> = {},
 ): AppLifecycleStartRecord {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     instanceId: 'instance-a',
+    hostname: 'host-a',
     branch: 'main',
     commit: 'abcdef1234567890',
     restartCount: 0,
@@ -32,8 +33,9 @@ function createStopRecord(
   overrides: Partial<AppLifecycleStopRecord> = {},
 ): AppLifecycleStopRecord {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     instanceId: 'instance-a',
+    hostname: 'host-a',
     branch: 'main',
     commit: 'abcdef1234567890',
     stoppedAt: '2026-05-02T12:10:00.000Z',
@@ -79,6 +81,7 @@ describe('determineStartupReason', () => {
       createStartRecord({ commit: 'oldcommit1234567' }),
       createStopRecord(),
       'newcommit1234567',
+      'host-a',
     );
 
     expect(reason).toBe('new_version');
@@ -95,6 +98,54 @@ describe('determineStartupReason', () => {
       previousStart,
       previousStop,
       previousStart.commit,
+      'host-a',
+    );
+
+    expect(reason).toBe('same_version_restart');
+  });
+
+  it('returns container_recreated when the hostname changes for the same commit', () => {
+    const previousStart = createStartRecord();
+    const previousStop = createStopRecord({
+      instanceId: previousStart.instanceId,
+      commit: previousStart.commit,
+    });
+
+    const reason = determineStartupReason(
+      previousStart,
+      previousStop,
+      previousStart.commit,
+      'host-b',
+    );
+
+    expect(reason).toBe('container_recreated');
+  });
+
+  it('returns crash_restart when the hostname changes without a graceful stop', () => {
+    const previousStart = createStartRecord();
+
+    const reason = determineStartupReason(
+      previousStart,
+      undefined,
+      previousStart.commit,
+      'host-b',
+    );
+
+    expect(reason).toBe('crash_restart');
+  });
+
+  it('falls back to stop state for legacy records without hostname', () => {
+    const previousStart = createStartRecord({ hostname: 'unknown' });
+    const previousStop = createStopRecord({
+      instanceId: previousStart.instanceId,
+      commit: previousStart.commit,
+    });
+
+    const reason = determineStartupReason(
+      previousStart,
+      previousStop,
+      previousStart.commit,
+      'host-b',
     );
 
     expect(reason).toBe('same_version_restart');
@@ -108,6 +159,7 @@ describe('determineStartupReason', () => {
       previousStart,
       previousStop,
       previousStart.commit,
+      'host-a',
     );
 
     expect(reason).toBe('crash_restart');
@@ -118,6 +170,7 @@ describe('determineStartupReason', () => {
       undefined,
       createStopRecord(),
       'abcdef1234567890',
+      'host-a',
     );
 
     expect(reason).toBe('initial_start');
@@ -126,7 +179,9 @@ describe('determineStartupReason', () => {
 
 describe('determineRestartCount', () => {
   it('returns 0 when there is no previous start record', () => {
-    expect(determineRestartCount(undefined, 'abcdef1234567890')).toBe(0);
+    expect(
+      determineRestartCount(undefined, 'abcdef1234567890', 'initial_start'),
+    ).toBe(0);
   });
 
   it('returns 0 when the commit changes', () => {
@@ -134,6 +189,7 @@ describe('determineRestartCount', () => {
       determineRestartCount(
         createStartRecord({ commit: 'oldcommit1234567', restartCount: 4 }),
         'newcommit1234567',
+        'new_version',
       ),
     ).toBe(0);
   });
@@ -143,12 +199,37 @@ describe('determineRestartCount', () => {
       determineRestartCount(
         createStartRecord({ restartCount: 4 }),
         'abcdef1234567890',
+        'same_version_restart',
       ),
     ).toBe(5);
+  });
+
+  it('resets the restart count for a graceful container recreation', () => {
+    expect(
+      determineRestartCount(
+        createStartRecord({ restartCount: 4 }),
+        'abcdef1234567890',
+        'container_recreated',
+      ),
+    ).toBe(0);
   });
 });
 
 describe('AppLifecycleService', () => {
+  const originalHostname = process.env.HOSTNAME;
+
+  beforeEach(() => {
+    process.env.HOSTNAME = 'host-a';
+  });
+
+  afterEach(() => {
+    if (originalHostname === undefined) {
+      delete process.env.HOSTNAME;
+    } else {
+      process.env.HOSTNAME = originalHostname;
+    }
+  });
+
   it('loads previous lifecycle state and stores the current startup record', async () => {
     const previousStart = createStartRecord({
       instanceId: 'instance-prev',
@@ -182,6 +263,7 @@ describe('AppLifecycleService', () => {
     ) as AppLifecycleStartRecord;
     expect(currentStart.commit).toBe('newcommit1234567');
     expect(currentStart.restartCount).toBe(0);
+    expect(currentStart.hostname).toBe('host-a');
     expect(currentStart.instanceId).toBeString();
     expect(currentStart.instanceId).not.toBe(previousStart.instanceId);
   });
@@ -206,6 +288,31 @@ describe('AppLifecycleService', () => {
     const startupContext = await service.getStartupContext();
     expect(startupContext.reason).toBe('same_version_restart');
     expect(startupContext.currentStart.restartCount).toBe(3);
+  });
+
+  it('classifies a graceful container recreation without incrementing restartCount', async () => {
+    const previousStart = createStartRecord({
+      instanceId: 'instance-prev',
+      hostname: 'host-a',
+      restartCount: 2,
+    });
+    const previousStop = createStopRecord({
+      instanceId: previousStart.instanceId,
+      commit: previousStart.commit,
+      hostname: 'host-a',
+    });
+    const redis = createRedisMock({
+      [APP_LIFECYCLE_LAST_START_KEY]: JSON.stringify(previousStart),
+      [APP_LIFECYCLE_LAST_STOP_KEY]: JSON.stringify(previousStop),
+    });
+    const service = new AppLifecycleService(redis, createGitInfoService());
+    process.env.HOSTNAME = 'host-b';
+
+    await service.onApplicationBootstrap();
+
+    const startupContext = await service.getStartupContext();
+    expect(startupContext.reason).toBe('container_recreated');
+    expect(startupContext.currentStart.restartCount).toBe(0);
   });
 
   it('treats legacy start records without restartCount as 0', async () => {
@@ -233,6 +340,30 @@ describe('AppLifecycleService', () => {
     expect(startupContext.currentStart.restartCount).toBe(1);
   });
 
+  it('records startup reason, build info and restart count in metrics', async () => {
+    const redis = createRedisMock();
+    const metrics = {
+      recordAppStartup: mock(() => undefined),
+      setBuildInfo: mock(() => undefined),
+      setAppRestartCount: mock(() => undefined),
+      recordAppLifecycleEvent: mock(() => undefined),
+    };
+    const service = new AppLifecycleService(
+      redis,
+      createGitInfoService(),
+      metrics as never,
+    );
+
+    await service.onApplicationBootstrap();
+
+    expect(metrics.recordAppStartup).toHaveBeenCalledWith('initial_start');
+    expect(metrics.setBuildInfo).toHaveBeenCalledWith(
+      'main',
+      'abcdef1234567890',
+    );
+    expect(metrics.setAppRestartCount).toHaveBeenCalledWith(0);
+  });
+
   it('persists graceful shutdown details with signal', async () => {
     const redis = createRedisMock();
     const service = new AppLifecycleService(redis, createGitInfoService());
@@ -245,6 +376,7 @@ describe('AppLifecycleService', () => {
 
     const stopRecord = JSON.parse(rawStopRecord!) as AppLifecycleStopRecord;
     expect(stopRecord.commit).toBe('abcdef1234567890');
+    expect(stopRecord.hostname).toBe('host-a');
     expect(stopRecord.signal).toBe('SIGTERM');
     expect(stopRecord.graceful).toBe(true);
   });
@@ -272,8 +404,11 @@ describe('lifecycle log payloads', () => {
     });
 
     expect(payload.currentCommit).toBe('newcommit1234567');
+    expect(payload.currentHostname).toBe('host-a');
     expect(payload.restartCount).toBe(0);
+    expect(payload.reasonDescription).toContain('Новая версия');
     expect(payload.previousCommit).toBe('oldcommit1234567');
+    expect(payload.previousHostname).toBe('host-a');
     expect(payload.previousGraceful).toBe(true);
     expect(payload.previousSignal).toBe('SIGTERM');
   });
@@ -288,6 +423,7 @@ describe('lifecycle log payloads', () => {
     );
 
     expect(payload.commit).toBe('abcdef1234567890');
+    expect(payload.hostname).toBe('host-a');
     expect(payload.signal).toBe('SIGTERM');
     expect(payload.graceful).toBe(true);
   });

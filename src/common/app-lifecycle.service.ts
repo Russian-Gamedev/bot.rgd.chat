@@ -14,17 +14,19 @@ import { MetricsService } from './metrics/metrics.service';
 
 export const APP_LIFECYCLE_LAST_START_KEY = 'app:lifecycle:last-start';
 export const APP_LIFECYCLE_LAST_STOP_KEY = 'app:lifecycle:last-stop';
-const APP_LIFECYCLE_SCHEMA_VERSION = 1;
+const APP_LIFECYCLE_SCHEMA_VERSION = 2;
 
 export type StartupReason =
   | 'initial_start'
   | 'new_version'
+  | 'container_recreated'
   | 'same_version_restart'
   | 'crash_restart';
 
 export interface AppLifecycleStartRecord {
   schemaVersion: number;
   instanceId: string;
+  hostname?: string;
   branch: string;
   commit: string;
   restartCount: number;
@@ -34,6 +36,7 @@ export interface AppLifecycleStartRecord {
 export interface AppLifecycleStopRecord {
   schemaVersion: number;
   instanceId: string;
+  hostname?: string;
   branch: string;
   commit: string;
   stoppedAt: string;
@@ -51,11 +54,14 @@ export interface AppStartupContext {
 export interface StartupLogPayload {
   event: 'app_start';
   reason: StartupReason;
+  reasonDescription: string;
   restartCount: number;
   currentInstanceId: string;
+  currentHostname: string;
   currentCommit: string;
   currentBranch: string;
   previousInstanceId: string | null;
+  previousHostname: string | null;
   previousCommit: string | null;
   previousGraceful: boolean | null;
   previousSignal: string | null;
@@ -64,6 +70,7 @@ export interface StartupLogPayload {
 export interface ShutdownLogPayload {
   event: 'app_stop';
   instanceId: string;
+  hostname: string;
   commit: string;
   branch: string;
   graceful: boolean;
@@ -74,6 +81,7 @@ export function determineStartupReason(
   previousStart: AppLifecycleStartRecord | undefined,
   previousStop: AppLifecycleStopRecord | undefined,
   currentCommit: string,
+  currentHostname: string,
 ): StartupReason {
   if (!previousStart) {
     return 'initial_start';
@@ -83,25 +91,38 @@ export function determineStartupReason(
     return 'new_version';
   }
 
-  if (
+  const previousShutdownWasGraceful =
     previousStop?.instanceId === previousStart.instanceId &&
-    previousStop.graceful
-  ) {
-    return 'same_version_restart';
+    previousStop.graceful;
+  const previousHostname = previousStart.hostname ?? 'unknown';
+  const hostnameChanged =
+    currentHostname !== 'unknown' &&
+    previousHostname !== 'unknown' &&
+    previousHostname !== currentHostname;
+
+  if (hostnameChanged) {
+    return previousShutdownWasGraceful
+      ? 'container_recreated'
+      : 'crash_restart';
   }
 
-  return 'crash_restart';
+  return previousShutdownWasGraceful ? 'same_version_restart' : 'crash_restart';
 }
 
 export function determineRestartCount(
   previousStart: AppLifecycleStartRecord | undefined,
   currentCommit: string,
+  reason: StartupReason,
 ) {
   if (!previousStart) {
     return 0;
   }
 
   if (previousStart.commit !== currentCommit) {
+    return 0;
+  }
+
+  if (reason === 'container_recreated') {
     return 0;
   }
 
@@ -113,7 +134,9 @@ export function describeStartupReason(reason: StartupReason): string {
     case 'initial_start':
       return 'Первый запуск или состояние в Redis отсутствует';
     case 'new_version':
-      return 'Новая версия';
+      return 'Новая версия (деплой)';
+    case 'container_recreated':
+      return 'Контейнер пересоздан без смены версии';
     case 'same_version_restart':
       return 'Перезапуск той же версии';
     case 'crash_restart':
@@ -131,11 +154,14 @@ export function createStartupLogPayload(
   return {
     event: 'app_start',
     reason: startupContext.reason,
+    reasonDescription: describeStartupReason(startupContext.reason),
     restartCount: startupContext.currentStart.restartCount,
     currentInstanceId: startupContext.currentStart.instanceId,
+    currentHostname: startupContext.currentStart.hostname ?? 'unknown',
     currentCommit: startupContext.currentStart.commit,
     currentBranch: startupContext.currentStart.branch,
     previousInstanceId: startupContext.previousStart?.instanceId ?? null,
+    previousHostname: startupContext.previousStart?.hostname ?? null,
     previousCommit: startupContext.previousStart?.commit ?? null,
     previousGraceful: previousStopMatches
       ? (startupContext.previousStop?.graceful ?? null)
@@ -152,6 +178,7 @@ export function createShutdownLogPayload(
   return {
     event: 'app_stop',
     instanceId: shutdownRecord.instanceId,
+    hostname: shutdownRecord.hostname ?? 'unknown',
     commit: shutdownRecord.commit,
     branch: shutdownRecord.branch,
     graceful: shutdownRecord.graceful,
@@ -190,11 +217,18 @@ export class AppLifecycleService
         this.readRecord<AppLifecycleStopRecord>(APP_LIFECYCLE_LAST_STOP_KEY),
       ]);
 
-      const currentStart = this.createStartRecord(previousStart);
+      const currentCommit = this.currentGitInfo.commit;
+      const currentHostname = this.getHostname();
       const reason = determineStartupReason(
         previousStart,
         previousStop,
-        currentStart.commit,
+        currentCommit,
+        currentHostname,
+      );
+      const currentStart = this.createStartRecord(
+        previousStart,
+        reason,
+        currentHostname,
       );
 
       this.startupContext = {
@@ -209,6 +243,9 @@ export class AppLifecycleService
       this.logger.log(
         `Lifecycle startup ${JSON.stringify(createStartupLogPayload(this.startupContext))}`,
       );
+      this.metrics?.recordAppStartup(reason);
+      this.metrics?.setBuildInfo(currentStart.branch, currentStart.commit);
+      this.metrics?.setAppRestartCount(currentStart.restartCount);
       this.metrics?.recordAppLifecycleEvent('startup', 'success');
     } catch (error) {
       this.metrics?.recordAppLifecycleEvent('startup', 'error');
@@ -246,16 +283,20 @@ export class AppLifecycleService
   }
 
   private createStartRecord(
-    previousStart?: AppLifecycleStartRecord,
+    previousStart: AppLifecycleStartRecord | undefined,
+    reason: StartupReason,
+    hostname: string,
   ): AppLifecycleStartRecord {
     return {
       schemaVersion: APP_LIFECYCLE_SCHEMA_VERSION,
       instanceId: this.instanceId,
+      hostname,
       branch: this.currentGitInfo.branch,
       commit: this.currentGitInfo.commit,
       restartCount: determineRestartCount(
         previousStart,
         this.currentGitInfo.commit,
+        reason,
       ),
       startedAt: new Date().toISOString(),
     };
@@ -265,12 +306,17 @@ export class AppLifecycleService
     return {
       schemaVersion: APP_LIFECYCLE_SCHEMA_VERSION,
       instanceId: this.instanceId,
+      hostname: this.getHostname(),
       branch: this.currentGitInfo.branch,
       commit: this.currentGitInfo.commit,
       stoppedAt: new Date().toISOString(),
       signal: signal ?? null,
       graceful: true,
     };
+  }
+
+  private getHostname(): string {
+    return process.env.HOSTNAME?.trim() || 'unknown';
   }
 
   private async readRecord<T>(key: string): Promise<T | undefined> {
@@ -300,6 +346,7 @@ export class AppLifecycleService
     return {
       schemaVersion: record.schemaVersion ?? APP_LIFECYCLE_SCHEMA_VERSION,
       instanceId: record.instanceId ?? 'unknown',
+      hostname: record.hostname ?? 'unknown',
       branch: record.branch ?? 'unknown',
       commit: record.commit ?? 'unknown',
       restartCount: record.restartCount ?? 0,
