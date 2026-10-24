@@ -1,11 +1,15 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { Client, type Role } from 'discord.js';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import type { DiscordID } from '#root/lib/types';
+
+import { DiscordProfileSyncService } from './discord-profile-sync.service';
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import { UserProfileTagEntity } from './entities/user-profile-tag.entity';
+import { PatronTagService } from './patron-tag.service';
 
 export interface PublicUserProfileTag {
   name: string;
@@ -14,20 +18,7 @@ export interface PublicUserProfileTag {
   description: string;
 }
 
-const PATRON_API = 'https://thanks.rgd.chat/api/supporters';
-const PATRON_TAG_COLOR = '#5C87E7';
-const PATRON_TAG_BACKGROUND = '#FEFEFE';
-const PATRON_TAG_DESCRIPTION = 'Донат';
-
-interface SupporterDto {
-  user: {
-    id: string;
-    username: string;
-    avatar_url: string;
-    banner: string;
-  };
-  value: number;
-}
+const ROLE_TAG_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class PublicProfileTagService {
@@ -37,26 +28,35 @@ export class PublicProfileTagService {
     @InjectRepository(UserProfileTagEntity)
     private readonly userProfileTagRepository: EntityRepository<UserProfileTagEntity>,
     private readonly client: Client,
+    private readonly discordProfileSync: DiscordProfileSyncService,
+    private readonly patronTagService: PatronTagService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async getPublicProfileTags(
     userId: DiscordID,
   ): Promise<PublicUserProfileTag[]> {
     const user_id = BigInt(userId);
-    const tags: PublicUserProfileTag[] = [];
-    const roleTags = await this.getRoleTags(user_id);
-    const patronTag = await this.getPatronTag(user_id);
+    const [memberships, customTags] = await Promise.all([
+      this.memberProfileRepository.find({
+        user_id,
+        isLeftGuild: false,
+      }),
+      this.userProfileTagRepository.find(
+        { user_id },
+        { orderBy: { id: 'ASC' } },
+      ),
+    ]);
+    const [roleTags, patronTag] = await Promise.all([
+      this.getRoleTags(memberships),
+      this.patronTagService.getTag(userId),
+    ]);
 
-    tags.push(...roleTags);
+    const tags = [...roleTags];
 
     if (patronTag) {
       tags.push(patronTag);
     }
-
-    const customTags = await this.userProfileTagRepository.find(
-      { user_id },
-      { orderBy: { id: 'ASC' } },
-    );
 
     tags.push(
       ...customTags.map((tag) => ({
@@ -70,57 +70,64 @@ export class PublicProfileTagService {
     return tags;
   }
 
-  private async getRoleTags(userId: bigint): Promise<PublicUserProfileTag[]> {
-    const memberships = await this.memberProfileRepository.find({
-      user_id: userId,
-      isLeftGuild: false,
-    });
+  private async getRoleTags(
+    memberships: MemberProfileEntity[],
+  ): Promise<PublicUserProfileTag[]> {
     const tags: PublicUserProfileTag[] = [];
 
     for (const membership of memberships) {
-      const guild = await this.client.guilds
-        .fetch(membership.guild_id.toString())
-        .catch(() => null);
-      if (!guild) continue;
-
-      const member = await guild.members
-        .fetch({ user: userId.toString(), force: true })
-        .catch(() => null);
-      if (!member) continue;
-
-      const role = member.roles.cache
-        .filter((role) => role.name !== '@everyone' && !role.tags)
-        .sort((left, right) => right.position - left.position)
-        .first();
-      if (!role) continue;
-
-      tags.push(roleToTag(role));
+      const role = await this.resolveRole(membership);
+      if (role) {
+        tags.push(roleToTag(role));
+      }
     }
 
     return tags;
   }
 
-  private async getPatronTag(
-    userId: bigint,
-  ): Promise<PublicUserProfileTag | null> {
+  private async resolveRole(
+    membership: MemberProfileEntity,
+  ): Promise<Role | null> {
+    const syncedAt = membership.roleSyncedAt?.getTime() ?? 0;
+    const roleId =
+      Date.now() - syncedAt < ROLE_TAG_SYNC_INTERVAL_MS
+        ? membership.highestRoleId
+        : await this.refreshHighestRoleId(membership);
+
+    if (!roleId) return null;
+
+    const guild = this.client.guilds.cache.get(membership.guild_id.toString());
+    return guild?.roles.cache.get(roleId.toString()) ?? null;
+  }
+
+  private async refreshHighestRoleId(
+    membership: MemberProfileEntity,
+  ): Promise<bigint | null> {
+    const startedAt = performance.now();
+
     try {
-      const response = await fetch(PATRON_API);
-      if (!response.ok) return null;
+      const synced = await this.discordProfileSync.syncGuildMemberById(
+        membership.guild_id,
+        membership.user_id,
+        { force: true },
+      );
 
-      const supporters: SupporterDto[] = await response.json();
-      const patron = supporters.find((s) => s.user.id === String(userId));
+      this.metrics?.recordProfileSync(
+        synced ? 'fresh' : 'none',
+        (performance.now() - startedAt) / 1000,
+      );
 
-      if (!patron || patron.value <= 0) return null;
-
-      return {
-        name: formatDonation(patron.value),
-        color: PATRON_TAG_COLOR,
-        background: PATRON_TAG_BACKGROUND,
-        description: PATRON_TAG_DESCRIPTION,
-      };
+      if (synced) {
+        return synced.highestRoleId;
+      }
     } catch {
-      return null;
+      this.metrics?.recordProfileSync(
+        'error',
+        (performance.now() - startedAt) / 1000,
+      );
     }
+
+    return membership.highestRoleId;
   }
 }
 
@@ -152,13 +159,4 @@ export function getContrastColor(hex: string): string {
 
   const threshold = b > r ? 0.2 : 0.8;
   return luminance > threshold ? '#000000' : '#ffffff';
-}
-
-function formatDonation(value: number): string {
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  }).format(value);
 }
