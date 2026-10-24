@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Client, Collection, GuildMember, User } from 'discord.js';
+import { Client, GuildMember, User } from 'discord.js';
 
 import { DiscordProfileSyncService } from './discord-profile-sync.service';
 import { MemberProfileEntity } from './entities/member-profile.entity';
@@ -15,7 +15,6 @@ describe('DiscordProfileSyncService', () => {
 
   beforeEach(() => {
     userRepository = {
-      find: mock(() => Promise.resolve([])),
       findOneOrFail: mock(async ({ user_id }: { user_id: bigint }) => {
         const user = new UserProfileEntity();
         user.user_id = user_id;
@@ -43,9 +42,6 @@ describe('DiscordProfileSyncService', () => {
       flush: mock(() => Promise.resolve()),
     } as unknown as EntityManager;
     client = {
-      users: {
-        fetch: mock(() => Promise.resolve(createUser('123'))),
-      },
       guilds: {
         fetch: mock(() =>
           Promise.resolve({
@@ -130,27 +126,6 @@ describe('DiscordProfileSyncService', () => {
     );
   });
 
-  it('fetches and syncs users by id with an explicit concurrency limit', async () => {
-    await service.syncUsersById([111n, 222n], 1);
-
-    expect(client.users.fetch).toHaveBeenCalledWith('111', { force: true });
-    expect(client.users.fetch).toHaveBeenCalledWith('222', { force: true });
-    expect(em.upsert).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not fetch users that were synced recently', async () => {
-    const freshUser = new UserProfileEntity();
-    freshUser.user_id = 111n;
-    freshUser.updatedAt = new Date();
-    (userRepository.find as ReturnType<typeof mock>).mockResolvedValueOnce([
-      freshUser,
-    ]);
-
-    await service.syncUsersById([111n], 1);
-
-    expect(client.users.fetch).not.toHaveBeenCalled();
-  });
-
   it('syncs fetched guild member by id explicitly', async () => {
     await expect(
       service.syncGuildMemberById(456n, 123n),
@@ -160,17 +135,6 @@ describe('DiscordProfileSyncService', () => {
     });
 
     expect(client.guilds.fetch).toHaveBeenCalledWith('456');
-  });
-
-  it('syncs a collection of members with explicit concurrency', async () => {
-    const members = new Collection<string, GuildMember>([
-      ['111', createMember('111', '456')],
-      ['222', createMember('222', '456')],
-    ]);
-
-    await service.syncMembers(members, 1);
-
-    expect(em.upsert).toHaveBeenCalledTimes(4);
   });
 });
 

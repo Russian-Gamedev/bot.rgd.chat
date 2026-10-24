@@ -1,7 +1,8 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
-import { Client, Collection, GuildMember, User } from 'discord.js';
+
+import { Client, GuildMember, User } from 'discord.js';
 
 import {
   getDefaultAvatar,
@@ -12,9 +13,6 @@ import type { DiscordID } from '#root/lib/types';
 
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import { UserProfileEntity } from './entities/user-profile.entity';
-
-const DEFAULT_SYNC_CONCURRENCY = 10;
-const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export interface EnsureMemberProfileResult {
   member: MemberProfileEntity;
@@ -124,33 +122,6 @@ export class DiscordProfileSyncService {
     return this.syncMember(member);
   }
 
-  async syncUsersById(
-    userIds: DiscordID[],
-    concurrency = DEFAULT_SYNC_CONCURRENCY,
-    options: { staleAfterMs?: number } = {},
-  ): Promise<void> {
-    const syncableUserIds = await this.getSyncableUserIds(
-      userIds,
-      options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS,
-    );
-
-    await runLimited(syncableUserIds, concurrency, async (userId) => {
-      const user = await this.client.users.fetch(userId.toString(), {
-        force: true,
-      });
-      await this.syncUser(user);
-    });
-  }
-
-  async syncMembers(
-    members: Collection<string, GuildMember> | GuildMember[],
-    concurrency = DEFAULT_SYNC_CONCURRENCY,
-  ): Promise<void> {
-    await runLimited([...members.values()], concurrency, (member) =>
-      this.syncMember(member),
-    );
-  }
-
   async ensureUserProfile(userId: DiscordID): Promise<UserProfileEntity> {
     const normalizedUserId = BigInt(userId);
     await this.em.upsert(
@@ -200,28 +171,6 @@ export class DiscordProfileSyncService {
     return { member, created: true };
   }
 
-  private async getSyncableUserIds(
-    userIds: DiscordID[],
-    staleAfterMs: number,
-  ): Promise<bigint[]> {
-    const uniqueUserIds = [...new Set(userIds.map((userId) => BigInt(userId)))];
-    if (uniqueUserIds.length === 0) return [];
-
-    const existingUsers = await this.userRepository.find({
-      user_id: { $in: uniqueUserIds },
-    });
-    const existingById = new Map(
-      existingUsers.map((user) => [user.user_id.toString(), user]),
-    );
-    const staleBefore = Date.now() - staleAfterMs;
-
-    return uniqueUserIds.filter((userId) => {
-      const user = existingById.get(userId.toString());
-      if (!user) return true;
-      return user.updatedAt.getTime() < staleBefore;
-    });
-  }
-
   private createDefaultProfileData(userId: bigint) {
     return {
       user_id: userId,
@@ -238,23 +187,4 @@ export class DiscordProfileSyncService {
       lastActiveAt: new Date(),
     };
   }
-}
-
-async function runLimited<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<unknown>,
-): Promise<void> {
-  const queue = [...items];
-  const workerCount = Math.max(1, Math.min(concurrency, queue.length));
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (queue.length > 0) {
-        const item = queue.shift();
-        if (item === undefined) continue;
-        await worker(item);
-      }
-    }),
-  );
 }
