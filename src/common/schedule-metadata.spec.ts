@@ -9,6 +9,7 @@ const SCHEDULE_CRON_OPTIONS = 'SCHEDULE_CRON_OPTIONS';
 const SCHEDULE_INTERVAL_OPTIONS = 'SCHEDULE_INTERVAL_OPTIONS';
 
 import { ActivityJobService } from '#core/activity/activity-job.service';
+import { ACTIVITY_TIME_ZONE } from '#core/activity/activity-period';
 import { ActivityWatchService } from '#core/activity/activity-watch.service';
 import { BarWatcher } from '#core/bar/bar.watcher';
 import { BirthdayService } from '#core/birthday/birthday.service';
@@ -88,6 +89,7 @@ describe('scheduled job metadata', () => {
 
     expect(metadata.name).toBe('daily-activity');
     expect(metadata.options?.cronTime).toBe('0 15 * * *');
+    expect(metadata.options?.timeZone).toBe(ACTIVITY_TIME_ZONE);
   });
 
   it('keeps birthday greeting cron metadata after request context wrapping', () => {

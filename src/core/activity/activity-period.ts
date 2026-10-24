@@ -6,6 +6,12 @@ export enum ActivityPeriod {
   Month = 'month',
 }
 
+/**
+ * `current` — период, который ещё идёт (сегодня/последние N дней включая сегодня).
+ * `completed` — только полные дни, заканчивающиеся вчера.
+ */
+export type ActivityRangeMode = 'current' | 'completed';
+
 const MOSCOW_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
   month: '2-digit',
@@ -25,8 +31,10 @@ export function toMoscowDateKey(date: Date): string {
 export function getActivityPeriodRange(
   period: ActivityPeriod,
   now = new Date(),
+  mode: ActivityRangeMode = 'current',
 ): [string, string] {
-  const end = addDaysToDateKey(toMoscowDateKey(now), 1);
+  const today = toMoscowDateKey(now);
+  const end = addDaysToDateKey(today, mode === 'completed' ? 0 : 1);
   const days = {
     [ActivityPeriod.Day]: 1,
     [ActivityPeriod.Week]: 7,
@@ -65,9 +73,13 @@ export function getRecentDaysRange(
 
 function subtractMonthsFromDateKey(dateKey: string, months: number): string {
   const [year, month, day] = dateKey.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1 - months, day));
+  const target = new Date(Date.UTC(year, month - 1 - months, 1));
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDayOfTargetMonth));
 
-  return date.toISOString().slice(0, 10);
+  return target.toISOString().slice(0, 10);
 }
 
 function addDaysToDateKey(dateKey: string, days: number): string {

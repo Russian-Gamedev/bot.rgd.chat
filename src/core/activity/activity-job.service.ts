@@ -23,7 +23,9 @@ import { WalletService } from '#core/wallet/wallet.service';
 import { formatCoins, formatTime, pickRandom, pluralize } from '#lib/utils';
 import { ActivityService, ActivityStats } from './activity.service';
 import {
+  ACTIVITY_TIME_ZONE,
   ActivityPeriod,
+  type ActivityRangeMode,
   getActivityPeriodRange,
   moscowDateKeyToStartDate,
 } from './activity-period';
@@ -76,12 +78,16 @@ export class ActivityJobService {
       activities,
       period,
       BigInt(interaction.guild.id),
+      this.getPeriodRange(period)[0],
     );
 
     await interaction.reply({ embeds: [embed] });
   }
 
-  @Cron('0 15 * * *', { name: 'daily-activity' })
+  @Cron('0 15 * * *', {
+    name: 'daily-activity',
+    timeZone: ACTIVITY_TIME_ZONE,
+  })
   @EnsureRequestContext()
   async handleDailyJob() {
     const startedAt = performance.now();
@@ -148,13 +154,14 @@ export class ActivityJobService {
     const activities = await this.getActivitiesForPeriod(
       guild.id,
       ActivityPeriod.Day,
+      'completed',
     );
 
     for (const activity of activities) {
       try {
         const coinsPerMinute = Math.floor(activity.voice_seconds / 60);
         const coins = activity.message_score + coinsPerMinute;
-        if (coins === 0) return;
+        if (coins === 0) continue;
         const user = await this.userService.findOrCreateMember(
           BigInt(guild.id),
           activity.user_id,
@@ -198,6 +205,7 @@ export class ActivityJobService {
     const activities = await this.getActivitiesForPeriod(
       guild.id,
       ActivityPeriod.Day,
+      'completed',
     );
 
     const activeUsers: bigint[] = [];
@@ -214,7 +222,7 @@ export class ActivityJobService {
     }
 
     this.logger.log(
-      `Guild ${guild.id} - Active users today: ${activeUsers.length}`,
+      `Guild ${guild.id} - Active users for the completed day: ${activeUsers.length}`,
     );
 
     /// reset streaks for inactive users
@@ -315,7 +323,12 @@ export class ActivityJobService {
       return;
     }
 
-    const activities = await this.getActivitiesForPeriod(guild.id, period);
+    const [start] = this.getPeriodRange(period, 'completed');
+    const activities = await this.getActivitiesForPeriod(
+      guild.id,
+      period,
+      'completed',
+    );
 
     if (activities.length === 0) {
       this.logger.log(
@@ -350,7 +363,12 @@ export class ActivityJobService {
       return;
     }
 
-    const embed = await this.buildEmbed(activities, period, BigInt(guild.id));
+    const embed = await this.buildEmbed(
+      activities,
+      period,
+      BigInt(guild.id),
+      start,
+    );
 
     const sent = await channel
       .send({ embeds: [embed] })
@@ -415,10 +433,10 @@ export class ActivityJobService {
     activities: ActivityStats[],
     period: ActivityPeriod,
     guildId: bigint,
+    periodStart: string,
   ) {
-    const [date] = this.getPeriodRange(period);
     const newRegs = await this.userService.getNewUsers(
-      moscowDateKeyToStartDate(date),
+      moscowDateKeyToStartDate(periodStart),
       guildId,
     );
     const usersStreak = await this.activityService.getTopMemberStreaks(
@@ -569,17 +587,21 @@ export class ActivityJobService {
     return embed;
   }
 
-  private getPeriodRange(period: ActivityPeriod): [string, string] {
-    return getActivityPeriodRange(period);
+  private getPeriodRange(
+    period: ActivityPeriod,
+    mode: ActivityRangeMode = 'current',
+  ): [string, string] {
+    return getActivityPeriodRange(period, new Date(), mode);
   }
 
   private async getActivitiesForPeriod(
     guildId: string,
     period: ActivityPeriod,
+    mode: ActivityRangeMode = 'current',
   ): Promise<ActivityStats[]> {
-    const [start, end] = this.getPeriodRange(period);
+    const [start, end] = this.getPeriodRange(period, mode);
     this.logger.log(
-      `Loading activity stats for guild ${guildId} and period ${period}: ${start} <= date < ${end}`,
+      `Loading activity stats for guild ${guildId} and period ${period} (${mode}): ${start} <= date < ${end}`,
     );
 
     return this.activityService.getActivityStatsInRange(guildId, start, end);

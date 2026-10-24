@@ -337,11 +337,13 @@ function createService(redis = createRedisMock(), guildSetup = createGuild()) {
 
   return {
     activities,
+    activityService,
     guild: guildSetup.guild,
     guildMembers: guildSetup.members,
     redis,
     service,
     setVoiceChannelMembers: guildSetup.setVoiceChannelMembers,
+    userService,
   };
 }
 
@@ -744,6 +746,49 @@ describe('ActivityWatchService voice tracking', () => {
 
     expect(activities.size).toBe(0);
     expect(redis.storage.get(VOICE_KEY)).toBeUndefined();
+  });
+});
+
+describe('ActivityWatchService message tracking', () => {
+  afterEach(() => {
+    mock.restore();
+  });
+
+  function createMessage(
+    guild: Guild,
+    {
+      bot = false,
+      content = 'hello world',
+      webhookId = null,
+    }: { bot?: boolean; content?: string; webhookId?: string | null } = {},
+  ) {
+    return {
+      author: { bot, id: MEMBER_ID },
+      content,
+      guild,
+      guildId: GUILD_ID,
+      webhookId,
+    } as unknown as ContextOf<'messageCreate'>[0];
+  }
+
+  it('counts words for a regular guild message', async () => {
+    const { activities, guild, service } = createService();
+
+    await service.onMessage([
+      createMessage(guild),
+    ] as ContextOf<'messageCreate'>);
+
+    expect(getActivity(activities)?.message_score).toBe(2);
+  });
+
+  it('ignores messages without text', async () => {
+    const { activities, guild, service } = createService();
+
+    await service.onMessage([
+      createMessage(guild, { content: '   ' }),
+    ] as ContextOf<'messageCreate'>);
+
+    expect(activities.size).toBe(0);
   });
 });
 

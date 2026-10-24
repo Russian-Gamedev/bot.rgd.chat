@@ -11,9 +11,14 @@ import type { UserService } from '#core/users/users.service';
 import type { WalletService } from '#core/wallet/wallet.service';
 import type { ActivityService } from './activity.service';
 import { ActivityJobService } from './activity-job.service';
-import { ActivityPeriod, getActivityPeriodRange } from './activity-period';
+import {
+  ActivityPeriod,
+  getActivityPeriodRange,
+  getActivityRange,
+} from './activity-period';
 
 interface PrivateActivityJobService {
+  giveAwayDailyCoins(guild: Guild): Promise<void>;
   postActivitySummary(guild: Guild, period: ActivityPeriod): Promise<void>;
   postActivitySummarySafely(
     guild: Guild,
@@ -99,6 +104,79 @@ describe('ActivityJobService', () => {
         new Date('2026-07-06T15:08:34.000Z'),
       ),
     ).toEqual(['2026-07-06', '2026-07-07']);
+  });
+
+  it('builds completed ranges ending yesterday', () => {
+    const now = new Date('2026-07-06T15:08:34.000Z');
+
+    expect(
+      getActivityPeriodRange(ActivityPeriod.Day, now, 'completed'),
+    ).toEqual(['2026-07-05', '2026-07-06']);
+    expect(
+      getActivityPeriodRange(ActivityPeriod.Week, now, 'completed'),
+    ).toEqual(['2026-06-29', '2026-07-06']);
+    expect(
+      getActivityPeriodRange(ActivityPeriod.Month, now, 'completed'),
+    ).toEqual(['2026-06-06', '2026-07-06']);
+  });
+
+  it('clamps the activity range start to the last day of the target month', () => {
+    expect(getActivityRange(3, new Date('2026-05-31T12:00:00.000Z'))).toEqual([
+      '2026-02-28',
+      '2026-06-01',
+    ]);
+    expect(getActivityRange(3, new Date('2028-05-31T12:00:00.000Z'))).toEqual([
+      '2028-02-29',
+      '2028-06-01',
+    ]);
+  });
+
+  it('loads the daily summary for the completed day, not the current one', async () => {
+    const { activityService, guild, service } = createService({
+      channelId: null,
+      postMessages: true,
+    });
+    const [start, end] = getActivityPeriodRange(
+      ActivityPeriod.Day,
+      new Date(),
+      'completed',
+    );
+
+    await service.postActivitySummary(guild, ActivityPeriod.Day);
+
+    expect(activityService.getActivityStatsInRange).toHaveBeenCalledWith(
+      guild.id,
+      start,
+      end,
+    );
+  });
+
+  it('skips users with zero coins without stopping the payout', async () => {
+    const { guild, service, walletService } = createService({
+      stats: [
+        {
+          guild_id: 1127255165548888196n,
+          message_score: 0,
+          reaction_count: 0,
+          user_id: 1n,
+          voice_seconds: 30,
+        },
+        {
+          guild_id: 1127255165548888196n,
+          message_score: 5,
+          reaction_count: 0,
+          user_id: 2n,
+          voice_seconds: 0,
+        },
+      ],
+    });
+
+    await service.giveAwayDailyCoins(guild);
+
+    expect(walletService.credit).toHaveBeenCalledTimes(1);
+    expect(walletService.credit).toHaveBeenCalledWith(2n, 5n, 'daily-reward', {
+      guildId: 1127255165548888196n,
+    });
   });
 
   it('skips publishing when the configured channel is missing', async () => {
