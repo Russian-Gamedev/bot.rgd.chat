@@ -21,7 +21,6 @@ import {
   SlashCommand,
   type SlashCommandContext,
 } from 'necord';
-import { recordDiscordCommand } from '#common/metrics/discord-command-metrics';
 import { MetricsService } from '#common/metrics/metrics.service';
 import { GuildSettings } from '#config/guilds';
 import { GuildSettingsService } from '#core/guilds/settings/guild-settings.service';
@@ -57,11 +56,7 @@ export class BarWatcher {
     contexts: [InteractionContextType.Guild],
   })
   async joinToChannel(@Context() [interaction]: SlashCommandContext) {
-    if (!this.metrics) return this.joinToChannelCommand(interaction);
-
-    return recordDiscordCommand(this.metrics, 'bar_join', interaction, () => {
-      return this.joinToChannelCommand(interaction);
-    });
+    return this.joinToChannelCommand(interaction);
   }
 
   private async joinToChannelCommand(interaction: SlashCommandContext[0]) {

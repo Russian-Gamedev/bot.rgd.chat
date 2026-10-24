@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
-
+import { DiscordCommandMetricsInterceptor } from './discord-command-metrics.interceptor';
 import { MetricsController } from './metrics.controller';
 import { MetricsHttpInterceptor } from './metrics.interceptor';
 import { MetricsService } from './metrics.service';
@@ -13,6 +13,10 @@ import { MetricsService } from './metrics.service';
     {
       provide: APP_INTERCEPTOR,
       useClass: MetricsHttpInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: DiscordCommandMetricsInterceptor,
     },
   ],
   exports: [MetricsService],
