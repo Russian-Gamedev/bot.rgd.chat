@@ -4,9 +4,13 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  type Attachment,
   Channel,
   Client,
+  type Embed,
   Message,
+  MessageReferenceType,
+  type MessageSnapshot,
   NewsChannel,
   TextChannel,
   WebhookClient,
@@ -14,6 +18,7 @@ import {
 import Redis from 'ioredis';
 import { Context, type ContextOf, On } from 'necord';
 import { UtilsService } from '#core/utils/utils.service';
+import { truncateText } from '#lib/utils';
 import { PortalEntity } from './entities/portal.entity';
 import { PortalBlacklistEntity } from './entities/portal-blacklist.entity';
 
@@ -22,6 +27,8 @@ const PORTAL_CACHE_TTL_SECONDS = 3600;
 const BLACKLIST_CACHE_KEY = 'portals:blacklist';
 const MSG_MAP_PREFIX = 'portals:msgmap:';
 const MSG_MAP_TTL = 60 * 60 * 24 * 7;
+const MESSAGE_CONTENT_LIMIT = 2000;
+const MAX_EMBEDS_PER_MESSAGE = 10;
 
 interface MessageMapping {
   originalGuildId: string;
@@ -407,21 +414,43 @@ export class PortalsService {
       `Relaying message ${message.id} from #${message.channelId} (guild ${message.guildId}) via portal #${portalData.portalId} → #${portalData.targetChannelId} (guild ${portalData.targetGuildId})`,
     );
 
-    const replyAuthorId = await this.resolveReplyAuthorId(message);
-    const replyLink = await this.resolveReplyLink(message);
+    const forwardedSnapshot = this.getForwardedSnapshot(message);
 
-    let content = message.content.trim();
-
+    let content: string;
+    let files: Attachment[];
+    let embeds: Embed[] = [];
     let replyPrefix: string | undefined;
-    if (replyLink) {
-      this.logger.debug(`Reply link for ${message.id}: ${replyLink}`);
-      const prefix = replyAuthorId ? `<@${replyAuthorId}> ` : '';
-      replyPrefix = `${prefix}${replyLink}`;
-      content = content ? `${replyPrefix}\n${content}` : replyPrefix;
-    } else if (message.reference?.messageId) {
-      this.logger.debug(
-        `No reply link for ${message.id} ref=${message.reference.messageId}`,
+
+    if (forwardedSnapshot) {
+      const forwardedAuthor = await this.resolveReferencedAuthor(message);
+      content = this.buildForwardedContent(
+        forwardedSnapshot,
+        forwardedAuthor?.username,
       );
+      files = [...forwardedSnapshot.attachments.values()];
+      embeds = forwardedSnapshot.embeds.slice(0, MAX_EMBEDS_PER_MESSAGE);
+
+      this.logger.debug(
+        `Relaying forwarded message ${message.id} from ${forwardedAuthor?.username ?? 'unknown author'}`,
+      );
+    } else {
+      const referencedAuthor = await this.resolveReferencedAuthor(message);
+      const replyAuthorId = referencedAuthor?.bot ? null : referencedAuthor?.id;
+      const replyLink = await this.resolveReplyLink(message);
+
+      content = message.content.trim();
+      files = [...message.attachments.values()];
+
+      if (replyLink) {
+        this.logger.debug(`Reply link for ${message.id}: ${replyLink}`);
+        const prefix = replyAuthorId ? `<@${replyAuthorId}> ` : '';
+        replyPrefix = `${prefix}${replyLink}`;
+        content = content ? `${replyPrefix}\n${content}` : replyPrefix;
+      } else if (message.reference?.messageId) {
+        this.logger.debug(
+          `No reply link for ${message.id} ref=${message.reference.messageId}`,
+        );
+      }
     }
 
     content = await this.applyEmbedFix(content);
@@ -439,10 +468,8 @@ export class PortalsService {
         content: content || undefined,
         username,
         avatarURL,
-        files:
-          message.attachments.size > 0
-            ? [...message.attachments.values()]
-            : undefined,
+        files: files.length > 0 ? files : undefined,
+        embeds: embeds.length > 0 ? embeds : undefined,
         allowedMentions: { parse: [] },
       });
 
@@ -470,6 +497,27 @@ export class PortalsService {
     const { content: fixedContent } =
       await this.utilsService.fixVideoEmbeds(content);
     return fixedContent;
+  }
+
+  /** Forwarded messages keep their text, files and embeds in a snapshot. */
+  private getForwardedSnapshot(message: Message): MessageSnapshot | null {
+    if (message.reference?.type !== MessageReferenceType.Forward) return null;
+    return message.messageSnapshots.first() ?? null;
+  }
+
+  private buildForwardedContent(
+    snapshot: MessageSnapshot,
+    authorName?: string,
+  ): string {
+    const header = authorName
+      ? `**Переслано от ${authorName}**`
+      : '**Переслано**';
+    const body = truncateText(
+      snapshot.content.trim(),
+      MESSAGE_CONTENT_LIMIT - header.length - 1,
+    );
+
+    return body ? `${header}\n${body}` : header;
   }
 
   private async resolveReplyLink(message: Message): Promise<string | null> {
@@ -515,7 +563,9 @@ export class PortalsService {
     return `https://discord.com/channels/${guildId}/${channelId}/${ref.messageId}`;
   }
 
-  private async resolveReplyAuthorId(message: Message): Promise<string | null> {
+  private async resolveReferencedAuthor(
+    message: Message,
+  ): Promise<{ id: string; username: string; bot: boolean } | null> {
     const ref = message.reference;
     if (!ref?.messageId) return null;
 
@@ -524,11 +574,16 @@ export class PortalsService {
       const channel = await this.client.channels.fetch(channelId);
       if (!channel?.isTextBased()) return null;
       const refMessage = await channel.messages.fetch(ref.messageId);
-      if (!refMessage || refMessage.author.bot) return null;
-      return refMessage.author.id;
+      if (!refMessage) return null;
+
+      return {
+        id: refMessage.author.id,
+        username: refMessage.member?.displayName ?? refMessage.author.username,
+        bot: refMessage.author.bot,
+      };
     } catch {
       this.logger.debug(
-        `Failed to fetch reply author for message ${ref.messageId}`,
+        `Failed to fetch referenced author for message ${ref.messageId}`,
       );
       return null;
     }
