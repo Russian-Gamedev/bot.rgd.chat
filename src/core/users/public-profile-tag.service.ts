@@ -1,9 +1,11 @@
+import { CreateRequestContext } from '@mikro-orm/decorators/legacy';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable, Optional } from '@nestjs/common';
+import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Client, type Role } from 'discord.js';
 
 import { MetricsService } from '#common/metrics/metrics.service';
+import { formatError } from '#lib/utils';
 import type { DiscordID } from '#root/lib/types';
 
 import { DiscordProfileSyncService } from './discord-profile-sync.service';
@@ -22,11 +24,15 @@ const ROLE_TAG_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class PublicProfileTagService {
+  private readonly logger = new Logger(PublicProfileTagService.name);
+  private readonly refreshingMemberships = new Set<string>();
+
   constructor(
     @InjectRepository(MemberProfileEntity)
     private readonly memberProfileRepository: EntityRepository<MemberProfileEntity>,
     @InjectRepository(UserProfileTagEntity)
     private readonly userProfileTagRepository: EntityRepository<UserProfileTagEntity>,
+    readonly em: EntityManager,
     private readonly client: Client,
     private readonly discordProfileSync: DiscordProfileSyncService,
     private readonly patronTagService: PatronTagService,
@@ -47,10 +53,8 @@ export class PublicProfileTagService {
         { orderBy: { id: 'ASC' } },
       ),
     ]);
-    const [roleTags, patronTag] = await Promise.all([
-      this.getRoleTags(memberships),
-      this.patronTagService.getTag(userId),
-    ]);
+    const roleTags = this.getRoleTags(memberships);
+    const patronTag = await this.patronTagService.getTag(userId);
 
     const tags = [...roleTags];
 
@@ -70,13 +74,13 @@ export class PublicProfileTagService {
     return tags;
   }
 
-  private async getRoleTags(
+  private getRoleTags(
     memberships: MemberProfileEntity[],
-  ): Promise<PublicUserProfileTag[]> {
+  ): PublicUserProfileTag[] {
     const tags: PublicUserProfileTag[] = [];
 
     for (const membership of memberships) {
-      const role = await this.resolveRole(membership);
+      const role = this.resolveRole(membership);
       if (role) {
         tags.push(roleToTag(role));
       }
@@ -85,30 +89,41 @@ export class PublicProfileTagService {
     return tags;
   }
 
-  private async resolveRole(
-    membership: MemberProfileEntity,
-  ): Promise<Role | null> {
+  private resolveRole(membership: MemberProfileEntity): Role | null {
     const syncedAt = membership.roleSyncedAt?.getTime() ?? 0;
-    const roleId =
-      Date.now() - syncedAt < ROLE_TAG_SYNC_INTERVAL_MS
-        ? membership.highestRoleId
-        : await this.refreshHighestRoleId(membership);
+    if (Date.now() - syncedAt >= ROLE_TAG_SYNC_INTERVAL_MS) {
+      void this.refreshMembershipRole(
+        membership.guild_id,
+        membership.user_id,
+      ).catch((error: unknown) => {
+        this.logger.warn(
+          `Failed to schedule profile role refresh for guild ${membership.guild_id} user ${membership.user_id}: ${formatError(error)}`,
+        );
+      });
+    }
 
+    const roleId = membership.highestRoleId;
     if (!roleId) return null;
 
     const guild = this.client.guilds.cache.get(membership.guild_id.toString());
     return guild?.roles.cache.get(roleId.toString()) ?? null;
   }
 
-  private async refreshHighestRoleId(
-    membership: MemberProfileEntity,
-  ): Promise<bigint | null> {
+  @CreateRequestContext()
+  private async refreshMembershipRole(
+    guildId: bigint,
+    userId: bigint,
+  ): Promise<void> {
+    const key = `${guildId}:${userId}`;
+    if (this.refreshingMemberships.has(key)) return;
+
+    this.refreshingMemberships.add(key);
     const startedAt = performance.now();
 
     try {
       const synced = await this.discordProfileSync.syncGuildMemberById(
-        membership.guild_id,
-        membership.user_id,
+        guildId,
+        userId,
         { force: true },
       );
 
@@ -117,17 +132,35 @@ export class PublicProfileTagService {
         (performance.now() - startedAt) / 1000,
       );
 
-      if (synced) {
-        return synced.highestRoleId;
+      if (!synced) {
+        await this.markRoleSynced(guildId, userId);
       }
-    } catch {
+    } catch (error) {
       this.metrics?.recordProfileSync(
         'error',
         (performance.now() - startedAt) / 1000,
       );
+      await this.markRoleSynced(guildId, userId);
+      this.logger.warn(
+        `Failed to refresh profile role for guild ${guildId} user ${userId}: ${formatError(error)}`,
+      );
+    } finally {
+      this.refreshingMemberships.delete(key);
     }
+  }
 
-    return membership.highestRoleId;
+  private async markRoleSynced(guildId: bigint, userId: bigint): Promise<void> {
+    try {
+      await this.em.nativeUpdate(
+        MemberProfileEntity,
+        { guild_id: guildId, user_id: userId },
+        { roleSyncedAt: new Date() },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to record role sync time for guild ${guildId} user ${userId}: ${formatError(error)}`,
+      );
+    }
   }
 }
 
