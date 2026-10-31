@@ -142,6 +142,13 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  private readonly profileLookupsNotFound = new Counter({
+    name: 'rgd_bot_profile_lookup_not_found_total',
+    help: 'Public profile lookups that found no user, by lookup kind.',
+    labelNames: ['lookup_kind'] as const,
+    registers: [this.registry],
+  });
+
   private readonly profileSyncs = new Counter({
     name: 'rgd_bot_profile_sync_total',
     help: 'Public profile Discord syncs by result.',
@@ -358,6 +365,10 @@ export class MetricsService {
 
   recordProfileCacheLookup(result: 'hit' | 'miss' | 'miss_marker') {
     this.profileCacheLookups.inc({ result });
+  }
+
+  recordProfileLookupNotFound(kind: 'id' | 'username') {
+    this.profileLookupsNotFound.inc({ lookup_kind: kind });
   }
 
   recordProfileSync(

@@ -62,11 +62,14 @@ describe('MetricsService', () => {
     const metrics = new MetricsService();
 
     metrics.recordProfileCacheLookup('miss');
+    metrics.recordProfileLookupNotFound('username');
     metrics.recordProfileSync('fresh', 0.3);
 
     const output = await metrics.getMetrics();
     expect(output).toContain('rgd_bot_profile_cache_lookups_total');
     expect(output).toContain('result="miss"');
+    expect(output).toContain('rgd_bot_profile_lookup_not_found_total');
+    expect(output).toContain('lookup_kind="username"');
     expect(output).toContain('rgd_bot_profile_sync_total');
     expect(output).toContain('result="fresh"');
   });
