@@ -16,12 +16,18 @@ import {
 import { PublicProfileTagService } from './public-profile-tag.service';
 import { UserService } from './users.service';
 
-const USER_RESPONSE_CACHE_TTL_SECONDS = 60;
+const USER_RESPONSE_CACHE_TTL_SECONDS = 300;
+const USER_RESPONSE_CACHE_MISS_TTL_SECONDS = 60;
 const USER_RESPONSE_CACHE_MISS = '-';
 const USER_RESPONSE_CACHE_VERSION = 'v7';
 
 @Injectable()
 export class PublicProfileService {
+  private readonly pendingProfiles = new Map<
+    string,
+    Promise<PublicUserProfileDto>
+  >();
+
   constructor(
     private readonly userService: UserService,
     private readonly publicProfileTagService: PublicProfileTagService,
@@ -39,6 +45,24 @@ export class PublicProfileService {
         : normalizedLookup.toLowerCase()
     }`;
 
+    const pending = this.pendingProfiles.get(cacheKey);
+    if (pending) return pending;
+
+    const promise = this.loadPublicProfile(
+      cacheKey,
+      normalizedLookup,
+      isNumericLookup,
+    ).finally(() => this.pendingProfiles.delete(cacheKey));
+    this.pendingProfiles.set(cacheKey, promise);
+
+    return promise;
+  }
+
+  private async loadPublicProfile(
+    cacheKey: string,
+    lookup: string,
+    isNumericLookup: boolean,
+  ): Promise<PublicUserProfileDto> {
     const cached = await this.redis.get(cacheKey);
     if (cached === USER_RESPONSE_CACHE_MISS) {
       this.metrics?.recordProfileCacheLookup('miss_marker');
@@ -61,11 +85,14 @@ export class PublicProfileService {
 
     const profile = await this.userService.lookupProfile(lookup);
     if (!profile) {
+      this.metrics?.recordProfileLookupNotFound(
+        isNumericLookup ? 'id' : 'username',
+      );
       await this.redis.set(
         cacheKey,
         USER_RESPONSE_CACHE_MISS,
         'EX',
-        USER_RESPONSE_CACHE_TTL_SECONDS,
+        USER_RESPONSE_CACHE_MISS_TTL_SECONDS,
       );
       throw new NotFoundException('User profile was not found.');
     }

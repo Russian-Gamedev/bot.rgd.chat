@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { NotFoundException } from '@nestjs/common';
 import Redis from 'ioredis';
 
+import { MetricsService } from '#common/metrics/metrics.service';
 import { PermissionService } from '#core/permissions/permissions.service';
 import { UserProfileEntity } from './entities/user-profile.entity';
 import { PublicProfileService } from './public-profile.service';
@@ -50,6 +51,7 @@ describe('PublicProfileService', () => {
   let userService: UserService;
   let publicProfileTagService: PublicProfileTagService;
   let redis: Redis;
+  let metrics: MetricsService;
 
   beforeEach(() => {
     userService = {
@@ -67,12 +69,17 @@ describe('PublicProfileService', () => {
     const permissionService = {
       getActorPermissions: mock(() => Promise.resolve({})),
     } as unknown as PermissionService;
+    metrics = {
+      recordProfileCacheLookup: mock(() => undefined),
+      recordProfileLookupNotFound: mock(() => undefined),
+    } as unknown as MetricsService;
 
     service = new PublicProfileService(
       userService,
       publicProfileTagService,
       permissionService,
       redis,
+      metrics,
     );
   });
 
@@ -102,12 +109,24 @@ describe('PublicProfileService', () => {
     );
 
     expect(userService.lookupProfile).toHaveBeenCalledWith('nobody');
+    expect(metrics.recordProfileLookupNotFound).toHaveBeenCalledWith(
+      'username',
+    );
     expect(redis.set).toHaveBeenCalledWith(
       expect.stringContaining('users:lookup-profile-response'),
       '-',
       'EX',
       60,
     );
+  });
+
+  it('records an id lookup when a numeric profile is missing', async () => {
+    await expect(service.getPublicProfile(' 999 ')).rejects.toThrow(
+      NotFoundException,
+    );
+
+    expect(userService.lookupProfile).toHaveBeenCalledWith('999');
+    expect(metrics.recordProfileLookupNotFound).toHaveBeenCalledWith('id');
   });
 
   it('serves the stored profile and caches it on a miss', async () => {
@@ -125,7 +144,42 @@ describe('PublicProfileService', () => {
       expect.stringContaining('users:lookup-profile-response'),
       expect.stringContaining('old.webp'),
       'EX',
-      60,
+      300,
     );
+  });
+
+  it('coalesces concurrent lookups for the same profile', async () => {
+    let releaseRedis!: (value: string | null) => void;
+    (redis.get as ReturnType<typeof mock>).mockImplementationOnce(
+      () =>
+        new Promise<string | null>((resolve) => {
+          releaseRedis = resolve;
+        }),
+    );
+    let resolveLookup!: (value: UserProfileEntity) => void;
+    (
+      userService.lookupProfile as ReturnType<typeof mock>
+    ).mockImplementationOnce(
+      () =>
+        new Promise<UserProfileEntity>((resolve) => {
+          resolveLookup = resolve;
+        }),
+    );
+
+    const first = service.getPublicProfile('123');
+    const second = service.getPublicProfile('123');
+
+    expect(redis.get).toHaveBeenCalledTimes(1);
+
+    releaseRedis(null);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(userService.lookupProfile).toHaveBeenCalledTimes(1);
+
+    resolveLookup(createProfile(123n));
+
+    const [firstProfile, secondProfile] = await Promise.all([first, second]);
+    expect(firstProfile).toEqual(secondProfile);
+    expect(userService.lookupProfile).toHaveBeenCalledTimes(1);
   });
 });
