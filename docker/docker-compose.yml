@@ -5,6 +5,10 @@ services:
     image: ghcr.io/russian-gamedev/bot.rgd.chat:latest
     container_name: "${COMPOSE_PROJECT_NAME}_app"
     restart: unless-stopped
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
     healthcheck:
       test:
         [
@@ -58,6 +62,10 @@ services:
     container_name: "${COMPOSE_PROJECT_NAME}_redis"
     command: "redis-server --appendonly yes"
     restart: unless-stopped
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
     ports:
       - ":6379"
     healthcheck:
