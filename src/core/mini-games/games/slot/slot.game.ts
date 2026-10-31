@@ -42,7 +42,7 @@ import type { DiscordID } from '#root/lib/types';
  * Weighted reel strip: cheap symbols occupy more cells than premium ones,
  * so triples of 🍒 are common and triples of 7️⃣ are rare.
  */
-const REEL = [
+export const REEL = [
   '🍒',
   '🍒',
   '🍒',
@@ -67,9 +67,11 @@ const REEL = [
  * Net payout multiplier of the bet for one line of three identical symbols.
  * Eight lines are checked (3 rows, 3 columns, 2 diagonals) and winnings
  * from several lines sum up. Symbols come from the 18-cell REEL strip,
- * so the house edge is 1 - 8 * Σ (w/18)³ * payout = 1 - 5520/5832 ≈ 5.3%.
+ * so the expected return is 8 * Σ (w/18)³ * payout = 8 * 1883/5832 ≈ 2.5826,
+ * i.e. 258% RTP (negative house edge). This is intentional: the slot is
+ * deliberately generous and is not a coin sink.
  */
-const PAYOUTS: Record<string, number> = {
+export const PAYOUTS: Record<string, number> = {
   '🍋': 2,
   '🍒': 5,
   '🔔': 10,
@@ -80,7 +82,7 @@ const PAYOUTS: Record<string, number> = {
 };
 
 /** Paying lines on the 3x3 grid, cells are [row, col]. */
-const LINES: Array<{ name: string; cells: Array<[number, number]> }> = [
+export const LINES: Array<{ name: string; cells: Array<[number, number]> }> = [
   {
     name: 'верхняя строка',
     cells: [
