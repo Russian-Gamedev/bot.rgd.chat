@@ -945,8 +945,20 @@ describe('ActivityWatchService reaction tracking', () => {
     expect(authorActivity(activities)).toBeUndefined();
   });
 
-  it('excludes self-reactions', async () => {
+  it('excludes self-reactions without warning', async () => {
     const { activities, service } = createService();
+    const warn = mock(() => undefined);
+    const debug = mock(() => undefined);
+    (
+      service as unknown as {
+        logger: { debug: typeof debug; warn: typeof warn };
+      }
+    ).logger.warn = warn;
+    (
+      service as unknown as {
+        logger: { debug: typeof debug; warn: typeof warn };
+      }
+    ).logger.debug = debug;
 
     await service.onReactionAdd([
       createReaction(freshMessage()),
@@ -954,14 +966,28 @@ describe('ActivityWatchService reaction tracking', () => {
     ] as unknown as ContextOf<'messageReactionAdd'>);
 
     expect(authorActivity(activities)).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledTimes(1);
   });
 
-  it('skips reactions on messages older than 24 hours', async () => {
+  it('skips reactions on messages older than 24 hours without warning', async () => {
     const { activities, service } = createService();
     const oldMessage = {
       ...freshMessage(),
       createdTimestamp: NOW - 25 * 60 * 60 * 1000,
     };
+    const warn = mock(() => undefined);
+    const debug = mock(() => undefined);
+    (
+      service as unknown as {
+        logger: { debug: typeof debug; warn: typeof warn };
+      }
+    ).logger.warn = warn;
+    (
+      service as unknown as {
+        logger: { debug: typeof debug; warn: typeof warn };
+      }
+    ).logger.debug = debug;
 
     await service.onReactionAdd([
       createReaction(oldMessage),
@@ -969,6 +995,8 @@ describe('ActivityWatchService reaction tracking', () => {
     ] as unknown as ContextOf<'messageReactionAdd'>);
 
     expect(authorActivity(activities)).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledTimes(1);
   });
 
   it('decrements when the last reaction from a user is removed', async () => {

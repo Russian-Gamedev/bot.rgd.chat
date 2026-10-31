@@ -288,8 +288,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     }
 
     if (message.author.id === user.id) {
-      this.warnRateLimited(
-        `reaction-self:${message.id}:${user.id}`,
+      this.logger.debug(
         `Skipping reaction activity for message ${message.id}: user ${user.id} reacted to their own message`,
       );
       return null;
@@ -298,8 +297,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     if (message.createdTimestamp == null) return null;
     const diffTime = Date.now() - message.createdTimestamp;
     if (diffTime > REACTION_WINDOW_MS) {
-      this.warnRateLimited(
-        `reaction-old:${message.id}`,
+      this.logger.debug(
         `Skipping reaction activity for message ${message.id}: message is older than 24 hours`,
       );
       return null;
