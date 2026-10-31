@@ -9,7 +9,9 @@ import type { DiscordID } from '#root/lib/types';
 const PATRON_API = 'https://thanks.rgd.chat/api/supporters';
 const PATRON_CACHE_KEY = 'users:patron-supporters';
 const PATRON_CACHE_TTL_SECONDS = 24 * 60 * 60;
-const PATRON_FETCH_TIMEOUT_MS = 5_000;
+const PATRON_FETCH_TIMEOUT_MS = 10_000;
+const PATRON_FETCH_ATTEMPTS = 2;
+const PATRON_RETRY_DELAY_MS = 1_000;
 const PATRON_TAG_COLOR = '#5C87E7';
 const PATRON_TAG_BACKGROUND = '#FEFEFE';
 const PATRON_TAG_DESCRIPTION = 'Донат';
@@ -70,14 +72,7 @@ export class PatronTagService {
     const startedAt = performance.now();
 
     try {
-      const response = await fetch(PATRON_API, {
-        signal: AbortSignal.timeout(PATRON_FETCH_TIMEOUT_MS),
-      });
-      if (!response.ok) {
-        throw new Error(`Patron API responded with ${response.status}`);
-      }
-
-      const supporters = (await response.json()) as SupporterDto[];
+      const supporters = await this.fetchSupporters();
       const amounts = toAmountsByUserId(supporters);
 
       const transaction = this.redis.multi();
@@ -104,6 +99,33 @@ export class PatronTagService {
         (performance.now() - startedAt) / 1000,
       );
     }
+  }
+
+  private async fetchSupporters(): Promise<SupporterDto[]> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= PATRON_FETCH_ATTEMPTS; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetch(PATRON_API, {
+          signal: AbortSignal.timeout(PATRON_FETCH_TIMEOUT_MS),
+        });
+      } catch (error) {
+        lastError = error;
+        if (attempt < PATRON_FETCH_ATTEMPTS) {
+          await Bun.sleep(PATRON_RETRY_DELAY_MS);
+        }
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Patron API responded with ${response.status}`);
+      }
+
+      return (await response.json()) as SupporterDto[];
+    }
+
+    throw lastError ?? new Error('Patron API request failed');
   }
 }
 

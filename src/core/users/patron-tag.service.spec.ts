@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+  spyOn,
+} from 'bun:test';
 import Redis from 'ioredis';
 
 import { MetricsService } from '#common/metrics/metrics.service';
@@ -115,19 +123,64 @@ describe('PatronTagService', () => {
     expect(metrics.setPatronSupporters).toHaveBeenCalledWith(0);
   });
 
-  it('keeps the previous hash when the API request fails', async () => {
+  it('does not retry a non-2xx response', async () => {
     globalThis.fetch = mock(
       async () => new Response('unavailable', { status: 503 }),
     ) as unknown as typeof fetch;
 
     await service.refresh();
 
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect(redis.multi).not.toHaveBeenCalled();
     expect(metrics.recordScheduledJob).toHaveBeenCalledWith(
       'patron_supporters',
       'error',
       expect.any(Number),
     );
+  });
+
+  it('retries once after a network error', async () => {
+    const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);
+    globalThis.fetch = mock()
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([]), { status: 200 }),
+      ) as unknown as typeof fetch;
+
+    await service.refresh();
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(metrics.recordScheduledJob).toHaveBeenCalledWith(
+      'patron_supporters',
+      'success',
+      expect.any(Number),
+    );
+    sleep.mockRestore();
+  });
+
+  it('logs the error message when the stack is empty', async () => {
+    const warn = mock(() => undefined);
+    (service as unknown as { logger: { warn: typeof warn } }).logger.warn =
+      warn;
+    const timeout = new Error('The operation timed out.');
+    timeout.stack = '';
+    globalThis.fetch = mock(async () => {
+      throw timeout;
+    }) as unknown as typeof fetch;
+    const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);
+
+    await service.refresh();
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('The operation timed out.'),
+    );
+    expect(metrics.recordScheduledJob).toHaveBeenCalledWith(
+      'patron_supporters',
+      'error',
+      expect.any(Number),
+    );
+    sleep.mockRestore();
   });
 
   it('does not run two refreshes concurrently', async () => {
