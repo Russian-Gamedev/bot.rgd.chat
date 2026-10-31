@@ -148,6 +148,7 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
   public async onMessage(@Context() [message]: ContextOf<'messageCreate'>) {
     if (message.webhookId) return;
     if (!message.guild) return;
+    if (message.author.bot) return;
 
     const words = message.content
       .trim()

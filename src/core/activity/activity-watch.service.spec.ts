@@ -781,6 +781,16 @@ describe('ActivityWatchService message tracking', () => {
     expect(getActivity(activities)?.message_score).toBe(2);
   });
 
+  it('ignores bot messages', async () => {
+    const { activities, guild, service } = createService();
+
+    await service.onMessage([
+      createMessage(guild, { bot: true }),
+    ] as ContextOf<'messageCreate'>);
+
+    expect(activities.size).toBe(0);
+  });
+
   it('ignores messages without text', async () => {
     const { activities, guild, service } = createService();
 
