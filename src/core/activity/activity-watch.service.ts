@@ -335,8 +335,20 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
     const previous = this.diagnosticLogTimestamps.get(key) ?? 0;
     if (now - previous < ACTIVITY_DIAGNOSTIC_LOG_INTERVAL_MS) return;
 
+    if (this.diagnosticLogTimestamps.size >= 1_000) {
+      this.pruneDiagnosticLogTimestamps(now);
+    }
+
     this.diagnosticLogTimestamps.set(key, now);
     this.logger.warn(message);
+  }
+
+  private pruneDiagnosticLogTimestamps(now: number) {
+    for (const [key, timestamp] of this.diagnosticLogTimestamps) {
+      if (now - timestamp >= ACTIVITY_DIAGNOSTIC_LOG_INTERVAL_MS) {
+        this.diagnosticLogTimestamps.delete(key);
+      }
+    }
   }
 
   private getVoiceActivityKey(guildId: string) {
