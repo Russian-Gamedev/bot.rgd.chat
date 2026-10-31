@@ -757,10 +757,18 @@ describe('ActivityWatchService message tracking', () => {
   function createMessage(
     guild: Guild,
     {
+      attachments = 0,
       bot = false,
       content = 'hello world',
+      embeds = 0,
       webhookId = null,
-    }: { bot?: boolean; content?: string; webhookId?: string | null } = {},
+    }: {
+      attachments?: number;
+      bot?: boolean;
+      content?: string;
+      embeds?: number;
+      webhookId?: string | null;
+    } = {},
   ) {
     return {
       author: { bot, id: MEMBER_ID },
@@ -768,6 +776,12 @@ describe('ActivityWatchService message tracking', () => {
       guild,
       guildId: GUILD_ID,
       webhookId,
+      attachments: { size: attachments },
+      embeds: Array.from({ length: embeds }),
+      stickers: { size: 0 },
+      components: [],
+      messageSnapshots: { size: 0 },
+      poll: null,
     } as unknown as ContextOf<'messageCreate'>[0];
   }
 
@@ -799,6 +813,34 @@ describe('ActivityWatchService message tracking', () => {
     ] as ContextOf<'messageCreate'>);
 
     expect(activities.size).toBe(0);
+  });
+
+  it('does not warn for attachment-only messages', async () => {
+    const { activities, guild, service } = createService();
+    const warn = mock(() => undefined);
+    (service as unknown as { logger: { warn: typeof warn } }).logger.warn =
+      warn;
+
+    await service.onMessage([
+      createMessage(guild, { content: '', attachments: 1 }),
+    ] as ContextOf<'messageCreate'>);
+
+    expect(activities.size).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns for a message with no text and no payload', async () => {
+    const { activities, guild, service } = createService();
+    const warn = mock(() => undefined);
+    (service as unknown as { logger: { warn: typeof warn } }).logger.warn =
+      warn;
+
+    await service.onMessage([
+      createMessage(guild, { content: '   ' }),
+    ] as ContextOf<'messageCreate'>);
+
+    expect(activities.size).toBe(0);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 

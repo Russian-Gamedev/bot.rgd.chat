@@ -157,10 +157,20 @@ export class ActivityWatchService implements BeforeApplicationShutdown {
       .filter((word) => word.length > 0);
 
     if (words.length === 0) {
-      this.warnRateLimited(
-        `message-empty-content:${message.guildId}`,
-        `Received guild message with empty content in guild ${message.guildId}; check Discord MessageContent intent and message payload access`,
-      );
+      const hasNonTextContent =
+        message.attachments.size > 0 ||
+        message.embeds.length > 0 ||
+        message.stickers.size > 0 ||
+        message.components.length > 0 ||
+        message.messageSnapshots.size > 0 ||
+        message.poll !== null;
+
+      if (!hasNonTextContent) {
+        this.warnRateLimited(
+          `message-empty-content:${message.guildId}`,
+          `Received a guild message with no text and no non-text content in guild ${message.guildId}; check the MessageContent intent or the message payload`,
+        );
+      }
       return;
     }
 
