@@ -82,6 +82,36 @@ describe('Template', () => {
     });
   });
 
+  describe('listEvents', () => {
+    it('returns the pick probability within each event pool', async () => {
+      const fresh = makeEntity({
+        id: 'fresh',
+        event: GuildEvents.MEMBER_JOIN,
+        triggered_count: 0,
+      });
+      const worn = makeEntity({
+        id: 'worn',
+        event: GuildEvents.MEMBER_JOIN,
+        triggered_count: 10,
+      });
+      const solo = makeEntity({
+        id: 'solo',
+        event: GuildEvents.MEMBER_LEAVE,
+        triggered_count: 3,
+      });
+      const { service } = makeService([fresh, worn, solo]);
+
+      const views = await service.listEvents();
+
+      const sum = 1 / (0 + 10) + 1 / (10 + 10);
+      expect(views.map((v) => v.probability)).toEqual([
+        1 / 10 / sum,
+        1 / 20 / sum,
+        1,
+      ]);
+    });
+  });
+
   describe('buildTemplate', () => {
     it('replaces known ${param} placeholders', () => {
       const entity = makeEntity({

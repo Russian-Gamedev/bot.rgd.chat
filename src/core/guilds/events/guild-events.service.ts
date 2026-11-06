@@ -24,6 +24,11 @@ export interface GuildEventView {
   author: EventAuthorView;
 }
 
+export interface GuildEventListView extends GuildEventView {
+  /** Chance the weighted lottery in getRandom picks this template next. */
+  probability: number;
+}
+
 @Injectable()
 export class GuildEventService {
   constructor(
@@ -36,12 +41,8 @@ export class GuildEventService {
     const events = await this.guildEventRepository.find({ event });
     if (!events.length) return null;
 
-    // Weighted lottery: less-picked templates are proportionally more likely,
-    // smoothing keeps brand-new (count 0) ones from dominating.
-    const template = pickWeighted(
-      events,
-      (e) => 1 / (e.triggered_count + GUILD_EVENT_PICK_SMOOTHING),
-    );
+    // Weighted lottery over the event's template pool.
+    const template = pickWeighted(events, GuildEventService.pickWeight);
 
     template.triggered_count++;
     await this.entityManager.persist(template).flush();
@@ -100,14 +101,30 @@ export class GuildEventService {
     return true;
   }
 
-  async listEvents(event?: GuildEvents): Promise<GuildEventView[]> {
+  async listEvents(event?: GuildEvents): Promise<GuildEventListView[]> {
     const events = await this.guildEventRepository.find(
       event ? { event } : {},
       {
         orderBy: { createdAt: 'DESC' },
       },
     );
-    return this.enrichAuthors(events);
+    const views = await this.enrichAuthors(events);
+
+    // Weight sums are kept per event pool so every probability shares the
+    // same normalized lottery as getRandom.
+    const weightSum = new Map<GuildEvents, number>();
+    for (const view of views) {
+      weightSum.set(
+        view.event,
+        (weightSum.get(view.event) ?? 0) + GuildEventService.pickWeight(view),
+      );
+    }
+
+    return views.map((view) => ({
+      ...view,
+      probability:
+        GuildEventService.pickWeight(view) / weightSum.get(view.event)!,
+    }));
   }
 
   private async enrichAuthors(
@@ -142,6 +159,14 @@ export class GuildEventService {
         },
       };
     });
+  }
+
+  /**
+   * Weight in the template lottery: less-picked templates are proportionally
+   * more likely, smoothing keeps brand-new (count 0) ones from dominating.
+   */
+  private static pickWeight({ triggered_count }: { triggered_count: number }) {
+    return 1 / (triggered_count + GUILD_EVENT_PICK_SMOOTHING);
   }
 
   static buildTemplate(
