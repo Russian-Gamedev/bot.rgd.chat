@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
 import { EnvironmentVariables } from '#config/env';
+import { GuildLoggingService } from '#core/guilds/logging/guild-logging.service';
+import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { UserService } from '#core/users/users.service';
 import { AuthService } from './auth.service';
@@ -15,6 +17,7 @@ describe('AuthService', () => {
   let entityManager: EntityManager;
   let jwtService: JwtService;
   let userService: UserService;
+  let guildLoggingService: GuildLoggingService;
   let configService: ConfigService<EnvironmentVariables>;
 
   beforeEach(() => {
@@ -33,9 +36,15 @@ describe('AuthService', () => {
 
     userService = {
       findOrCreateProfile: mock(() => Promise.resolve(createProfile())),
+      getMemberProfiles: mock(() => Promise.resolve([])),
     } as unknown as UserService;
 
+    guildLoggingService = {
+      log: mock(async () => undefined),
+    } as unknown as GuildLoggingService;
+
     configService = {
+      get: mock(() => undefined),
       getOrThrow: mock((key: string) => {
         const values: Record<string, string> = {
           DISCORD_CLIENT_ID: 'discord-client-id',
@@ -51,6 +60,7 @@ describe('AuthService', () => {
       authRepository,
       entityManager,
       userService,
+      guildLoggingService,
       configService,
     );
   });
@@ -93,6 +103,31 @@ describe('AuthService', () => {
       user_id: '123',
       username: 'new',
     });
+  });
+
+  it('logs site authorization to the guilds the member is still in', async () => {
+    const active = new MemberProfileEntity();
+    active.guild_id = 333n;
+    active.isLeftGuild = false;
+    const left = new MemberProfileEntity();
+    left.guild_id = 444n;
+    left.isLeftGuild = true;
+    (
+      userService.getMemberProfiles as unknown as ReturnType<typeof mock>
+    ).mockResolvedValueOnce([active, left]);
+
+    await service.logIn({
+      user_id: '123',
+      username: 'alice',
+      avatarUrl: 'avatar.png',
+      nickname: 'Alice',
+    });
+
+    expect(guildLoggingService.log).toHaveBeenCalledTimes(1);
+    expect(guildLoggingService.log).toHaveBeenCalledWith(
+      '333',
+      expect.anything(),
+    );
   });
 
   it('throws a readable 4xx error when Discord rejects code exchange', async () => {

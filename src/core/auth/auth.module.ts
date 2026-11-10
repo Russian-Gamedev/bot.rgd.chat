@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
 import { EnvironmentVariables } from '#config/env';
+import { GuildLoggingModule } from '#core/guilds/logging/logging.module';
 import { UserModule } from '#core/users/users.module';
 import { AuthController } from './auth.controller';
 import { DiscordAuthGuard } from './auth.guard';
@@ -29,6 +30,7 @@ import { JwtStrategy } from './jwt.strategy';
       },
     }),
     UserModule,
+    GuildLoggingModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, DiscordAuthGuard, DiscordStrategy, JwtStrategy],

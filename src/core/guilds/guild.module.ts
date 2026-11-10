@@ -1,6 +1,8 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Module } from '@nestjs/common';
 
+import { ActivityModule } from '#core/activity/activity.module';
+import { GuildLoggingModule } from '#core/guilds/logging/logging.module';
 import { PermissionsModule } from '#core/permissions/permissions.module';
 import { UserModule } from '#core/users/users.module';
 
@@ -18,6 +20,8 @@ import { GuildSettingsModule } from './settings/guild-settings.module';
 @Module({
   imports: [
     MikroOrmModule.forFeature([GuildEntity, RoleEntity]),
+    ActivityModule,
+    GuildLoggingModule,
     GuildSettingsModule,
     GuildEventsModule,
     GuildInviteModule,

@@ -2,7 +2,9 @@ export const DISCORD_CDN = 'https://cdn.discordapp.com';
 
 export enum Colors {
   Primary = 0x5c87e7,
+  Success = 0x57f287,
   Warning = 0xff9900,
+  Danger = 0xed4245,
 }
 
 export enum BotEvents {

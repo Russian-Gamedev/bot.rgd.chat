@@ -3,6 +3,8 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { AuditLogEvent, Client, Guild } from 'discord.js';
 
 import { GuildEvents } from '#config/guilds';
+import { ActivityService } from '#core/activity/activity.service';
+import { GuildLoggingService } from '#core/guilds/logging/guild-logging.service';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import { UserService } from '#core/users/users.service';
@@ -76,6 +78,8 @@ describe('GuildWatcherService', () => {
       {} as UserService,
       {} as GuildMemberRolesService,
       {} as GuildInviteService,
+      {} as GuildLoggingService,
+      {} as ActivityService,
     );
   });
 
@@ -238,6 +242,7 @@ describe('GuildWatcherService', () => {
       service: GuildWatcherService;
       userService: UserService;
       guildSettingsService: GuildSettingsService;
+      guildLoggingService: GuildLoggingService;
     } {
       const userService = {
         findOrCreateMember: mock(async () => user),
@@ -247,6 +252,9 @@ describe('GuildWatcherService', () => {
       const guildSettingsService = {
         getEventMessageChannel: mock(async () => null),
       } as unknown as GuildSettingsService;
+      const guildLoggingService = {
+        log: mock(async () => undefined),
+      } as unknown as GuildLoggingService;
 
       return {
         service: new GuildWatcherService(
@@ -261,9 +269,14 @@ describe('GuildWatcherService', () => {
           {
             trackLeave: mock(async () => undefined),
           } as unknown as GuildInviteService,
+          guildLoggingService,
+          {
+            getGuildActivityTotal: mock(async () => null),
+          } as unknown as ActivityService,
         ),
         userService,
         guildSettingsService,
+        guildLoggingService,
       };
     }
 
@@ -294,11 +307,17 @@ describe('GuildWatcherService', () => {
         },
       ) as Guild;
       const user = createMemberProfile();
-      const { service, userService } = createServiceForMemberLeave(user);
+      const { service, userService, guildLoggingService } =
+        createServiceForMemberLeave(user);
 
       await service.handleMemberLeave(createMember(guild) as never);
 
       expect(userService.incrementBanCount).toHaveBeenCalledWith(user.user_id);
+      expect(guildLoggingService.log).toHaveBeenCalledTimes(1);
+      expect(guildLoggingService.log).toHaveBeenCalledWith(
+        DISCORD_GUILD_ID,
+        expect.anything(),
+      );
     });
 
     it('does not increment user ban count for regular leave', async () => {

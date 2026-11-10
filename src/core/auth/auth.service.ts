@@ -5,8 +5,10 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
 import { EnvironmentVariables } from '#config/env';
+import { GuildLoggingService } from '#core/guilds/logging/guild-logging.service';
 import { UserProfileEntity } from '#core/users/entities/user-profile.entity';
 import { UserService } from '#core/users/users.service';
+import { buildAuthLogEmbed } from './auth.embed';
 import { AuthProfile, JwtPayload } from './auth.type';
 import { AuthEntity } from './entities/auth.entity';
 
@@ -20,6 +22,7 @@ export class AuthService {
     private readonly authRepository: EntityRepository<AuthEntity>,
     private readonly entityManager: EntityManager,
     private readonly userService: UserService,
+    private readonly guildLoggingService: GuildLoggingService,
     private readonly configService: ConfigService<EnvironmentVariables>,
   ) {}
 
@@ -45,7 +48,31 @@ export class AuthService {
     } else {
       await this.entityManager.persist(user).flush();
     }
+
+    await this.logSiteAuthorization(user);
+
     return this.generateJwtToken(user);
+  }
+
+  /// The OAuth callback has no guild context, so log to every guild the member is still in.
+  private async logSiteAuthorization(user: UserProfileEntity): Promise<void> {
+    const profiles = await this.userService.getMemberProfiles(
+      String(user.user_id),
+    );
+    const siteUrl = this.configService.get<string>('WEB_BASE_URL');
+
+    for (const profile of profiles) {
+      if (profile.isLeftGuild) continue;
+
+      await this.guildLoggingService.log(
+        String(profile.guild_id),
+        buildAuthLogEmbed({
+          userId: String(user.user_id),
+          username: user.username,
+          siteUrl,
+        }),
+      );
+    }
   }
 
   private generateJwtToken(user: UserProfileEntity) {

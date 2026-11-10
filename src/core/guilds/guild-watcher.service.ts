@@ -6,10 +6,17 @@ import { Context, type ContextOf, On } from 'necord';
 
 import { MetricsService } from '#common/metrics/metrics.service';
 import { GuildEvents } from '#config/guilds';
+import { ActivityService } from '#core/activity/activity.service';
+import { GuildLoggingService } from '#core/guilds/logging/guild-logging.service';
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { UserService } from '#core/users/users.service';
 
 import { GuildEventService } from './events/guild-events.service';
+import {
+  buildJoinLogEmbed,
+  buildLeaveLogEmbed,
+  type MemberLeaveReason,
+} from './guild-watcher.embed';
 import { GuildInviteService } from './invite/invite.service';
 import { GuildSettingsService } from './settings/guild-settings.service';
 
@@ -25,6 +32,8 @@ export class GuildWatcherService {
     private readonly userService: UserService,
     private readonly guildMemberRolesService: GuildMemberRolesService,
     private readonly guildInviteService: GuildInviteService,
+    private readonly guildLoggingService: GuildLoggingService,
+    private readonly activityService: ActivityService,
     @Optional() private readonly metrics?: MetricsService,
   ) {}
 
@@ -62,6 +71,15 @@ export class GuildWatcherService {
 
       await this.guildInviteService.trackJoin(user, invite.id);
     }
+
+    await this.guildLoggingService.log(
+      guild.id,
+      buildJoinLogEmbed({
+        memberId: member.id,
+        memberName: member.displayName,
+        invite: invite ?? null,
+      }),
+    );
 
     const channel = await this.guildSettingsService.getEventMessageChannel(
       guild.id,
@@ -110,7 +128,7 @@ export class GuildWatcherService {
     await this.userService.leaveGuild(user);
     await this.guildInviteService.trackLeave(user);
 
-    const { event, moderatorId } = await this.detectLeaveReason(
+    const { event, moderatorId, reason } = await this.detectLeaveReason(
       guild,
       member.id,
     );
@@ -118,6 +136,27 @@ export class GuildWatcherService {
     if (event === GuildEvents.MEMBER_BAN) {
       await this.userService.incrementBanCount(user.user_id);
     }
+
+    const joinedAt = member.joinedAt ?? user.firstJoinedAt;
+    const activityTotal = await this.activityService.getGuildActivityTotal(
+      guild.id,
+      member.id,
+    );
+
+    await this.guildLoggingService.log(
+      guild.id,
+      buildLeaveLogEmbed({
+        memberId: member.id,
+        memberName: member.displayName,
+        reason,
+        moderatorId,
+        joinedAt,
+        durationSec: joinedAt
+          ? Math.max(0, (Date.now() - joinedAt.getTime()) / 1000)
+          : 0,
+        messageScore: activityTotal?.message_score ?? 0,
+      }),
+    );
 
     const roles = member.roles.cache;
 
@@ -162,7 +201,11 @@ export class GuildWatcherService {
   async detectLeaveReason(
     guild: Guild,
     memberId: string,
-  ): Promise<{ event: GuildEvents; moderatorId?: string }> {
+  ): Promise<{
+    event: GuildEvents;
+    moderatorId?: string;
+    reason: MemberLeaveReason;
+  }> {
     const banResult = await this.checkAuditEntry(
       guild,
       memberId,
@@ -172,6 +215,7 @@ export class GuildWatcherService {
       return {
         event: GuildEvents.MEMBER_BAN,
         moderatorId: banResult.moderatorId,
+        reason: 'ban',
       };
     }
 
@@ -184,10 +228,11 @@ export class GuildWatcherService {
       return {
         event: GuildEvents.MEMBER_KICK,
         moderatorId: kickResult.moderatorId,
+        reason: 'kick',
       };
     }
 
-    return { event: GuildEvents.MEMBER_LEAVE };
+    return { event: GuildEvents.MEMBER_LEAVE, reason: 'leave' };
   }
 
   private async checkAuditEntry(

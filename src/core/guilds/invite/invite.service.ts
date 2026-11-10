@@ -4,6 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Client, Invite } from 'discord.js';
 
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
+import type { DiscordID } from '#root/lib/types';
 
 import { GuildInviteEntity } from './entities/invite.entity';
 import { GuildInviteHistoryEntity } from './entities/invite-history.entity';
@@ -83,6 +84,22 @@ export class GuildInviteService {
       await this.entityManager.remove(inviteEntity).flush();
       this.logger.log(`Deleted invite with ID: ${inviteEntity.id}`);
     }
+  }
+
+  async setAlias(code: string, name: string | null) {
+    const inviteEntity = await this.inviteRepository.findOne({ id: code });
+    if (!inviteEntity) return null;
+
+    inviteEntity.name = name;
+    await this.entityManager.persist(inviteEntity).flush();
+    return inviteEntity;
+  }
+
+  async listGuildInvites(guildId: DiscordID) {
+    return this.inviteRepository.find(
+      { guild_id: BigInt(guildId) },
+      { orderBy: { uses: 'DESC' } },
+    );
   }
 
   async trackJoin(user: MemberProfileEntity, inviteCode: string) {

@@ -6,6 +6,7 @@ import { Client } from 'discord.js';
 import { Context, type ContextOf, On, Once } from 'necord';
 
 import { MetricsService } from '#common/metrics/metrics.service';
+
 import { GuildInviteService } from './invite.service';
 
 @Injectable()
