@@ -58,9 +58,24 @@ describe('guild watcher log embeds', () => {
 
     expect(embed.data.title).toBe('Выход с сервера');
     expect(field(embed, 'Причина')).toContain('<@222>');
-    expect(field(embed, 'Зашёл')).toContain('<t:');
+    expect(field(embed, 'Зашёл')).toBe(
+      `<t:${Math.floor(joinedAt.getTime() / 1000)}:R>`,
+    );
     expect(field(embed, 'На сервере')).toContain('мес.');
     expect(field(embed, 'Написал слов')).toBe('1234');
+  });
+
+  it('leave embed formats a fractional duration without float noise', () => {
+    const embed = buildLeaveLogEmbed({
+      memberId: '111',
+      memberName: 'Guest',
+      reason: 'leave',
+      joinedAt: new Date(),
+      durationSec: 61.1069999999993,
+      messageScore: 0,
+    });
+
+    expect(field(embed, 'На сервере')).toBe('1 мин. 1 сек.');
   });
 
   it('leave embed keeps plain leave reason and zero score', () => {

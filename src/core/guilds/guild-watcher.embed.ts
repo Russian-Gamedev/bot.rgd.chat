@@ -76,7 +76,7 @@ export function buildLeaveLogEmbed(params: LeaveLogParams): EmbedBuilder {
     embed.addFields(
       {
         name: 'Зашёл',
-        value: getRelativeFormat(Math.floor(params.joinedAt.getTime() / 1000)),
+        value: getRelativeFormat(params.joinedAt.getTime()),
       },
       {
         name: 'На сервере',
