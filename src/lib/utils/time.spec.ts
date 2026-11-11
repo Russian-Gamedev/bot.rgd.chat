@@ -18,6 +18,12 @@ describe('formatTime', () => {
     expect(formatTime(31_536_000)).toBe('1 год.');
     expect(formatTime(63_072_000)).toBe('2 год.');
   });
+  it('drops fractional seconds instead of printing them', () => {
+    expect(formatTime(59.9)).toBe('59 сек.');
+    expect(formatTime(61.107)).toBe('1 мин. 1 сек.');
+    expect(formatTime(0.5)).toBe('');
+  });
+
   it('formats time with negative values correctly', () => {
     expect(formatTime(-3601)).toBe('1 ч. 1 сек.');
     expect(formatTime(-3660)).toBe('1 ч. 1 мин.');

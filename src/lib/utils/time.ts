@@ -12,7 +12,7 @@ export function getTimeInfo(t: number) {
   t -= hours * 3600;
   const minutes = Math.floor(t / 60);
   t -= minutes * 60;
-  const seconds = t;
+  const seconds = Math.floor(t);
 
   return {
     years,
