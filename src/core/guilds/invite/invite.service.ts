@@ -1,7 +1,7 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Injectable, Logger } from '@nestjs/common';
-import { Client, Invite } from 'discord.js';
+import { Client, GuildTextBasedChannel, Invite } from 'discord.js';
 
 import { MemberProfileEntity } from '#core/users/entities/member-profile.entity';
 import type { DiscordID } from '#root/lib/types';
@@ -23,13 +23,44 @@ export class GuildInviteService {
   ) {}
 
   public async create(invite: Invite) {
-    const inviteEntity = new GuildInviteEntity();
-    inviteEntity.id = invite.code;
-    inviteEntity.guild_id = invite.guild?.id ?? '0';
-    inviteEntity.uses = invite.uses ?? 0;
-    inviteEntity.inviter_id = invite.inviter?.id ?? '0';
-    await this.entityManager.persist(inviteEntity).flush();
-    return inviteEntity;
+    /// the row may already exist when the bot itself created the invite
+    await this.entityManager.upsert(
+      GuildInviteEntity,
+      {
+        id: invite.code,
+        guild_id: invite.guild?.id ?? '0',
+        uses: invite.uses ?? 0,
+        inviter_id: invite.inviter?.id ?? '0',
+      },
+      { onConflictFields: ['id'], onConflictAction: 'ignore' },
+    );
+  }
+
+  async createPermanentInvite(
+    channel: GuildTextBasedChannel,
+    inviterId: DiscordID,
+    name: string,
+  ) {
+    const invite = await channel.guild.invites.create(channel.id, {
+      maxAge: 0,
+      maxUses: 0,
+      unique: true,
+      reason: `Приглашение с alias «${name}»`,
+    });
+
+    await this.entityManager.upsert(
+      GuildInviteEntity,
+      {
+        id: invite.code,
+        guild_id: invite.guild?.id ?? channel.guildId,
+        uses: invite.uses ?? 0,
+        inviter_id: invite.inviter?.id ?? inviterId,
+        name,
+      },
+      { onConflictFields: ['id'], onConflictAction: 'merge' },
+    );
+
+    return invite;
   }
 
   async syncGuildInvites(guildId: string) {

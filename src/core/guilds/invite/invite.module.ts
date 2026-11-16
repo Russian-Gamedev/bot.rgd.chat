@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 
 import {
   InvitesAliasCommand,
+  InvitesCreateCommand,
   InvitesListCommand,
 } from './commands/invites.command';
 import { GuildInviteEntity } from './entities/invite.entity';
@@ -18,6 +19,7 @@ import { GuildInviteWatcher } from './invite-wather.service';
     GuildInviteService,
     GuildInviteWatcher,
     InvitesAliasCommand,
+    InvitesCreateCommand,
     InvitesListCommand,
   ],
   exports: [GuildInviteService],

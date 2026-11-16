@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InteractionContextType, MessageFlags } from 'discord.js';
 import {
   Context,
@@ -88,6 +88,78 @@ export class InvitesAliasCommand {
       content: `Alias приглашения \`${invite.id}\` убран.`,
       flags: [MessageFlags.Ephemeral],
     });
+  }
+}
+
+class InviteCreateDto {
+  @StringOption({
+    name: 'name',
+    description: 'Alias нового приглашения',
+    max_length: 100,
+    required: true,
+  })
+  name: string;
+}
+
+@InvitesCommandDecorator()
+@Injectable()
+export class InvitesCreateCommand {
+  private readonly logger = new Logger(InvitesCreateCommand.name);
+
+  constructor(private readonly guildInviteService: GuildInviteService) {}
+
+  @Subcommand({
+    name: 'create',
+    description: 'Создать бессрочное приглашение с alias',
+  })
+  public async create(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() dto: InviteCreateDto,
+  ) {
+    const channel = interaction.channel;
+    if (
+      !channel?.isTextBased() ||
+      channel.isThread() ||
+      !('guildId' in channel) ||
+      channel.guildId !== interaction.guildId
+    ) {
+      return await interaction.reply({
+        content: 'Команда доступна только в текстовом канале сервера.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    const name = dto.name.trim();
+    if (!name) {
+      return await interaction.reply({
+        content: 'Alias не может быть пустым.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
+
+    try {
+      const invite = await this.guildInviteService.createPermanentInvite(
+        channel,
+        interaction.user.id,
+        name,
+      );
+
+      return await interaction.reply({
+        content: `Создано бессрочное приглашение **${name}**: https://discord.gg/${invite.code}`,
+        flags: [MessageFlags.Ephemeral],
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to create invite with alias "${name}" in guild ${interaction.guildId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      return await interaction.reply({
+        content:
+          'Не удалось создать приглашение. Проверьте право «Создавать приглашения» у бота в этом канале.',
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
   }
 }
 
