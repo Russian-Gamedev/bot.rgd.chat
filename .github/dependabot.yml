@@ -1,8 +1,8 @@
 version: 2
 
 updates:
-  # Bun / npm deps: package.json + bun.lock
-  - package-ecosystem: "npm"
+  # Bun deps: package.json + bun.lock
+  - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
