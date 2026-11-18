@@ -9,7 +9,7 @@
         "@aws-sdk/s3-request-presigner": "^3.1169.0",
         "@discordjs/voice": "^0.19.2",
         "@mikro-orm/core": "^7.2.0",
-        "@mikro-orm/decorators": "^7.2.0",
+        "@mikro-orm/decorators": "^7.2.9",
         "@mikro-orm/migrations": "^7.2.0",
         "@mikro-orm/nestjs": "^7.1.0",
         "@mikro-orm/pglite": "^7.2.0",
@@ -187,7 +187,7 @@
 
     "@mikro-orm/core": ["@mikro-orm/core@7.2.5", "", { "peerDependencies": { "dataloader": "2.2.3" }, "optionalPeers": ["dataloader"] }, "sha512-YF2q2Druxw4PQf/DoN1jZgYZdWfgQUWZWEapXIs0Oc/mC5HvD21nVncruDz2qMitmihro1oPhb9gI4LR5u8BEw=="],
 
-    "@mikro-orm/decorators": ["@mikro-orm/decorators@7.2.5", "", { "peerDependencies": { "@mikro-orm/core": "7.2.5", "reflect-metadata": "^0.1.0 || ^0.2.0" }, "optionalPeers": ["reflect-metadata"] }, "sha512-QxtlrlDDLkEqQ4EEsy1/Qnk9p/66cyveC6JpyHdOK7FFMpee+cQCRP/VxH6UL5HANhKmJDsUjqkoplNG2bgMrg=="],
+    "@mikro-orm/decorators": ["@mikro-orm/decorators@7.2.9", "", { "peerDependencies": { "@mikro-orm/core": "7.2.9", "reflect-metadata": "^0.1.0 || ^0.2.0" }, "optionalPeers": ["reflect-metadata"] }, "sha512-neJ9rQztszx4b8Kb1A23BinHBApgrOA5o/aVtkTzvlb4A3VrfkLjITmo0qfQmTVjy7va3q7H2Ps7tLG0jWuOdw=="],
 
     "@mikro-orm/migrations": ["@mikro-orm/migrations@7.2.5", "", { "dependencies": { "@mikro-orm/sql": "7.2.5" }, "peerDependencies": { "@mikro-orm/core": "7.2.5" } }, "sha512-1nq+ger9gpPTTjxJF4GyrIXtTO/fhZGjlYjw6MSLcnVyCy0xoCMpz/cYYcz95J9HuT2tEInK41oi+ZUqIfTUEg=="],
 
