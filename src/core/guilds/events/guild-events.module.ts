@@ -5,6 +5,7 @@ import { PermissionsModule } from '#core/permissions/permissions.module';
 import { UserModule } from '#core/users/users.module';
 import { WalletModule } from '#core/wallet/wallet.module';
 
+import { GuildSettingsModule } from '../settings/guild-settings.module';
 import { GuildEventsCommands } from './commands/events.command';
 import { GuildEventEntity } from './entities/events.entity';
 import { GuildEventsController } from './guild-events.controller';
@@ -16,6 +17,7 @@ import { GuildEventService } from './guild-events.service';
     PermissionsModule,
     UserModule,
     WalletModule,
+    GuildSettingsModule,
   ],
   controllers: [GuildEventsController],
   providers: [GuildEventService, GuildEventsCommands],

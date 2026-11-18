@@ -291,7 +291,11 @@ describe('ActivityJobService', () => {
 
     expect(guildEventService.getRandom).toHaveBeenCalledWith(
       GuildEvents.ACTIVITY_RAFFLE,
-      { user: '<@42>', money: expect.stringContaining('100') },
+      {
+        user: '<@42>',
+        money: expect.stringContaining('100'),
+        guildId: '1127255165548888196',
+      },
     );
     const [winnerMessage] = send.mock.calls[1] as unknown as [string];
     expect(winnerMessage).toBe('<@42> забирает все монеты!');

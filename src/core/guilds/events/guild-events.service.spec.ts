@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from 'bun:test';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 
 import { GuildEvents } from '#config/guilds';
-
+import type { GuildSettingsService } from '../settings/guild-settings.service';
 import { GuildEventEntity } from './entities/events.entity';
 import { GuildEventService } from './guild-events.service';
 
@@ -17,7 +17,11 @@ function makeEntity(
   return Object.assign(event, overrides);
 }
 
-function makeService(events: GuildEventEntity[]) {
+/** `null` means the guild has no active role; otherwise member ids. */
+function makeService(
+  events: GuildEventEntity[],
+  activeRoleMembers: string[] | null = null,
+) {
   const flushed: GuildEventEntity[] = [];
   const repository = {
     find: mock(() => Promise.resolve(events)),
@@ -29,9 +33,18 @@ function makeService(events: GuildEventEntity[]) {
       }),
     })),
   } as unknown as EntityManager;
+  const guildSettings = {
+    getActiveRole: mock(() =>
+      Promise.resolve(
+        activeRoleMembers === null
+          ? null
+          : { members: new Map(activeRoleMembers.map((id) => [id, {}])) },
+      ),
+    ),
+  } as unknown as GuildSettingsService;
 
   return {
-    service: new GuildEventService(repository, entityManager),
+    service: new GuildEventService(repository, entityManager, guildSettings),
     flushed,
   };
 }
@@ -57,6 +70,63 @@ describe('Template', () => {
       expect(message).toBe('Hello World');
       expect(entity.triggered_count).toBe(6);
       expect(flushed).toEqual([entity]);
+    });
+
+    it('resolves ${active} from the guild active role', async () => {
+      const entity = makeEntity({ message: 'Активный: ${active}' });
+      const { service } = makeService([entity], ['111', '222']);
+
+      const message = await service.getRandom(GuildEvents.MEMBER_JOIN, {
+        guildId: 'guild',
+      });
+
+      expect(message).toMatch(/^Активный: <@(111|222)>$/);
+    });
+
+    it('resolves ${active} in every guild render independently', async () => {
+      const entity = makeEntity({ message: 'Активный: ${active}' });
+      const { service } = makeService([entity], ['111']);
+
+      const message = await service.getRandom(GuildEvents.MEMBER_JOIN, {
+        guildId: 'guild',
+      });
+      const nextMessage = await service.getRandom(GuildEvents.MEMBER_JOIN, {
+        guildId: 'guild',
+      });
+
+      expect(message).toBe('Активный: <@111>');
+      expect(nextMessage).toBe('Активный: <@111>');
+    });
+
+    it('leaves ${active} unresolved when the guild has no active role', async () => {
+      const entity = makeEntity({ message: 'Активный: ${active}' });
+      const { service } = makeService([entity], null);
+
+      const message = await service.getRandom(GuildEvents.MEMBER_JOIN, {
+        guildId: 'guild',
+      });
+
+      expect(message).toBe('Активный: ${active}');
+    });
+
+    it('leaves ${active} unresolved when no guildId is passed', async () => {
+      const entity = makeEntity({ message: 'Активный: ${active}' });
+      const { service } = makeService([entity], ['111']);
+
+      const message = await service.getRandom(GuildEvents.MEMBER_JOIN);
+
+      expect(message).toBe('Активный: ${active}');
+    });
+
+    it('does not leak the guildId param into the template', async () => {
+      const entity = makeEntity({ message: 'g ${guildId}' });
+      const { service } = makeService([entity], ['111']);
+
+      const message = await service.getRandom(GuildEvents.MEMBER_JOIN, {
+        guildId: 'guild',
+      });
+
+      expect(message).toBe('g ${guildId}');
     });
 
     it('strongly prefers the least-picked template', async () => {
@@ -144,6 +214,69 @@ describe('Template', () => {
       );
     });
 
+    it('renders ${irandom,min,max} within the inclusive range', () => {
+      const entity = makeEntity({ message: 'кубик: ${irandom,1,6}' });
+      for (let i = 0; i < 100; i++) {
+        expect(GuildEventService.buildTemplate(entity, {})).toMatch(
+          /^кубик: [1-6]$/,
+        );
+      }
+    });
+
+    it('renders ${irandom,min,max} with negative bounds', () => {
+      const entity = makeEntity({ message: '${irandom,-5,-1}' });
+      for (let i = 0; i < 100; i++) {
+        expect(GuildEventService.buildTemplate(entity, {})).toMatch(
+          /^-(?:[1-5])$/,
+        );
+      }
+    });
+
+    it('renders ${irandom,5,5} as the single value', () => {
+      const entity = makeEntity({ message: '${irandom,5,5}' });
+      expect(GuildEventService.buildTemplate(entity, {})).toBe('5');
+    });
+
+    it('renders ${choose,...} with one of the arguments', () => {
+      const entity = makeEntity({ message: '${choose,привет,пока}' });
+      const seen = new Set<string>();
+      for (let i = 0; i < 100; i++) {
+        seen.add(GuildEventService.buildTemplate(entity, {}));
+      }
+      expect([...seen].sort()).toEqual(['пока', 'привет']);
+    });
+
+    it('renders ${choose,...} with multi-word arguments', () => {
+      const entity = makeEntity({
+        message: '${choose,мало денег,много денег}',
+      });
+      expect(GuildEventService.buildTemplate(entity, {})).toMatch(
+        /^(мало|много) денег$/,
+      );
+    });
+
+    it('trims spaces around ${choose,...} argument separators', () => {
+      const entity = makeEntity({ message: '${choose, a , b }' });
+      expect(GuildEventService.buildTemplate(entity, {})).toMatch(/^[ab]$/);
+    });
+
+    it('replaces ${active} from params like a plain parameter', () => {
+      const entity = makeEntity({ message: 'жертва: ${active}' });
+      expect(GuildEventService.buildTemplate(entity, { active: '<@42>' })).toBe(
+        'жертва: <@42>',
+      );
+    });
+
+    it('leaves invalid dynamic tokens untouched', () => {
+      const entity = makeEntity({
+        message:
+          '${irandom,1} ${irandom,a,b} ${irandom,5,1} ${choose} ${foo,bar}',
+      });
+      expect(GuildEventService.buildTemplate(entity, {})).toBe(
+        '${irandom,1} ${irandom,a,b} ${irandom,5,1} ${choose} ${foo,bar}',
+      );
+    });
+
     it('returns message unchanged when params is empty', () => {
       const entity = makeEntity({
         message: 'No params here',
@@ -189,20 +322,23 @@ describe('Template', () => {
 
     it('returns missing params when none are present in template', () => {
       const requiredParams = ['name', 'role'];
-      const missing = GuildEventService.validateTemplate(
+      const problems = GuildEventService.validateTemplate(
         'No placeholders',
         requiredParams,
       );
-      expect(missing).toEqual(['name', 'role']);
+      expect(problems).toEqual([
+        'missing parameter name',
+        'missing parameter role',
+      ]);
     });
 
     it('returns only the missing params', () => {
       const requiredParams = ['name', 'role'];
-      const missing = GuildEventService.validateTemplate(
+      const problems = GuildEventService.validateTemplate(
         'Hi ${name}',
         requiredParams,
       );
-      expect(missing).toEqual(['role']);
+      expect(problems).toEqual(['missing parameter role']);
     });
 
     it('returns empty array for empty requiredParams', () => {
@@ -220,6 +356,61 @@ describe('Template', () => {
           requiredParams,
         ),
       ).toEqual([]);
+    });
+
+    it('accepts dynamic tokens alongside required params', () => {
+      expect(
+        GuildEventService.validateTemplate(
+          'Выпал ${irandom,1,10}: ${choose,орёл,решка} для ${user} и ${active}',
+          ['user'],
+        ),
+      ).toEqual([]);
+    });
+
+    it('rejects ${irandom} with wrong argument count', () => {
+      expect(GuildEventService.validateTemplate('${irandom,1}', [])).toEqual([
+        '${irandom} expects exactly 2 argument(s)',
+      ]);
+    });
+
+    it('rejects ${irandom} with non-integer arguments', () => {
+      expect(GuildEventService.validateTemplate('${irandom,a,b}', [])).toEqual([
+        '${irandom} expects two integers',
+      ]);
+    });
+
+    it('rejects ${irandom} with min greater than max', () => {
+      expect(GuildEventService.validateTemplate('${irandom,5,1}', [])).toEqual([
+        '${irandom} expects min <= max',
+      ]);
+    });
+
+    it('rejects bare ${choose} without arguments', () => {
+      expect(GuildEventService.validateTemplate('${choose}', [])).toEqual([
+        '${choose} expects at least 1 argument(s)',
+      ]);
+    });
+
+    it('rejects ${active} with arguments', () => {
+      expect(GuildEventService.validateTemplate('${active,1}', [])).toEqual([
+        '${active} expects exactly 0 argument(s)',
+      ]);
+    });
+
+    it('rejects unknown tokens with arguments', () => {
+      expect(GuildEventService.validateTemplate('${foo,bar}', [])).toEqual([
+        'unknown token ${foo}',
+      ]);
+    });
+
+    it('rejects malformed placeholders', () => {
+      expect(
+        GuildEventService.validateTemplate('${} ${a,,b} ${a b}', []),
+      ).toEqual([
+        'malformed placeholder ${}',
+        'malformed placeholder ${a,,b}',
+        'malformed placeholder ${a b}',
+      ]);
     });
   });
 });

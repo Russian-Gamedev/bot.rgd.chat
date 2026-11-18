@@ -423,7 +423,7 @@ export class ActivityJobService {
 
     const message = await this.guildEventService.getRandom(
       GuildEvents.ACTIVITY_RAFFLE,
-      { user: userStr, money },
+      { user: userStr, money, guildId: guild.id },
     );
 
     await channel.send(message ?? `${userStr} выиграл ${money}`);

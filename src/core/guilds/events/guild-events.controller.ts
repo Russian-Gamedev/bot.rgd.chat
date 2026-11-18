@@ -61,15 +61,13 @@ export class GuildEventsController {
     @Actor() actor: AuthenticatedActor,
     @Body() dto: CreateEventDto,
   ) {
-    const missingParams = GuildEventService.validateTemplate(
+    const problems = GuildEventService.validateTemplate(
       dto.message,
       GuildEventsParameters[dto.event],
     );
 
-    if (missingParams.length) {
-      throw new BadRequestException(
-        `The template is missing the following parameters: ${missingParams.join(', ')}`,
-      );
+    if (problems.length) {
+      throw new BadRequestException(`Invalid template: ${problems.join('; ')}`);
     }
 
     const userId = getActorUserId(actor);

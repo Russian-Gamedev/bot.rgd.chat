@@ -11,7 +11,10 @@ import { GuildLoggingService } from '#core/guilds/logging/guild-logging.service'
 import { GuildMemberRolesService } from '#core/guilds/roles/guild-member-roles.service';
 import { UserService } from '#core/users/users.service';
 
-import { GuildEventService } from './events/guild-events.service';
+import {
+  GuildEventService,
+  type RandomEventParams,
+} from './events/guild-events.service';
 import {
   buildJoinLogEmbed,
   buildLeaveLogEmbed,
@@ -92,6 +95,7 @@ export class GuildWatcherService {
 
     let message = await this.guildEventsService.getRandom(event, {
       user: `<@${member.id}>`,
+      guildId: guild.id,
     });
 
     message ??= 'Приветствуем <@' + member.id + '> на сервере!';
@@ -175,10 +179,10 @@ export class GuildWatcherService {
     const userStr = `[<@${member.id}>] **${member.displayName}**`;
     const moderatorStr = moderatorId ? `<@${moderatorId}>` : 'неизвестный';
 
-    const params: Record<string, string> =
+    const params: RandomEventParams =
       event === GuildEvents.MEMBER_LEAVE
-        ? { user: userStr }
-        : { user: userStr, moderator: moderatorStr };
+        ? { user: userStr, guildId: guild.id }
+        : { user: userStr, moderator: moderatorStr, guildId: guild.id };
 
     let message = await this.guildEventsService.getRandom(event, params);
 

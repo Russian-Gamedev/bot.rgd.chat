@@ -175,6 +175,7 @@ export class RenameCommands {
       {
         user: `**${previous_nickname}**`,
         nickname: `**${new_nickname}**`,
+        guildId: guild.id,
       },
     );
 

@@ -18,7 +18,10 @@ import { WalletService } from '#core/wallet/wallet.service';
 import { cast, formatCoins } from '#lib/utils';
 
 import { GUILD_EVENT_COST } from '../guild-events.constants';
-import { GuildEventService } from '../guild-events.service';
+import {
+  GuildEventService,
+  type RandomEventParams,
+} from '../guild-events.service';
 
 import { AddEventDto, FakeEventDto } from './events.dto';
 
@@ -46,9 +49,12 @@ export class GuildEventsCommands {
     @Context() [interaction]: SlashCommandContext,
     @Options() dto: FakeEventDto,
   ) {
-    const event = await this.guildEventService.getRandom(dto.event, {
+    const params: RandomEventParams = {
       user: `<@${interaction.user.id}>`,
-    });
+    };
+    if (interaction.guildId) params.guildId = interaction.guildId;
+
+    const event = await this.guildEventService.getRandom(dto.event, params);
     const silent = Boolean(dto.silent);
 
     if (!event) {
@@ -80,16 +86,14 @@ export class GuildEventsCommands {
     const guildId = interaction.guildId;
     if (!guildId) return null;
 
-    const missingParams = GuildEventService.validateTemplate(
+    const problems = GuildEventService.validateTemplate(
       dto.template,
       GuildEventsParameters[dto.event],
     );
 
-    if (missingParams.length) {
+    if (problems.length) {
       await interaction.reply({
-        content: `The template is missing the following parameters: ${missingParams
-          .map((p) => `\`${p}\``)
-          .join(', ')}`,
+        content: `Invalid template: ${problems.join('; ')}`,
         flags: MessageFlags.Ephemeral,
       });
       return;

@@ -14,6 +14,11 @@ export function pickRandom<T>(array: readonly T[]): T {
   return array[Math.floor(Math.random() * length)];
 }
 
+/** Returns a random integer between min and max, inclusively. */
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 /**
  * Picks an item with probability proportional to its weight.
  * Weights are expected to be non-negative.

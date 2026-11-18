@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { pickWeighted } from './basic';
+import { pickWeighted, randomInt } from './basic';
 
 describe('pickWeighted', () => {
   it('returns the only item regardless of weight', () => {
@@ -25,5 +25,28 @@ describe('pickWeighted', () => {
     }
     expect(counts.a / counts.b).toBeGreaterThan(2);
     expect(counts.a / counts.b).toBeLessThan(4);
+  });
+});
+
+describe('randomInt', () => {
+  it('always stays within the inclusive range', () => {
+    for (let i = 0; i < 500; i++) {
+      const value = randomInt(-3, 3);
+      expect(value).toBeGreaterThanOrEqual(-3);
+      expect(value).toBeLessThanOrEqual(3);
+      expect(Number.isInteger(value)).toBe(true);
+    }
+  });
+
+  it('returns the only value when min equals max', () => {
+    expect(randomInt(5, 5)).toBe(5);
+  });
+
+  it('reaches both bounds over many rolls', () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 500; i++) {
+      seen.add(randomInt(1, 2));
+    }
+    expect([...seen].sort()).toEqual([1, 2]);
   });
 });
