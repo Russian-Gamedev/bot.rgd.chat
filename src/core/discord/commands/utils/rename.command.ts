@@ -277,7 +277,7 @@ export class RenameCommands {
       };
     }
 
-    const lockCost = BigInt(lockDuration) * 1000n;
+    const lockCost = BigInt(lockDuration) * 100_000n;
     const user = await this.userService.findOrCreate(
       BigInt(executor_member.guild.id),
       BigInt(executor_member.id),

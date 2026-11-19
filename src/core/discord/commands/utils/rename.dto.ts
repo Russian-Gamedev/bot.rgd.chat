@@ -17,7 +17,7 @@ export class RenameUserDto {
 
   @StringOption({
     name: 'lock',
-    description: 'Заблокировать никнейм (1000 монет/час)',
+    description: 'Заблокировать никнейм (100 000 монет/час)',
     required: false,
   })
   lock?: string;
