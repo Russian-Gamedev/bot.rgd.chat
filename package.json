@@ -63,7 +63,7 @@
     "@nestjs/websockets": "^12.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
-    "discord.js": "^14.27.0",
+    "discord.js": "^14.28.1",
     "ioredis": "^6.0.0",
     "necord": "npm:@damirlut/necord@^7.0.1",
     "openai": "^7.43.0",
