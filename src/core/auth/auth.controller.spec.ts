@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import type { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
+import type { NodeRequest, NodeResponse } from '@nestjs/platform-node';
 
 import { Environment, type EnvironmentVariables } from '#config/env';
 import { AuthController } from './auth.controller';
@@ -47,7 +47,7 @@ describe('AuthController', () => {
     const controller = new AuthController(authService, configService);
     const cookie = mock(() => undefined);
     const redirect = mock(() => undefined);
-    const response = { cookie, redirect } as unknown as Response;
+    const response = { cookie, redirect } as unknown as NodeResponse;
     const request = {
       user: {
         user_id: '123',
@@ -56,7 +56,7 @@ describe('AuthController', () => {
         nickname: null,
       },
       headers: {},
-    } as unknown as Request;
+    } as unknown as NodeRequest;
 
     await controller.callback(request, response);
 
@@ -83,7 +83,7 @@ describe('AuthController', () => {
     } as unknown as ConfigService<EnvironmentVariables>;
     const controller = new AuthController(authService, configService);
     const clearCookie = mock(() => undefined);
-    const response = { clearCookie } as unknown as Response;
+    const response = { clearCookie } as unknown as NodeResponse;
 
     expect(controller.logout(response)).toEqual({ ok: true });
     expect(clearCookie).toHaveBeenCalledWith('auth_cookie', {

@@ -9,7 +9,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { type Response } from 'express';
+import type { NodeResponse } from '@nestjs/platform-node';
 import { getActorUserId } from '#core/permissions/actor-user-id';
 import { Actor } from '#core/permissions/permissions.decorator';
 import { ActorAuthGuard } from '#core/permissions/permissions.guard';
@@ -72,7 +72,7 @@ export class UsersController {
   }
 
   @Get(':id')
-  async getById(@Param('id') id: string, @Res() res: Response) {
+  async getById(@Param('id') id: string, @Res() res: NodeResponse) {
     const ext = id.split('.').at(-1);
     if (ext && AVATAR_EXTENSIONS.has(ext)) {
       const lookup = id.slice(0, id.length - ext.length - 1);

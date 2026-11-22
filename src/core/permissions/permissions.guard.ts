@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
-import type { Request } from 'express';
+import type { NodeRequest } from '@nestjs/platform-node';
 
 import { type EnvironmentVariables } from '#config/env';
 import { getAuthCookieToken } from '#core/auth/auth-cookie';
@@ -35,7 +35,7 @@ export class ActorAuthGuard implements CanActivate {
   }
 
   protected async authenticateRequest(
-    request: Request,
+    request: NodeRequest,
   ): Promise<AuthenticatedActor> {
     const authHeader = request.headers.authorization;
     if (authHeader) {
@@ -129,7 +129,7 @@ export class PermissionGuard extends ActorAuthGuard {
 }
 
 function getPermissionContext(
-  request: Request,
+  request: NodeRequest,
   actor: AuthenticatedActor,
 ): PermissionContext {
   const params = request.params as Record<string, unknown>;

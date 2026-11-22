@@ -8,7 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
+import type { NodeRequest, NodeResponse } from '@nestjs/platform-node';
 
 import { EnvironmentVariables } from '#config/env';
 import { DiscordAuthGuard } from './auth.guard';
@@ -39,8 +39,8 @@ export class AuthController {
   @Get('/discord/callback')
   @UseGuards(DiscordAuthGuard)
   async callback(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
+    @Req() req: NodeRequest,
+    @Res({ passthrough: true }) res: NodeResponse,
   ) {
     const redirectUri = this.configService.getOrThrow<string>('BASE_URL');
 
@@ -63,7 +63,7 @@ export class AuthController {
   }
 
   @Post('/logout')
-  logout(@Res({ passthrough: true }) res: Response) {
+  logout(@Res({ passthrough: true }) res: NodeResponse) {
     res.clearCookie(
       getAuthCookieName(this.configService),
       getAuthCookieOptions(this.configService),

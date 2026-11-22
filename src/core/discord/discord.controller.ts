@@ -5,7 +5,7 @@ import {
   Param,
   Res,
 } from '@nestjs/common';
-import { type Response } from 'express';
+import type { NodeResponse } from '@nestjs/platform-node';
 import { DiscordService } from './discord.service';
 
 @Controller('discord')
@@ -16,7 +16,7 @@ export class DiscordController {
   public async getEmojiImage(
     @Param('emoji') emoji: string,
     @Param('size') size = 128,
-    @Res() res: Response,
+    @Res() res: NodeResponse,
   ) {
     const url = await this.discordService.getEmojiImage(emoji, size);
     if (!url) return res.sendStatus(404);

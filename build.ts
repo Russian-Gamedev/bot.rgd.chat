@@ -10,6 +10,7 @@ const result = await Bun.build({
   },
   external: [
     '@nestjs/microservices',
+    '@nestjs/platform-express',
     'ffmpeg-static',
     'class-transformer/storage',
     '@nestjs/platform-socket.io',

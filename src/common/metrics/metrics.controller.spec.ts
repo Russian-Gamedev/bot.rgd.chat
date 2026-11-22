@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
+import type { NodeRequest, NodeResponse } from '@nestjs/platform-node';
 
 import { Environment, type EnvironmentVariables } from '#config/env';
 import { MetricsController } from './metrics.controller';
@@ -28,7 +28,7 @@ function createResponse() {
     },
   };
 
-  return response as unknown as Response & {
+  return response as unknown as NodeResponse & {
     headers: Map<string, string>;
     body: string;
   };
@@ -61,8 +61,8 @@ describe('MetricsController', () => {
 
     await expect(
       controller.getMetrics(
-        { header: mock(() => undefined) } as unknown as Request,
-        {} as Response,
+        { header: mock(() => undefined) } as unknown as NodeRequest,
+        {} as NodeResponse,
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -80,7 +80,7 @@ describe('MetricsController', () => {
     const response = createResponse();
 
     await controller.getMetrics(
-      { header: mock(() => 'Bearer secret') } as unknown as Request,
+      { header: mock(() => 'Bearer secret') } as unknown as NodeRequest,
       response,
     );
 

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { type NestNodeApplication, NodeAdapter } from '@nestjs/platform-node';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { postgresOrmConfig } from '#common/mikro-orm.postgres.config';
 import { EnvironmentVariables } from '#config/env';
@@ -65,8 +66,9 @@ function registerProcessShutdownHandlers(
 
 async function main() {
   const isProduction = process.env.NODE_ENV === 'production';
-  const app = await NestFactory.create(
+  const app = await NestFactory.create<NestNodeApplication>(
     await AppModule.register(postgresOrmConfig),
+    new NodeAdapter(),
     {
       logger: new ConsoleLogger({
         json: isProduction,

@@ -5,7 +5,7 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
+import type { NodeRequest, NodeResponse } from '@nestjs/platform-node';
 import { catchError, tap, throwError } from 'rxjs';
 
 import { EnvironmentVariables } from '#config/env';
@@ -24,8 +24,8 @@ export class MetricsHttpInterceptor implements NestInterceptor {
     }
 
     const http = context.switchToHttp();
-    const request = http.getRequest<Request>();
-    const response = http.getResponse<Response>();
+    const request = http.getRequest<NodeRequest>();
+    const response = http.getResponse<NodeResponse>();
     const startedAt = performance.now();
     const metricsPath = this.config.get<string>('METRICS_PATH', '/metrics');
     const route = getRouteLabel(request);
@@ -36,11 +36,16 @@ export class MetricsHttpInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        this.record(request.method, route, response.statusCode, startedAt);
+        this.record(
+          request.method ?? 'unknown',
+          route,
+          response.statusCode,
+          startedAt,
+        );
       }),
       catchError((error) => {
         this.record(
-          request.method,
+          request.method ?? 'unknown',
           route,
           typeof error?.status === 'number' ? error.status : 500,
           startedAt,
@@ -65,9 +70,6 @@ export class MetricsHttpInterceptor implements NestInterceptor {
   }
 }
 
-function getRouteLabel(request: Request): string {
-  const routePath = request.route?.path;
-  if (typeof routePath === 'string') return routePath;
-  if (Array.isArray(routePath)) return routePath.join('|');
-  return request.path || request.url || 'unknown';
+function getRouteLabel(request: NodeRequest): string {
+  return request.route?.path || request.path || request.url || 'unknown';
 }

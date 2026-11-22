@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
+import type { NodeRequest, NodeResponse } from '@nestjs/platform-node';
 
 import { Environment, EnvironmentVariables } from '#config/env';
 import { MetricsService } from './metrics.service';
@@ -25,7 +25,7 @@ export class MetricsController {
   ) {}
 
   @Get(METRICS_ROUTE)
-  async getMetrics(@Req() request: Request, @Res() response: Response) {
+  async getMetrics(@Req() request: NodeRequest, @Res() response: NodeResponse) {
     if (!this.config.get<boolean>('METRICS_ENABLED', true)) {
       throw new NotFoundException();
     }

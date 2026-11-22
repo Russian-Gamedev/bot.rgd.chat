@@ -1,6 +1,6 @@
 import { isIP } from 'node:net';
 import type { ConfigService } from '@nestjs/config';
-import type { CookieOptions, Request } from 'express';
+import type { NodeCookieOptions, NodeRequest } from '@nestjs/platform-node';
 
 import { Environment, type EnvironmentVariables } from '#config/env';
 
@@ -14,7 +14,7 @@ export function getAuthCookieName(
 
 export function getAuthCookieOptions(
   config: ConfigService<EnvironmentVariables>,
-): CookieOptions {
+): NodeCookieOptions {
   const domain = normalizeAuthCookieDomain(
     config.get<string>('AUTH_COOKIE_DOMAIN'),
   );
@@ -53,7 +53,7 @@ export function normalizeAuthCookieDomain(
 }
 
 export function getAuthCookieToken(
-  request: Request,
+  request: NodeRequest,
   config: ConfigService<EnvironmentVariables>,
 ): string | undefined {
   return getCookieValue(request.headers.cookie, getAuthCookieName(config));

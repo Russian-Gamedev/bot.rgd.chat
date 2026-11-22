@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import type { ConfigService } from '@nestjs/config';
-import type { Request } from 'express';
+import type { NodeRequest } from '@nestjs/platform-node';
 
 import { Environment, type EnvironmentVariables } from '#config/env';
 import {
@@ -23,7 +23,7 @@ describe('auth cookie helpers', () => {
       headers: {
         cookie: 'theme=dark; rgd_access_token=user.jwt.token',
       },
-    } as Request;
+    } as unknown as NodeRequest;
 
     expect(getAuthCookieName(config)).toBe(DEFAULT_AUTH_COOKIE_NAME);
     expect(getAuthCookieToken(request, config)).toBe('user.jwt.token');
@@ -51,7 +51,7 @@ describe('auth cookie helpers', () => {
       headers: {
         cookie: 'custom_auth=user.jwt.token',
       },
-    } as Request;
+    } as unknown as NodeRequest;
 
     expect(getAuthCookieName(config)).toBe('custom_auth');
     expect(getAuthCookieToken(request, config)).toBe('user.jwt.token');

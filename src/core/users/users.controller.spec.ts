@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type { NodeResponse } from '@nestjs/platform-node';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { type Response } from 'express';
 
 import { BotEntity } from '#core/bots/entities/bot.entity';
 import { ActorType } from '#core/permissions/permissions.types';
@@ -99,7 +99,7 @@ describe('UsersController', () => {
       createProjectsService(),
     );
     const json = mock(() => undefined);
-    const res = { json } as unknown as Response;
+    const res = { json } as unknown as NodeResponse;
 
     await controller.getById('123', res);
 
@@ -118,7 +118,7 @@ describe('UsersController', () => {
       createProjectsService(),
     );
     const json = mock(() => undefined);
-    const res = { json } as unknown as Response;
+    const res = { json } as unknown as NodeResponse;
 
     await controller.getById('DamirLut', res);
 
@@ -139,7 +139,7 @@ describe('UsersController', () => {
       createProjectsService(),
     );
     const json = mock(() => undefined);
-    const res = { json } as unknown as Response;
+    const res = { json } as unknown as NodeResponse;
 
     await controller.getById('1.5k', res);
 
@@ -162,7 +162,7 @@ describe('UsersController', () => {
       createProjectsService(),
     );
     const redirect = mock(() => undefined);
-    const res = { redirect } as unknown as Response;
+    const res = { redirect } as unknown as NodeResponse;
 
     await controller.getById('123.png', res);
 
@@ -188,7 +188,7 @@ describe('UsersController', () => {
       createProjectsService(),
     );
     const redirect = mock(() => undefined);
-    const res = { redirect } as unknown as Response;
+    const res = { redirect } as unknown as NodeResponse;
 
     await controller.getById('damirlut.dev.png', res);
 
@@ -213,9 +213,9 @@ describe('UsersController', () => {
       createProjectsService(),
     );
 
-    await expect(controller.getById('404.png', {} as Response)).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      controller.getById('404.png', {} as NodeResponse),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('throws NotFoundException when public profile is not found', async () => {
@@ -230,7 +230,7 @@ describe('UsersController', () => {
       createProjectsService(),
     );
 
-    await expect(controller.getById('404', {} as Response)).rejects.toThrow(
+    await expect(controller.getById('404', {} as NodeResponse)).rejects.toThrow(
       NotFoundException,
     );
   });
