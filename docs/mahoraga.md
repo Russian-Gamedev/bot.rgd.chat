@@ -5,6 +5,7 @@ Mahoraga - система мягкого антиспама для Discord-се�
 ## Что делает Mahoraga
 
 Mahoraga реагирует на пять типов событий:
+
 - `honeypot` - сообщение отправлено в honeypot-канал.
 - `text_repeat` - пользователь повторяет одинаковый нормализованный текст.
 - `link_repeat` - пользователь повторяет одинаковые нормализованные ссылки.
@@ -16,6 +17,7 @@ Mahoraga реагирует на пять типов событий:
 ## Режимы работы
 
 У типов детектов есть режим работы (`off`, `monitor`, `on`).
+
 - `off` - детекты этого типа полностью отключены.
 - `monitor` - Mahoraga создаёт `observed`-кейс и пишет один лог о том, что sanction был бы применён.
 - `on` - Mahoraga применяет temporary softban.
@@ -106,6 +108,7 @@ mahoraga:detector:text:{guildId}:{userId}:{hash}
 ## Softban
 
 Softban - это temporary Discord ban в source guild:
+
 1. `guild.bans.create(userId, { reason, deleteMessageSeconds: 3600 })`.
 2. Через 5 секунд `guild.bans.remove(userId, reason)`.
 3. После unban Mahoraga проверяет Redis-tracked messages для `mahoraga:messages:{guildId}:{userId}`.
@@ -132,6 +135,7 @@ GET /mahoraga/spammers
 ```
 
 Query params:
+
 - `status` - `observed`, `active`, `pardoned`.
 - `guild_id` - Discord guild ID.
 - `reason` - `honeypot`, `text_repeat`, `link_repeat`, `image_repeat`, `manual`.
@@ -195,6 +199,7 @@ POST /mahoraga/spammers/:user_id/sync-softban
 Доступна в guild-контексте пользователям с `Administrator`.
 
 Параметры:
+
 - `user` - Discord user для удаления из Mahoraga.
 - `reason` - опциональная причина.
 
@@ -203,6 +208,7 @@ POST /mahoraga/spammers/:user_id/sync-softban
 ## Логи
 
 Если задан `mahoraga_log_channel_id`, Mahoraga пишет туда события:
+
 - первый detection в `monitor` режиме;
 - агрегированный результат temporary softban;
 - rejoin пользователя с активным Mahoraga case;
