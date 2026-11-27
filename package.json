@@ -46,7 +46,7 @@
     "@discordjs/voice": "^0.19.2",
     "@mikro-orm/core": "^7.2.10",
     "@mikro-orm/decorators": "^7.2.10",
-    "@mikro-orm/migrations": "^7.2.10",
+    "@mikro-orm/migrations": "^7.2.11",
     "@mikro-orm/nestjs": "^7.1.0",
     "@mikro-orm/pglite": "^7.2.10",
     "@mikro-orm/postgresql": "^7.2.10",
