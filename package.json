@@ -48,7 +48,7 @@
     "@mikro-orm/decorators": "^7.2.10",
     "@mikro-orm/migrations": "^7.2.10",
     "@mikro-orm/nestjs": "^7.1.0",
-    "@mikro-orm/pglite": "^7.2.10",
+    "@mikro-orm/pglite": "^7.2.11",
     "@mikro-orm/postgresql": "^7.2.10",
     "@necord/pagination": "^3.0.0",
     "@nestjs/common": "^12.2.0",
